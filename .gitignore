@@ -1,0 +1,7 @@
+#custom items
+old/
+test_files/
+__pycache__/
+
+#mac
+.DS_Store
