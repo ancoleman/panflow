@@ -59,19 +59,19 @@ The library includes a comprehensive CLI:
 
 ```bash
 # List all address objects
-panos-xml-utils object list --config firewall.xml --type address --context vsys --vsys vsys1
+panflow object list --config firewall.xml --type address --context vsys --vsys vsys1
 
 # Add a new address object
-panos-xml-utils object add --config firewall.xml --type address --name web-server --properties web-server.json --output updated.xml
+panflow object add --config firewall.xml --type address --name web-server --properties web-server.json --output updated.xml
 
 # Generate a report of unused objects
-panos-xml-utils report unused-objects --config firewall.xml --output unused.json
+panflow report unused-objects --config firewall.xml --output unused.json
 
 # Bulk update security policies matching criteria
-panos-xml-utils policy bulk-update --config firewall.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
+panflow policy bulk-update --config firewall.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
 
 # Find and merge duplicate objects
-panos-xml-utils deduplicate --config firewall.xml --type address --output deduped.xml
+panflow deduplicate --config firewall.xml --type address --output deduped.xml
 ```
 
 ## Bulk Operations
