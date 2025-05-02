@@ -32,7 +32,7 @@ pip install panflow
 ## Basic Usage
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
+from panflow import PanOsXmlConfig
 
 # Load a configuration file
 config = PanOsXmlConfig("firewall.xml")
@@ -79,7 +79,7 @@ panflow deduplicate --config firewall.xml --type address --output deduped.xml
 The library provides powerful bulk operations for modifying multiple configuration elements at once:
 
 ```python
-from panos_xml_utils.core.bulk_operations import ConfigUpdater
+from panflow.core.bulk_operations import ConfigUpdater
 
 # Create a configuration updater
 updater = ConfigUpdater(config.tree, "firewall", "vsys", config.version, vsys="vsys1")
@@ -111,7 +111,7 @@ print(f"Updated {updated_count} policies")
 The deduplication engine helps identify and merge duplicate objects:
 
 ```python
-from panos_xml_utils.core.deduplication import DeduplicationEngine
+from panflow.core.deduplication import DeduplicationEngine
 
 # Create a deduplication engine
 engine = DeduplicationEngine(config.tree, "firewall", "vsys", config.version, vsys="vsys1")
@@ -134,7 +134,7 @@ print(f"Merged {len(changes)} duplicate objects")
 The library is organized into logical modules:
 
 ```
-panos_xml_utils/
+panflow/
 ├── core/                  # Core functionality
 │   ├── config_loader.py   # XML loading and parsing
 │   ├── config_saver.py    # XML saving and export
@@ -181,7 +181,7 @@ The library automatically handles differences between PAN-OS versions:
 config = PanOsXmlConfig("firewall.xml", version="10.1")
 
 # Get available versions
-from panos_xml_utils.core.xpath_resolver import get_all_versions
+from panflow.core.xpath_resolver import get_all_versions
 versions = get_all_versions()
 print(f"Supported PAN-OS versions: {versions}")
 ```
@@ -211,8 +211,8 @@ duplicates = config.generate_duplicate_objects_report("vsys", vsys="vsys1")
 ### Finding and Merging Duplicate Objects
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
-from panos_xml_utils.core.deduplication import DeduplicationEngine
+from panflow import PanOsXmlConfig
+from panflow.core.deduplication import DeduplicationEngine
 
 # Load configuration
 config = PanOsXmlConfig("firewall.xml")
@@ -233,8 +233,8 @@ config.save("deduped-firewall.xml")
 ### Bulk Updating Security Policies
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
-from panos_xml_utils.core.bulk_operations import ConfigUpdater
+from panflow import PanOsXmlConfig
+from panflow.core.bulk_operations import ConfigUpdater
 
 # Load configuration
 config = PanOsXmlConfig("panorama.xml")
