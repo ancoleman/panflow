@@ -20,6 +20,7 @@ from .core.xpath_resolver import (
 )
 
 from .core.policy_merger import PolicyMerger
+from .core.object_merger import ObjectMerger
 
 # Import functional modules
 from .modules.objects import (
@@ -42,7 +43,7 @@ from .modules.reports import (
 # Set up logging
 logger = logging.getLogger("panflow")
 
-class PanOsXmlConfig:
+class PANFlowConfig:
     """
     Simple class wrapper for working with PAN-OS XML configurations.
     This provides a more object-oriented interface if desired, while still
@@ -188,7 +189,7 @@ class PanOsXmlConfig:
         Merge a policy with another configuration.
         
         Args:
-            target_config: Target PanOsXmlConfig object or path to target configuration file
+            target_config: Target PANFlowConfig object or path to target configuration file
             policy_type: Type of policy to merge
             policy_name: Name of the policy to merge
             source_context_type: Source context type (shared, device_group, vsys)
@@ -202,7 +203,7 @@ class PanOsXmlConfig:
         Returns:
             bool: Success status
         """
-        # Handle target_config as file path or PanOsXmlConfig object
+        # Handle target_config as file path or PANFlowConfig object
         if isinstance(target_config, str):
             from .core.config_loader import load_config_from_file
             target_tree, target_version = load_config_from_file(target_config)
@@ -232,6 +233,64 @@ class PanOsXmlConfig:
             copy_references,
             position,
             ref_policy_name,
+            **kwargs
+        )
+    
+    def merge_object(
+        self, 
+        target_config,
+        object_type,
+        object_name,
+        source_context_type,
+        target_context_type,
+        skip_if_exists=True,
+        copy_references=True,
+        **kwargs
+    ):
+        """
+        Merge an object with another configuration.
+        
+        Args:
+            target_config: Target PANFlowConfig object or path to target configuration file
+            object_type: Type of object to merge (address, service, etc.)
+            object_name: Name of the object to merge
+            source_context_type: Source context type (shared, device_group, vsys)
+            target_context_type: Target context type (shared, device_group, vsys)
+            skip_if_exists: Skip if object already exists in target
+            copy_references: Copy object references (e.g., address group members)
+            **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
+            
+        Returns:
+            bool: Success status
+        """
+        # Handle target_config as file path or PANFlowConfig object
+        if isinstance(target_config, str):
+            from .core.config_loader import load_config_from_file, detect_device_type
+            target_tree, target_version = load_config_from_file(target_config)
+            target_device_type = detect_device_type(target_tree)
+        else:
+            target_tree = target_config.tree
+            target_version = target_config.version
+            target_device_type = target_config.device_type
+        
+        # Create merger
+        merger = ObjectMerger(
+            self.tree,
+            target_tree,
+            self.device_type,
+            target_device_type,
+            self.version,
+            target_version
+        )
+        
+        # Merge object
+        return merger.copy_object(
+            object_type,
+            object_name,
+            source_context_type,
+            target_context_type,
+            skip_if_exists,
+            copy_references,
             **kwargs
         )
 

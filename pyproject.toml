@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "panos-xml-utils"
+name = "panflow"
 version = "0.1.0"
 description = "A comprehensive set of utilities for working with PAN-OS XML configurations"
 authors = ["Anton Coleman <acoleman@paloaltonetworks.com>"]
@@ -39,7 +39,7 @@ pytest-cov = "^4.1.0"
 pre-commit = "^3.3.2"
 
 [tool.poetry.scripts]
-panos-xml-utils = "panos_xml_utils.cli:app"
+panflow = "panflow.cli:app"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

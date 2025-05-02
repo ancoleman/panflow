@@ -15,7 +15,7 @@ import logging
 
 # Import the new refactored modules
 from panflow import (
-    PanOsXmlConfig, configure_logging, get_all_versions
+    PANFlowConfig, configure_logging, get_all_versions
 )
 from panflow.core.logging_utils import (
     verbose_callback, quiet_callback, log_level_callback, log_file_callback
@@ -84,7 +84,7 @@ def list_objects(
     """List objects of specified type"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Prepare context parameters
         context_kwargs = {}
@@ -127,7 +127,7 @@ def add_object(
     """Add a new object"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Read properties from file
         with open(properties_file, 'r') as f:
@@ -177,7 +177,7 @@ def update_object(
     """Update an existing object"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Read properties from file
         with open(properties_file, 'r') as f:
@@ -226,7 +226,7 @@ def delete_object(
     """Delete an object"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Prepare context parameters
         context_kwargs = {}
@@ -271,7 +271,7 @@ def filter_objects(
     """Filter objects based on criteria"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Read criteria from file
         with open(criteria_file, 'r') as f:
@@ -320,7 +320,7 @@ def list_policies(
     """List policies of specified type"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Prepare context parameters
         context_kwargs = {}
@@ -368,7 +368,7 @@ def add_group_member(
     """Add a member to a group"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Prepare context parameters
         context_kwargs = {}
@@ -415,7 +415,7 @@ def report_unused_objects(
     """Generate report of unused objects"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Prepare context parameters
         context_kwargs = {}
@@ -455,7 +455,7 @@ def validate_config(
     """Validate XML configuration structure"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Basic validation is performed during loading
         logger.info(f"Configuration file loaded and validated successfully")
@@ -486,7 +486,7 @@ def bulk_update_policies(
     """Bulk update policies matching criteria with specified operations"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Prepare context parameters
         context_kwargs = {}
@@ -535,7 +535,7 @@ def deduplicate_objects(
     """Find and merge duplicate objects"""
     try:
         # Initialize the configuration
-        xml_config = PanOsXmlConfig(config_file=config, device_type=device_type, version=version)
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
         # Prepare context parameters
         context_kwargs = {}
