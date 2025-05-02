@@ -56,7 +56,7 @@ def main(
     log_file: Optional[str] = typer.Option(None, "--log-file", "-f", help="Log to file", callback=log_file_callback),
 ):
     """
-    PAN-OS XML Utilities CLI
+    PANFlow Utilities CLI
 
     A comprehensive command-line interface for working with PAN-OS XML configurations
     using the PANFlow utilities.
