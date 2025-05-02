@@ -1,5 +1,5 @@
 """
-Logging utilities for PAN-OS XML utilities.
+Logging utilities for PANFlow.
 
 This module provides functions for configuring and using the logging system.
 """

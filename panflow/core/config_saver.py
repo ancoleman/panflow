@@ -1,5 +1,5 @@
 """
-Configuration saver for PAN-OS XML utilities.
+Configuration saver for PANFlow
 
 This module provides utilities for saving PAN-OS XML configurations
 to files, with features like timestamping, backups, and validation.
