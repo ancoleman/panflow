@@ -134,24 +134,31 @@ print(f"Merged {len(changes)} duplicate objects")
 The library is organized into logical modules:
 
 ```
-panflow/
-├── core/                  # Core functionality
-│   ├── config_loader.py   # XML loading and parsing
-│   ├── config_saver.py    # XML saving and export
-│   ├── xpath_resolver.py  # Version-aware XPath handling
-│   ├── xml_utils.py       # XML manipulation utilities
-│   ├── bulk_operations.py # Bulk configuration operations
-│   └── deduplication.py   # Duplicate object handling
-├── modules/               # Functional modules
-│   ├── objects.py         # Object management
-│   ├── policies.py        # Policy management
-│   ├── groups.py          # Group operations
-│   └── reports.py         # Report generation
-├── xpath_mappings/        # XPath definitions by version
-│   ├── panos_10.1.yaml
-│   ├── panos_10.2.yaml
-│   └── panos_11.2.yaml
-└── cli.py                 # Command-line interface
+├── panflow/
+│   ├── __init__.py
+│   ├── constants
+│   │   └── common.py
+│   ├── core                    # Core functionality
+│   │   ├── bulk_operations.py  # Bulk configuration operations
+│   │   ├── config_loader.py    # XML loading and parsing
+│   │   ├── config_saver.py     # XML saving and export
+│   │   ├── deduplication.py    # Duplicate object handling
+│   │   ├── logging_utils.py    # Logging and error tracking
+│   │   ├── object_merger.py    # Object merging handling
+│   │   ├── policy_merger.py    # Policy merging handling
+│   │   ├── xml_utils.py        # XML manipulation utilities
+│   │   └── xpath_resolver.py   # Version-aware XPath handling
+│   ├── modules
+│   │   ├── groups.py           # Group operations
+│   │   ├── objects.py          # Object management
+│   │   ├── policies.py         # Policy management
+│   │   └── reports.py          # Report generation
+│   └── xpath_mappings          # XPath definitions by version
+│       ├── panos_10_1.yaml
+│       ├── panos_10_2.yaml
+│       └── panos_11_2.yaml
+├── pyproject.toml
+├── cli.py # Command-line interface
 ```
 
 ## XPath Mappings
