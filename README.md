@@ -17,7 +17,7 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 ## Installation
 
 ```bash
-pip install panos-xml-utils
+pip install panflow
 ```
 
 ## Key Concepts
