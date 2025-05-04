@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 PANFlow for PAN-OS XML CLI
@@ -9,11 +10,12 @@ using the dynamic PAN-OS XML utilities.
 import os
 import sys
 import json
-from typing import List, Dict, Optional, Any, Tuple, Union
+from typing import Optional, Dict, List
 import typer
 import logging
+from lxml import etree
 
-# Import the new refactored modules
+# Import the core modules
 from panflow import (
     PANFlowConfig, configure_logging, get_all_versions
 )
@@ -25,7 +27,7 @@ from panflow.core.deduplication import DeduplicationEngine
 from panflow.core.policy_merger import PolicyMerger
 from panflow.core.object_merger import ObjectMerger
 from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
-
+from panflow.core.bulk_operations import ConfigUpdater
 # Create main Typer app
 app = typer.Typer(help="PANFlow CLI")
 object_app = typer.Typer(help="Object management commands")
@@ -63,9 +65,57 @@ def main(
     """
     # Ensure logging is configured properly with the right level for console output
     from panflow.core.logging_utils import configure_logging
-    # Log level will already be set by callbacks, but we need to ensure a console handler exists
-    configure_logging(level=log_level, log_file=log_file, quiet=quiet, verbose=verbose)
-    logger.info("PANFLow CLI initialized")
+    
+    try:
+        # Log level will already be set by callbacks, but we need to ensure a console handler exists
+        configure_logging(level=log_level, log_file=log_file, quiet=quiet, verbose=verbose)
+        logger.info("PANFLow CLI initialized")
+    except Exception as e:
+        # Fallback to basic print if logging configuration fails
+        print(f"Error configuring logging: {e}")
+        print("Continuing with default logging configuration")
+        
+    # Display version and device information
+    import sys
+    import platform
+    
+    logger.debug(f"Python version: {sys.version}")
+    logger.debug(f"Platform: {platform.platform()}")
+    logger.debug(f"lxml version: {etree.LXML_VERSION}")
+    
+    # Set up exception handling for the CLI
+    sys.excepthook = _global_exception_handler
+
+# ===== Exception Handler =====
+def _global_exception_handler(exc_type, exc_value, exc_traceback):
+    """
+    Global exception handler for unhandled exceptions.
+    Provides more user-friendly error messages for common issues.
+    """
+    if isinstance(exc_value, FileNotFoundError):
+        logger.error(f"File not found: {exc_value}")
+        sys.exit(1)
+    elif isinstance(exc_value, etree.XMLSyntaxError):
+        logger.error(f"XML syntax error: {exc_value}")
+        sys.exit(1)
+    elif isinstance(exc_value, ValueError):
+        logger.error(f"Value error: {exc_value}")
+        sys.exit(1)
+    elif isinstance(exc_value, KeyError):
+        logger.error(f"Missing key in configuration: {exc_value}")
+        sys.exit(1)
+    elif isinstance(exc_value, PermissionError):
+        logger.error(f"Permission denied: {exc_value}")
+        sys.exit(1)
+    else:
+        # For other exceptions, show the full traceback in debug mode
+        logger.error(f"Unexpected error: {exc_type.__name__}: {exc_value}")
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            import traceback
+            logger.debug("Traceback:")
+            for line in traceback.format_tb(exc_traceback):
+                logger.debug(line.rstrip())
+        sys.exit(1)
 
 # ===== Object Commands =====
 

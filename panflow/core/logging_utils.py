@@ -25,7 +25,8 @@ def configure_logging(
     level: str = "info",
     log_file: Optional[str] = None,
     quiet: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    json_format: bool = False
 ) -> None:
     """
     Configure the global logger
@@ -35,6 +36,7 @@ def configure_logging(
         log_file: Path to log file (optional)
         quiet: Suppress console output if True
         verbose: Enable verbose output if True
+        json_format: Use JSON formatting for structured logging
     """
     # Adjust log level based on verbose/quiet flags
     if verbose:
@@ -51,11 +53,46 @@ def configure_logging(
         logger.removeHandler(handler)
     
     # Create formatters
-    console_format = '%(levelname)s: %(message)s'
-    file_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    
-    console_formatter = logging.Formatter(console_format)
-    file_formatter = logging.Formatter(file_format)
+    if json_format:
+        import json
+        
+        class JsonFormatter(logging.Formatter):
+            def format(self, record):
+                log_data = {
+                    'timestamp': self.formatTime(record),
+                    'level': record.levelname,
+                    'message': record.getMessage(),
+                    'module': record.module,
+                    'function': record.funcName,
+                    'line': record.lineno
+                }
+                
+                # Add exception info if present
+                if record.exc_info:
+                    import traceback
+                    log_data['exception'] = {
+                        'type': record.exc_info[0].__name__,
+                        'value': str(record.exc_info[1]),
+                        'traceback': traceback.format_tb(record.exc_info[2])
+                    }
+                
+                # Add extra attributes
+                if hasattr(record, 'extra_data'):
+                    log_data.update(record.extra_data)
+                
+                return json.dumps(log_data)
+        
+        console_formatter = JsonFormatter()
+        file_formatter = JsonFormatter()
+    else:
+        console_format = '%(levelname)s: %(message)s'
+        file_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        
+        if verbose:
+            console_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        
+        console_formatter = logging.Formatter(console_format)
+        file_formatter = logging.Formatter(file_format)
     
     # Create console handler unless quiet mode is enabled
     if not quiet:
@@ -79,7 +116,39 @@ def configure_logging(
         logger.addHandler(file_handler)
     
     # Log configuration information at debug level
-    logger.debug(f"Logging configured: level={level}, log_file={log_file}, quiet={quiet}, verbose={verbose}")
+    logger.debug(f"Logging configured: level={level}, log_file={log_file}, quiet={quiet}, verbose={verbose}, json_format={json_format}")
+
+def log_structured(
+    message: str,
+    level: str = "info",
+    **kwargs
+) -> None:
+    """
+    Log a message with structured additional data.
+    
+    Args:
+        message: Log message
+        level: Log level (debug, info, warning, error, critical)
+        **kwargs: Additional structured data to include in the log
+    """
+    log_level = LOG_LEVELS.get(level.lower(), logging.INFO)
+    
+    # Create a custom record factory to add extra_data
+    old_factory = logging.getLogRecordFactory()
+    
+    def record_factory(*args, **kwargs):
+        record = old_factory(*args, **kwargs)
+        record.extra_data = kwargs
+        return record
+    
+    # Set the custom factory
+    logging.setLogRecordFactory(record_factory)
+    
+    # Log the message
+    logger.log(log_level, message, extra={'extra_data': kwargs})
+    
+    # Restore the original factory
+    logging.setLogRecordFactory(old_factory)
 
 def log(
     message: str,

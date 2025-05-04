@@ -244,13 +244,17 @@ class DeduplicationEngine:
         Args:
             duplicates: Dictionary of duplicate objects (from find_duplicate_addresses)
             references: Dictionary of references (from find_duplicate_addresses)
-            primary_name_strategy: Strategy for choosing primary object ('first', 'shortest', etc.)
+            primary_name_strategy: Strategy for choosing primary object 
+                                ('first', 'shortest', 'longest', 'alphabetical')
             
         Returns:
             List of changes made (operation, name, element)
         """
         logger.info(f"Merging duplicate objects using strategy: {primary_name_strategy}")
         changes = []
+        
+        # Track processed objects to handle circular references
+        processed_objects = set()
         
         # Validate inputs
         if not duplicates:
@@ -261,10 +265,15 @@ class DeduplicationEngine:
         duplicate_count = sum(len(objects) - 1 for objects in duplicates.values())
         logger.info(f"Processing {duplicate_count} duplicates across {duplicate_sets} unique values")
         
-        for value_key, objects in duplicates.items():
+        # Sort duplicate sets by dependency order
+        # This helps ensure we process independent objects before their dependents
+        dependency_order = self._sort_by_dependencies(duplicates, references)
+        
+        for value_key in dependency_order:
+            objects = duplicates.get(value_key, [])
             logger.debug(f"Processing duplicates with value: {value_key}")
             
-            # Skip if there's only one object (shouldn't happen with duplicates dict)
+            # Skip if there's only one object
             if len(objects) <= 1:
                 logger.warning(f"Skipping value {value_key} with only {len(objects)} object")
                 continue
@@ -274,6 +283,13 @@ class DeduplicationEngine:
                 primary = self._select_primary_object(objects, primary_name_strategy)
                 primary_name, primary_elem = primary
                 
+                # Skip if we've already processed this primary
+                if primary_name in processed_objects:
+                    logger.warning(f"Object {primary_name} already processed, skipping to avoid circular references")
+                    continue
+                    
+                processed_objects.add(primary_name)
+                
                 logger.info(f"Selected primary object '{primary_name}' for value {value_key}")
                 
                 # Process each duplicate
@@ -282,6 +298,12 @@ class DeduplicationEngine:
                     if name == primary_name:
                         continue
                         
+                    # Skip if we've already processed this object
+                    if name in processed_objects:
+                        logger.warning(f"Object {name} already processed, skipping to avoid circular references")
+                        continue
+                        
+                    processed_objects.add(name)
                     logger.debug(f"Processing duplicate: {name}")
                     
                     # Update references to this object
@@ -292,11 +314,12 @@ class DeduplicationEngine:
                         for ref_path, ref_elem in references[name]:
                             try:
                                 # Update the reference to point to primary_name
-                                logger.debug(f"Updating reference in {ref_path}: {name} -> {primary_name}")
+                                old_text = ref_elem.text
                                 ref_elem.text = primary_name
-                                changes.append(('update_reference', name, ref_elem))
+                                changes.append(('update_reference', f"{ref_path}: {old_text} -> {primary_name}", ref_elem))
+                                logger.debug(f"Updated reference in {ref_path}: {old_text} -> {primary_name}")
                             except Exception as e:
-                                logger.error(f"Error updating reference to '{name}' in {ref_path}: {e}", exc_info=True)
+                                logger.error(f"Error updating reference to '{name}' in {ref_path}: {str(e)}")
                     else:
                         logger.debug(f"No references found for '{name}'")
                     
@@ -305,9 +328,9 @@ class DeduplicationEngine:
                     changes.append(('delete', name, obj))
             
             except Exception as e:
-                logger.error(f"Error processing duplicates for value {value_key}: {e}", exc_info=True)
+                logger.error(f"Error processing duplicates for value {value_key}: {str(e)}")
                 continue
-        
+    
         # Log changes summary
         delete_count = sum(1 for op, _, _ in changes if op == 'delete')
         ref_update_count = sum(1 for op, _, _ in changes if op == 'update_reference')
@@ -352,3 +375,70 @@ class DeduplicationEngine:
         else:
             logger.warning(f"Unknown strategy: {strategy}, falling back to 'first'")
             return objects[0]
+        
+    def _sort_by_dependencies(self, duplicates, references):
+        """
+        Sort duplicate sets based on their dependencies to avoid circular reference issues.
+        
+        Args:
+            duplicates: Dictionary of duplicate objects
+            references: Dictionary of references
+            
+        Returns:
+            List of value_keys in dependency order
+        """
+        dependency_graph = {}
+        value_key_to_names = {}
+        
+        # Build mapping of value_keys to object names
+        for value_key, objects in duplicates.items():
+            names = [name for name, _ in objects]
+            value_key_to_names[value_key] = set(names)
+            dependency_graph[value_key] = set()
+        
+        # Build dependency graph
+        for value_key, objects in duplicates.items():
+            names = value_key_to_names[value_key]
+            
+            # Find dependencies
+            for dependent_value_key, dependent_names in value_key_to_names.items():
+                if value_key == dependent_value_key:
+                    continue
+                
+                # Check if any object in this set references any object in the dependent set
+                for name in names:
+                    if name in references:
+                        for ref_path, _ in references[name]:
+                            for dependent_name in dependent_names:
+                                if dependent_name in ref_path:
+                                    # This set depends on the dependent set
+                                    dependency_graph[value_key].add(dependent_value_key)
+        
+        # Perform topological sort
+        result = []
+        visited = set()
+        temp_mark = set()
+        
+        def visit(node):
+            if node in visited:
+                return
+            if node in temp_mark:
+                # Circular dependency detected, but we'll continue
+                logger.warning(f"Circular dependency detected for value {node}")
+                return
+            
+            temp_mark.add(node)
+            
+            for dep in dependency_graph[node]:
+                visit(dep)
+            
+            temp_mark.remove(node)
+            visited.add(node)
+            result.append(node)
+        
+        for node in dependency_graph:
+            if node not in visited:
+                visit(node)
+        
+        # Return in reverse order (least dependent first)
+        return result[::-1]

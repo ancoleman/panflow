@@ -87,6 +87,40 @@ class ObjectMerger:
         Returns:
             bool: Success status
         """
+        # Validate required parameters
+        if not object_type:
+            logger.error("Object type cannot be empty")
+            self.skipped_objects.append((object_type, object_name, "Invalid object type"))
+            return False
+            
+        if not object_name:
+            logger.error("Object name cannot be empty")
+            self.skipped_objects.append((object_type, object_name, "Invalid object name"))
+            return False
+        
+        # Validate context types
+        valid_contexts = ["shared", "device_group", "vsys", "template"]
+        if source_context_type not in valid_contexts:
+            logger.error(f"Invalid source context type: {source_context_type}")
+            self.skipped_objects.append((object_type, object_name, f"Invalid source context: {source_context_type}"))
+            return False
+            
+        if target_context_type not in valid_contexts:
+            logger.error(f"Invalid target context type: {target_context_type}")
+            self.skipped_objects.append((object_type, object_name, f"Invalid target context: {target_context_type}"))
+            return False
+        
+        # Validate context parameters
+        if source_context_type == "device_group" and "source_device_group" not in kwargs:
+            logger.error("source_device_group parameter is required for device_group context")
+            self.skipped_objects.append((object_type, object_name, "Missing source_device_group parameter"))
+            return False
+            
+        if target_context_type == "device_group" and "target_device_group" not in kwargs:
+            logger.error("target_device_group parameter is required for device_group context")
+            self.skipped_objects.append((object_type, object_name, "Missing target_device_group parameter"))
+            return False
+        
         logger.info(f"Copying {object_type} object '{object_name}' from {source_context_type} to {target_context_type}")
         logger.debug(f"Copy parameters: skip_if_exists={skip_if_exists}, copy_references={copy_references}")
         
@@ -240,6 +274,7 @@ class ObjectMerger:
                 # Continue since the main object was copied successfully
         
         return True
+  
     
     def copy_objects(
         self,

@@ -13,13 +13,14 @@ from .xpath_resolver import determine_version_from_config
 # Initialize logger for this module
 logger = logging.getLogger("panflow")
 
-def load_config_from_file(file_path: str, version: Optional[str] = None) -> Tuple[etree._ElementTree, str]:
+def load_config_from_file(file_path: str, version: Optional[str] = None, validate: bool = False) -> Tuple[etree._ElementTree, str]:
     """
     Load XML configuration from a file and return the element tree and detected version.
     
     Args:
         file_path: Path to XML configuration file
         version: User-specified PAN-OS version (optional)
+        validate: Whether to validate the XML structure
         
     Returns:
         Tuple containing (ElementTree, PAN-OS version)
@@ -27,6 +28,7 @@ def load_config_from_file(file_path: str, version: Optional[str] = None) -> Tupl
     Raises:
         FileNotFoundError: If the configuration file does not exist
         etree.XMLSyntaxError: If the XML is malformed
+        ValueError: If the XML doesn't appear to be a valid PAN-OS configuration
     """
     logger.info(f"Loading configuration file: {file_path}")
     
@@ -37,8 +39,29 @@ def load_config_from_file(file_path: str, version: Optional[str] = None) -> Tupl
     try:
         # Parse the XML file
         logger.debug(f"Attempting to parse XML file: {file_path}")
-        tree = etree.parse(file_path)
+        parser = etree.XMLParser(remove_blank_text=True)
+        tree = etree.parse(file_path, parser)
         root = tree.getroot()
+        
+        # Basic validation of PAN-OS configuration structure
+        if validate:
+            if root.tag != "config":
+                logger.error("XML root element is not 'config' - not a valid PAN-OS configuration")
+                raise ValueError("XML root element is not 'config' - not a valid PAN-OS configuration")
+            
+            # Check for essential PAN-OS configuration elements
+            essential_elements = [
+                "/config/devices",
+                "/config/devices/entry[@name='localhost.localdomain']"
+            ]
+            
+            for xpath in essential_elements:
+                elements = tree.xpath(xpath)
+                if not elements:
+                    logger.error(f"Missing essential PAN-OS configuration element: {xpath}")
+                    raise ValueError(f"Missing essential PAN-OS configuration element: {xpath}")
+            
+            logger.debug("Basic PAN-OS configuration structure validation passed")
         
         # Use user-specified version if provided, otherwise detect from config
         logger.debug("Detecting configuration version")

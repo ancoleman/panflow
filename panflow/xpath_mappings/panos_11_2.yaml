@@ -1,5 +1,5 @@
-# XPath mappings for PAN-OS 10.1
-# This file contains the XPath expressions for different elements in a PAN-OS 10.1 configuration
+# XPath mappings for PAN-OS 11.2
+# This file contains the XPath expressions for different elements in a PAN-OS 11.2 configuration
 
 # Contexts define the base paths for different configuration contexts
 contexts:
@@ -8,9 +8,12 @@ contexts:
     device_group: "/config/devices/entry[@name='localhost.localdomain']/device-group/entry[@name='{device_group}']"
     template: "/config/devices/entry[@name='localhost.localdomain']/template/entry[@name='{template}']"
     pushed_config: "/config/pushed-shared-policy"
+    template_stack: "/config/devices/entry[@name='localhost.localdomain']/template-stack/entry[@name='{template_stack}']"
+    log_collector_group: "/config/devices/entry[@name='localhost.localdomain']/log-collector-group/entry[@name='{log_collector_group}']"
   firewall:
     shared: "/config/shared"
     vsys: "/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='{vsys}']"
+    system: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system"
 
 # Objects define the paths for different object types (relative to the context)
 objects:
@@ -18,7 +21,9 @@ objects:
   address-group: "{base_path}/address-group/entry[@name='{name}']"
   service: "{base_path}/service/entry[@name='{name}']"
   service-group: "{base_path}/service-group/entry[@name='{name}']"
+  application: "{base_path}/application/entry[@name='{name}']"
   application-group: "{base_path}/application-group/entry[@name='{name}']"
+  application-filter: "{base_path}/application-filter/entry[@name='{name}']"
   security-profile-group: "{base_path}/profile-group/entry[@name='{name}']"
   av-profile: "{base_path}/profiles/virus/entry[@name='{name}']"
   as-profile: "{base_path}/profiles/spyware/entry[@name='{name}']"
@@ -28,6 +33,20 @@ objects:
   dnssec_profile: "{base_path}/profiles/dns-security/entry[@name='{name}']"
   log_forwarding_profile: "{base_path}/log-settings/profiles/entry[@name='{name}']"
   management_profile: "{base_path}/network/profiles/interface-management-profile/entry[@name='{name}']"
+  zone: "{base_path}/zone/entry[@name='{name}']"
+  decryption_profile: "{base_path}/profiles/decryption/entry[@name='{name}']"
+  file_blocking_profile: "{base_path}/profiles/file-blocking/entry[@name='{name}']"
+  external_dynamic_list: "{base_path}/external-list/entry[@name='{name}']"
+  dynamic_user_group: "{base_path}/dynamic-user-group/entry[@name='{name}']"
+  region: "{base_path}/region/entry[@name='{name}']"
+  schedule: "{base_path}/schedule/entry[@name='{name}']"
+  tag: "{base_path}/tag/entry[@name='{name}']"
+  ike_crypto_profile: "{base_path}/network/ike/crypto-profiles/ike-crypto-profiles/entry[@name='{name}']"
+  ipsec_crypto_profile: "{base_path}/network/ike/crypto-profiles/ipsec-crypto-profiles/entry[@name='{name}']"
+  ssl_tls_service_profile: "{base_path}/profiles/ssl-tls-service-profile/entry[@name='{name}']"
+  http_header_profile: "{base_path}/profiles/http-header-insertion/entry[@name='{name}']"
+  saml_profile: "{base_path}/profiles/saml-profile/entry[@name='{name}']"
+  scep_profile: "{base_path}/certificate-profiles/entry[@name='{name}']"
 
 # Policies define the paths for different policy types (relative to the context)
 policies:
@@ -36,19 +55,102 @@ policies:
     security_post_rules: "{base_path}/post-rulebase/security/rules/entry[@name='{name}']"
     nat_pre_rules: "{base_path}/pre-rulebase/nat/rules/entry[@name='{name}']"
     nat_post_rules: "{base_path}/post-rulebase/nat/rules/entry[@name='{name}']"
+    pbf_pre_rules: "{base_path}/pre-rulebase/pbf/rules/entry[@name='{name}']"
+    pbf_post_rules: "{base_path}/post-rulebase/pbf/rules/entry[@name='{name}']"
     decryption_pre_rules: "{base_path}/pre-rulebase/decryption/rules/entry[@name='{name}']"
     decryption_post_rules: "{base_path}/post-rulebase/decryption/rules/entry[@name='{name}']"
+    tunnel_insp_pre_rules: "{base_path}/pre-rulebase/tunnel-inspect/rules/entry[@name='{name}']"
+    tunnel_insp_post_rules: "{base_path}/post-rulebase/tunnel-inspect/rules/entry[@name='{name}']"
+    sdwan_pre_rules: "{base_path}/pre-rulebase/sdwan/rules/entry[@name='{name}']"
+    sdwan_post_rules: "{base_path}/post-rulebase/sdwan/rules/entry[@name='{name}']"
+    application_override_pre_rules: "{base_path}/pre-rulebase/application-override/rules/entry[@name='{name}']"
+    application_override_post_rules: "{base_path}/post-rulebase/application-override/rules/entry[@name='{name}']"
     authentication_pre_rules: "{base_path}/pre-rulebase/authentication/rules/entry[@name='{name}']"
     authentication_post_rules: "{base_path}/post-rulebase/authentication/rules/entry[@name='{name}']"
+    dos_pre_rules: "{base_path}/pre-rulebase/dos/rules/entry[@name='{name}']"
+    dos_post_rules: "{base_path}/post-rulebase/dos/rules/entry[@name='{name}']"
+    qos_pre_rules: "{base_path}/pre-rulebase/qos/rules/entry[@name='{name}']"
+    qos_post_rules: "{base_path}/post-rulebase/qos/rules/entry[@name='{name}']"
+    security_profiles_pre_rules: "{base_path}/pre-rulebase/security-profiles/rules/entry[@name='{name}']"
+    security_profiles_post_rules: "{base_path}/post-rulebase/security-profiles/rules/entry[@name='{name}']"
   firewall:
     security_rules: "{base_path}/rulebase/security/rules/entry[@name='{name}']"
     nat_rules: "{base_path}/rulebase/nat/rules/entry[@name='{name}']"
+    pbf_rules: "{base_path}/rulebase/pbf/rules/entry[@name='{name}']"
     decryption_rules: "{base_path}/rulebase/decryption/rules/entry[@name='{name}']"
+    tunnel_insp_rules: "{base_path}/rulebase/tunnel-inspect/rules/entry[@name='{name}']"
+    sdwan_rules: "{base_path}/rulebase/sdwan/rules/entry[@name='{name}']"
+    application_override_rules: "{base_path}/rulebase/application-override/rules/entry[@name='{name}']"
     authentication_rules: "{base_path}/rulebase/authentication/rules/entry[@name='{name}']"
+    dos_rules: "{base_path}/rulebase/dos/rules/entry[@name='{name}']"
+    qos_rules: "{base_path}/rulebase/qos/rules/entry[@name='{name}']"
+    security_profiles_rules: "{base_path}/rulebase/security-profiles/rules/entry[@name='{name}']"
 
-# Version-specific XPath overrides can be defined here
-# This section would contain any XPaths that are different in 10.1 compared to other versions
-version_specific:
-  # Example (This is a placeholder. Replace with actual version-specific XPaths)
+# Configuration elements for device settings
+device_config:
   panorama:
-    log_collector_group: "/config/devices/entry[@name='localhost.localdomain']/log-collector-group/entry[@name='{name}']"
+    ntp_servers: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/ntp-servers/primary"
+    dns_servers: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/dns-setting/servers/primary"
+    syslog_servers: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/syslog-setting/server/entry[@name='{name}']"
+    email_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/email-scheduler/entry[@name='{name}']"
+    snmp_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/snmp-setting/access-setting/entry[@name='{name}']"
+    tacacs_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/tacplus-server/entry[@name='{name}']"
+    radius_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/radius-server/entry[@name='{name}']"
+    ldap_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/ldap-server/entry[@name='{name}']"
+    kerberos_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/kerberos-server/entry[@name='{name}']"
+    saml_idp: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/saml-idp/entry[@name='{name}']"
+    certificate: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/ssl-decrypt/certificate[@name='{name}']"
+  firewall:
+    ntp_servers: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/ntp-servers/primary"
+    dns_servers: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/dns-setting/servers/primary"
+    syslog_servers: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/syslog-setting/server/entry[@name='{name}']"
+    email_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/email-scheduler/entry[@name='{name}']"
+    snmp_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/snmp-setting/access-setting/entry[@name='{name}']"
+    tacacs_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/tacplus-server/entry[@name='{name}']"
+    radius_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/radius-server/entry[@name='{name}']"
+    ldap_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/ldap-server/entry[@name='{name}']"
+    kerberos_server: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/kerberos-server/entry[@name='{name}']"
+    saml_idp: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/saml-idp/entry[@name='{name}']"
+    certificate: "/config/devices/entry[@name='localhost.localdomain']/deviceconfig/system/ssl-decrypt/certificate[@name='{name}']"
+
+# Network configuration elements
+network_config:
+  panorama:
+    interface: "/config/devices/entry[@name='localhost.localdomain']/network/interface/ethernet/entry[@name='{name}']"
+    virtual_router: "/config/devices/entry[@name='localhost.localdomain']/network/virtual-router/entry[@name='{name}']"
+    virtual_wire: "/config/devices/entry[@name='localhost.localdomain']/network/virtual-wire/entry[@name='{name}']"
+    dhcp_server: "/config/devices/entry[@name='localhost.localdomain']/network/dhcp/server/entry[@name='{name}']"
+    ike_gateway: "/config/devices/entry[@name='localhost.localdomain']/network/ike/gateway/entry[@name='{name}']"
+    ipsec_tunnel: "/config/devices/entry[@name='localhost.localdomain']/network/tunnel/ipsec/entry[@name='{name}']"
+    qos_profile: "/config/devices/entry[@name='localhost.localdomain']/network/qos/profile/entry[@name='{name}']"
+    vlan: "/config/devices/entry[@name='localhost.localdomain']/network/vlan/entry[@name='{name}']"
+    loopback: "/config/devices/entry[@name='localhost.localdomain']/network/interface/loopback/units/entry[@name='{name}']"
+    tunnel: "/config/devices/entry[@name='localhost.localdomain']/network/interface/tunnel/units/entry[@name='{name}']"
+    zone_protection_profile: "/config/devices/entry[@name='localhost.localdomain']/network/profiles/zone-protection-profile/entry[@name='{name}']"
+  firewall:
+    interface: "/config/devices/entry[@name='localhost.localdomain']/network/interface/ethernet/entry[@name='{name}']"
+    virtual_router: "/config/devices/entry[@name='localhost.localdomain']/network/virtual-router/entry[@name='{name}']"
+    virtual_wire: "/config/devices/entry[@name='localhost.localdomain']/network/virtual-wire/entry[@name='{name}']"
+    dhcp_server: "/config/devices/entry[@name='localhost.localdomain']/network/dhcp/server/entry[@name='{name}']"
+    ike_gateway: "/config/devices/entry[@name='localhost.localdomain']/network/ike/gateway/entry[@name='{name}']"
+    ipsec_tunnel: "/config/devices/entry[@name='localhost.localdomain']/network/tunnel/ipsec/entry[@name='{name}']"
+    qos_profile: "/config/devices/entry[@name='localhost.localdomain']/network/qos/profile/entry[@name='{name}']"
+    vlan: "/config/devices/entry[@name='localhost.localdomain']/network/vlan/entry[@name='{name}']"
+    loopback: "/config/devices/entry[@name='localhost.localdomain']/network/interface/loopback/units/entry[@name='{name}']"
+    tunnel: "/config/devices/entry[@name='localhost.localdomain']/network/interface/tunnel/units/entry[@name='{name}']"
+    zone_protection_profile: "/config/devices/entry[@name='localhost.localdomain']/network/profiles/zone-protection-profile/entry[@name='{name}']"
+
+# Version-specific XPath overrides specific to 11.2
+version_specific:
+  panorama:
+    default_security_policy: "/config/devices/entry[@name='localhost.localdomain']/device-group/entry[@name='{device_group}']/default-security-rules/rules/entry[@name='{name}']"
+    decryption_exclusions: "/config/devices/entry[@name='localhost.localdomain']/device-group/entry[@name='{device_group}']/decryption-profile/entry[@name='{name}']/exclusion/entry[@name='{exclusion_name}']"
+    sdwan_interface: "/config/devices/entry[@name='localhost.localdomain']/template/entry[@name='{template}']/config/devices/entry[@name='localhost.localdomain']/network/sdwan/interface/entry[@name='{name}']"
+    cloud_services: "/config/devices/entry[@name='localhost.localdomain']/plugins/cloud_services/onboarding/entries/entry[@name='{name}']"
+    prisma_access: "/config/devices/entry[@name='localhost.localdomain']/plugins/cloud_services/remote-networks/templates/entry[@name='{name}']"
+    mobile_users: "/config/devices/entry[@name='localhost.localdomain']/plugins/cloud_services/mobile-users/entry[@name='{name}']"
+    log_collector: "/config/devices/entry[@name='localhost.localdomain']/log-collector/entry[@name='{name}']"
+  firewall:
+    default_security_policy: "/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='{vsys}']/default-security-rules/rules/entry[@name='{name}']"
+    decryption_exclusions: "/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='{vsys}']/decryption-profile/entry[@name='{name}']/exclusion/entry[@name='{exclusion_name}']"
+    sdwan_interface: "/config/devices/entry[@name='localhost.localdomain']/network/sdwan/interface/entry[@name='{name}']"

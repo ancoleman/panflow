@@ -47,12 +47,18 @@ class ConfigQuery:
         
     def select_policies(self, policy_type, criteria=None):
         """
-        Select policies matching the criteria.
+        Select policies matching the criteria with enhanced filtering capabilities.
         
         Args:
             policy_type: Type of policy to select (security_pre_rules, nat_rules, etc.)
-            criteria: Dictionary of criteria to filter policies
-            
+            criteria: Dictionary of criteria to filter policies. Enhanced criteria include:
+                - 'field_exists': Check if a field exists
+                - 'field_missing': Check if a field is missing
+                - 'text_contains': Check if text contains a substring
+                - 'regex_match': Use regular expressions for matching
+                - 'has_profile_type': Check for specific security profile types
+                - 'date_before'/'date_after': Filter by modification date
+                
         Returns:
             List of matching policy elements
         """
@@ -61,7 +67,7 @@ class ConfigQuery:
         # Get base XPath for the policy type
         try:
             base_xpath = get_policy_xpath(policy_type, self.device_type, self.context_type, 
-                                          self.version, **self.context_kwargs)
+                                        self.version, **self.context_kwargs)
             
             logger.debug(f"Generated base XPath: {base_xpath}")
             
@@ -76,7 +82,7 @@ class ConfigQuery:
                 filtered_results = []
                 
                 for policy in results:
-                    if self._matches_criteria(policy, criteria):
+                    if self._matches_enhanced_criteria(policy, criteria):
                         policy_name = policy.get('name', 'unknown')
                         filtered_results.append(policy)
                         logger.debug(f"Policy '{policy_name}' matches criteria")
@@ -90,6 +96,119 @@ class ConfigQuery:
             logger.error(f"Error selecting policies: {str(e)}", exc_info=True)
             return []
     
+    def _matches_enhanced_criteria(self, element, criteria):
+        """
+        Check if an element matches the enhanced criteria.
+        
+        Args:
+            element: XML element to check
+            criteria: Dictionary of enhanced criteria
+            
+        Returns:
+            bool: True if the element matches all criteria, False otherwise
+        """
+        import re
+        from datetime import datetime
+        
+        element_name = element.get('name', 'unknown')
+        logger.debug(f"Evaluating enhanced criteria for element '{element_name}'")
+        
+        try:
+            for key, value in criteria.items():
+                # Handle enhanced criteria types
+                if key == 'field_exists':
+                    for field in value if isinstance(value, list) else [value]:
+                        if not element.xpath(f'./{field}'):
+                            logger.debug(f"Element '{element_name}' is missing required field: {field}")
+                            return False
+                
+                elif key == 'field_missing':
+                    for field in value if isinstance(value, list) else [value]:
+                        if element.xpath(f'./{field}'):
+                            logger.debug(f"Element '{element_name}' has field that should be missing: {field}")
+                            return False
+                
+                elif key == 'text_contains':
+                    field_path, substring = value.get('field', ''), value.get('text', '')
+                    field_elements = element.xpath(f'./{field_path}')
+                    if not field_elements or not any(substring in (elem.text or '') for elem in field_elements):
+                        logger.debug(f"Element '{element_name}' does not contain text: {substring}")
+                        return False
+                
+                elif key == 'regex_match':
+                    field_path, pattern = value.get('field', ''), value.get('pattern', '')
+                    field_elements = element.xpath(f'./{field_path}')
+                    if not field_elements or not any(re.search(pattern, (elem.text or '')) for elem in field_elements):
+                        logger.debug(f"Element '{element_name}' does not match regex pattern: {pattern}")
+                        return False
+                
+                elif key == 'has_profile_type':
+                    profile_type = value
+                    profile_elements = element.xpath(f'.//profile-setting//{profile_type}')
+                    if not profile_elements:
+                        logger.debug(f"Element '{element_name}' does not have profile type: {profile_type}")
+                        return False
+                
+                elif key == 'date_before' or key == 'date_after':
+                    # This assumes a 'last-modified' attribute or element
+                    date_str = element.get('last-modified', '')
+                    if not date_str:
+                        mod_elem = element.find('./last-modified')
+                        date_str = mod_elem.text if mod_elem is not None else ''
+                    
+                    if date_str:
+                        try:
+                            mod_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                            compare_date = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+                            
+                            if key == 'date_before' and mod_date >= compare_date:
+                                logger.debug(f"Element '{element_name}' modification date {mod_date} is not before {compare_date}")
+                                return False
+                            elif key == 'date_after' and mod_date <= compare_date:
+                                logger.debug(f"Element '{element_name}' modification date {mod_date} is not after {compare_date}")
+                                return False
+                        except ValueError:
+                            logger.warning(f"Invalid date format in element '{element_name}' or criteria")
+                
+                # Handle standard field matching (as in the original method)
+                elif key == 'name':
+                    if element.get('name') != value:
+                        logger.debug(f"Element '{element_name}' name does not match {value}")
+                        return False
+                elif key == 'has-tag':
+                    tag_elements = element.xpath('./tag/member')
+                    tag_values = [tag.text for tag in tag_elements if tag.text]
+                    if value not in tag_values:
+                        logger.debug(f"Element '{element_name}' does not have tag: {value}")
+                        return False
+                elif key in ['source', 'destination', 'application', 'service']:
+                    member_elements = element.xpath(f'./{key}/member')
+                    member_values = [m.text for m in member_elements if m.text]
+                    
+                    if isinstance(value, list):
+                        if not any(v in member_values for v in value):
+                            logger.debug(f"Element '{element_name}' {key} values {member_values} don't match any in {value}")
+                            return False
+                    else:
+                        if value not in member_values:
+                            logger.debug(f"Element '{element_name}' {key} values {member_values} don't include {value}")
+                            return False
+                else:
+                    child_elements = element.xpath(f'./{key}')
+                    if not child_elements:
+                        logger.debug(f"Element '{element_name}' has no child element: {key}")
+                        return False
+                    
+                    if value is not None and child_elements[0].text and child_elements[0].text.strip() != str(value).strip():
+                        logger.debug(f"Element '{element_name}' {key} value '{child_elements[0].text}' doesn't match '{value}'")
+                        return False
+            
+            logger.debug(f"Element '{element_name}' matches all criteria")
+            return True
+        except Exception as e:
+            logger.error(f"Error matching criteria for element '{element_name}': {str(e)}", exc_info=True)
+            return False
+        
     def select_objects(self, object_type, criteria=None):
         """
         Select objects matching the criteria.
