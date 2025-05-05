@@ -13,6 +13,10 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 - **Deduplication engine**: Find and merge duplicate objects while updating all references
 - **Graph-based querying**: Query the configuration using a Cypher-like query language
 - **Command-line interface**: Feature-rich CLI for configuration management
+- **Device type auto-detection**: Automatically detects if a configuration is from a Panorama or firewall
+- **Query-based filtering**: Select objects and policies using graph queries
+- **Conflict resolution**: Multiple strategies for handling merging conflicts
+- **HTML report templates**: Customizable HTML reports for configuration analysis
 - **Functional design**: Modular architecture with separation of concerns
 
 ## Documentation
@@ -92,11 +96,17 @@ python panflow_cli.py deduplicate --config firewall.xml --type address --output 
 # Query the configuration with the graph query language
 python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
 
+# Filter objects using a graph query
+python panflow_cli.py object list --config config.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))"
+
+# Filter policies using a graph query
+python panflow_cli.py policy filter --config config.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.port = '80'"
+
 # Merge a policy from one config to another
 python panflow_cli.py merge policy --source-config source.xml --target-config target.xml --type security_pre_rules --name "Allow Web" --output merged.xml
 
-# Launch interactive query mode
-python panflow_cli.py query interactive --config config.xml
+# Run commands with auto-detected device type
+python panflow_cli.py object list --config config.xml --type address  # Device type will be auto-detected
 ```
 
 > **Note**: All CLI commands can be used with either `panflow_cli.py` (recommended) or `cli.py` (legacy). See the [CLI Migration Guide](docs/cli_migration.md) for details.
@@ -165,30 +175,72 @@ The library is organized into logical modules:
 ```
 ├── panflow/
 │   ├── __init__.py
-│   ├── constants
-│   │   └── common.py
-│   ├── core                    # Core functionality
+│   ├── cli/                     # CLI command framework
+│   │   ├── __init__.py
+│   │   ├── app.py              # CLI app definition
+│   │   ├── common.py           # Shared CLI options
+│   │   └── commands/           # CLI command modules
+│   │       ├── __init__.py
+│   │       ├── deduplicate_commands.py
+│   │       ├── merge_commands.py
+│   │       ├── object_commands.py
+│   │       ├── policy_commands.py
+│   │       └── query_commands.py
+│   ├── constants/
+│   │   ├── __init__.py
+│   │   └── common.py           # Global constants
+│   ├── core/                   # Core functionality
+│   │   ├── __init__.py
 │   │   ├── bulk_operations.py  # Bulk configuration operations
 │   │   ├── config_loader.py    # XML loading and parsing
 │   │   ├── config_saver.py     # XML saving and export
+│   │   ├── conflict_resolver.py # Conflict resolution strategies
 │   │   ├── deduplication.py    # Duplicate object handling
+│   │   ├── exceptions.py       # Custom exceptions
+│   │   ├── graph_utils.py      # Configuration graph builder
 │   │   ├── logging_utils.py    # Logging and error tracking
 │   │   ├── object_merger.py    # Object merging handling
+│   │   ├── object_validator.py # Object validation
 │   │   ├── policy_merger.py    # Policy merging handling
+│   │   ├── query_engine.py     # Graph query execution engine
+│   │   ├── query_language.py   # Graph query language parser
+│   │   ├── reporting.py        # Report generation framework
+│   │   ├── template_loader.py  # HTML template loader
+│   │   ├── xml_builder.py      # XML construction utilities
+│   │   ├── xml_cache.py        # XML caching for performance
+│   │   ├── xml_diff.py         # XML difference utilities
+│   │   ├── xml_query.py        # XML querying utilities
 │   │   ├── xml_utils.py        # XML manipulation utilities
 │   │   └── xpath_resolver.py   # Version-aware XPath handling
-│   ├── modules
+│   ├── modules/                # Functional modules
+│   │   ├── __init__.py
 │   │   ├── groups.py           # Group operations
 │   │   ├── objects.py          # Object management
 │   │   ├── policies.py         # Policy management
 │   │   └── reports.py          # Report generation
-│   └── xpath_mappings          # XPath definitions by version
+│   ├── templates/              # HTML report templates
+│   │   └── reports/
+│   │       ├── base.html
+│   │       ├── custom_report.html
+│   │       ├── object_usage.html
+│   │       ├── sections/
+│   │       │   ├── object_section.html
+│   │       │   └── policy_section.html
+│   │       └── security_policy_analysis.html
+│   └── xpath_mappings/         # XPath definitions by version
 │       ├── panos_10_1.yaml
 │       ├── panos_10_2.yaml
 │       └── panos_11_2.yaml
-├── pyproject.toml
-├── panflow_cli.py # Main command-line interface (recommended)
-├── cli.py # Legacy command-line interface (deprecated)
+├── docs/                       # Documentation
+├── pyproject.toml              # Project metadata
+├── pytest.ini                  # Test configuration
+├── panflow_cli.py              # Main command-line interface (recommended)
+├── cli.py                      # Legacy command-line interface (deprecated)
+├── tests/                      # Test suite
+│   ├── fixtures/               # Test fixtures
+│   ├── integration/            # Integration tests
+│   └── unit/                   # Unit tests
+└── test_files/                 # Test data files
 ```
 
 ## XPath Mappings
