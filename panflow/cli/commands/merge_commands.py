@@ -13,6 +13,9 @@ from panflow.core.object_merger import ObjectMerger
 from panflow.core.policy_merger import PolicyMerger
 from panflow.core.conflict_resolver import ConflictStrategy
 from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
+from panflow.core.graph_utils import ConfigGraph
+from panflow.core.query_language import Query
+from panflow.core.query_engine import QueryExecutor
 from panflow.constants import POLICY_TYPES, OBJECT_TYPES
 
 from ..app import merge_app
@@ -133,6 +136,7 @@ def merge_policies(
     policy_type: str = PolicyOptions.policy_type(),
     policy_names_file: Optional[str] = typer.Option(None, "--names-file", help="File containing policy names to merge (one per line)"),
     criteria_file: Optional[str] = typer.Option(None, "--criteria", help="JSON file with filter criteria"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select policies (e.g., 'MATCH (r:security-rule)-[:uses-source]->(a:address) WHERE a.name == \"any\"')"),
     source_context: str = typer.Option("shared", "--source-context", help="Source context (shared, device_group, vsys)"),
     target_context: str = typer.Option("shared", "--target-context", help="Target context (shared, device_group, vsys)"),
     source_device_group: Optional[str] = typer.Option(None, "--source-dg", help="Source device group name"),
@@ -187,13 +191,50 @@ Example:
         if policy_names_file:
             with open(policy_names_file, 'r') as f:
                 policy_names = [line.strip() for line in f if line.strip()]
+            logger.info(f"Loaded {len(policy_names)} policy names from {policy_names_file}")
         
         if criteria_file:
             with open(criteria_file, 'r') as f:
                 filter_criteria = json.load(f)
+            logger.info(f"Loaded criteria from {criteria_file}: {filter_criteria}")
+            
+        # Process query filter if specified
+        if query_filter:
+            logger.info(f"Using graph query filter: {query_filter}")
+            
+            # Build the graph from source configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(source_tree)
+            
+            # Prepare a query that returns policy names
+            # If the query doesn't already have a RETURN clause, append one that returns policy names
+            if "RETURN" not in query_filter.upper():
+                query_text = f"{query_filter} RETURN r.name"
+            else:
+                query_text = query_filter
+            
+            # Execute the query
+            query = Query(query_text)
+            executor = QueryExecutor(graph)
+            results = executor.execute(query)
+            
+            # Extract policy names from the results
+            query_policy_names = []
+            for row in results:
+                if 'r.name' in row:
+                    query_policy_names.append(row['r.name'])
+            
+            logger.info(f"Query matched {len(query_policy_names)} policies")
+            
+            # If policy_names is already set, extend it with query results
+            if policy_names:
+                policy_names.extend(query_policy_names)
+            # Otherwise, set policy_names to query results
+            else:
+                policy_names = query_policy_names
         
         if not policy_names and not filter_criteria:
-            logger.error("Either policy names file or criteria file must be provided")
+            logger.error("Either policy names file, criteria file, or query filter must be provided")
             raise typer.Exit(1)
         
         # Merge the policies
@@ -491,6 +532,7 @@ def merge_objects(
     object_type: str = ObjectOptions.object_type(),
     names_file: Optional[str] = typer.Option(None, "--names-file", help="File containing object names to merge (one per line)"),
     criteria_file: Optional[str] = typer.Option(None, "--criteria", help="JSON file with filter criteria"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE a.value CONTAINS \"10.1.1\"')"),
     source_context: str = typer.Option("shared", "--source-context", help="Source context (shared, device_group, vsys)"),
     target_context: str = typer.Option("shared", "--target-context", help="Target context (shared, device_group, vsys)"),
     source_device_group: Optional[str] = typer.Option(None, "--source-dg", help="Source device group name"),
@@ -545,13 +587,50 @@ def merge_objects(
         if names_file:
             with open(names_file, 'r') as f:
                 object_names = [line.strip() for line in f if line.strip()]
+            logger.info(f"Loaded {len(object_names)} object names from {names_file}")
         
         if criteria_file:
             with open(criteria_file, 'r') as f:
                 filter_criteria = json.load(f)
+            logger.info(f"Loaded criteria from {criteria_file}: {filter_criteria}")
+            
+        # Process query filter if specified
+        if query_filter:
+            logger.info(f"Using graph query filter: {query_filter}")
+            
+            # Build the graph from source configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(source_tree)
+            
+            # Prepare a query that returns object names
+            # If the query doesn't already have a RETURN clause, append one that returns object names
+            if "RETURN" not in query_filter.upper():
+                query_text = f"{query_filter} RETURN a.name"
+            else:
+                query_text = query_filter
+            
+            # Execute the query
+            query = Query(query_text)
+            executor = QueryExecutor(graph)
+            results = executor.execute(query)
+            
+            # Extract object names from the results
+            query_object_names = []
+            for row in results:
+                if 'a.name' in row:
+                    query_object_names.append(row['a.name'])
+            
+            logger.info(f"Query matched {len(query_object_names)} objects")
+            
+            # If object_names is already set, extend it with query results
+            if object_names:
+                object_names.extend(query_object_names)
+            # Otherwise, set object_names to query results
+            else:
+                object_names = query_object_names
         
         if not object_names and not filter_criteria:
-            logger.error("Either object names file or criteria file must be provided")
+            logger.error("Either object names file, criteria file, or query filter must be provided")
             raise typer.Exit(1)
         
         # Merge the objects

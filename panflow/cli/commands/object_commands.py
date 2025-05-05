@@ -7,9 +7,14 @@ This module provides commands for managing PAN-OS objects.
 import json
 import typer
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from panflow import PANFlowConfig
+from panflow.core.graph_utils import ConfigGraph
+from panflow.core.query_language import Query
+from panflow.core.query_engine import QueryExecutor
+from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
+
 from ..app import object_app
 from ..common import (
     ConfigOptions, ContextOptions, ObjectOptions
@@ -221,4 +226,140 @@ def filter_objects(
             
     except Exception as e:
         logger.error(f"Error filtering objects: {e}")
+        raise typer.Exit(1)
+
+@object_app.command("bulk-delete")
+def bulk_delete_objects(
+    config: str = ConfigOptions.config_file(),
+    object_type: str = ObjectOptions.object_type(),
+    names_file: Optional[str] = typer.Option(None, "--names-file", help="Text file with object names to delete (one per line)"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))')"),
+    output: str = ConfigOptions.output_file(),
+    device_type: str = ConfigOptions.device_type(),
+    context: str = ContextOptions.context_type(),
+    device_group: Optional[str] = ContextOptions.device_group(),
+    vsys: str = ContextOptions.vsys(),
+    template: Optional[str] = ContextOptions.template(),
+    version: Optional[str] = ConfigOptions.version(),
+    dry_run: bool = ConfigOptions.dry_run(),
+    force: bool = typer.Option(False, "--force", help="Delete objects without confirmation (USE WITH CAUTION)")
+):
+    """Delete multiple objects based on a query filter or names file
+    
+    Examples:
+    
+        # Delete objects listed in a file
+        python cli.py object bulk-delete --config config.xml --type address --names-file objects_to_delete.txt
+        
+        # Delete unused address objects using query filter
+        python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination|contains]->(a))"
+        
+        # Preview objects that would be deleted without making changes
+        python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE a.value CONTAINS '192.168.1'" --dry-run
+    """
+    try:
+        # Load the configuration
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
+        
+        # Get context kwargs
+        context_kwargs = ContextOptions.get_context_kwargs(context, device_group, vsys, template)
+        
+        # Initialize object names list
+        object_names = []
+        
+        # Load names from file if specified
+        if names_file:
+            with open(names_file, 'r') as f:
+                object_names = [line.strip() for line in f if line.strip()]
+            logger.info(f"Loaded {len(object_names)} object names from {names_file}")
+        
+        # Process query filter if specified
+        if query_filter:
+            logger.info(f"Using graph query filter: {query_filter}")
+            
+            # Get the configuration tree (needed to build the graph)
+            tree = xml_config.tree
+            
+            # Build the graph
+            graph = ConfigGraph()
+            graph.build_from_xml(tree)
+            
+            # Prepare a query that returns object names
+            # If the query doesn't already have a RETURN clause, append one that returns object names
+            if "RETURN" not in query_filter.upper():
+                query_text = f"{query_filter} RETURN a.name"
+            else:
+                query_text = query_filter
+            
+            # Execute the query
+            query = Query(query_text)
+            executor = QueryExecutor(graph)
+            results = executor.execute(query)
+            
+            # Extract object names from the results
+            query_object_names = []
+            for row in results:
+                if 'a.name' in row:
+                    query_object_names.append(row['a.name'])
+            
+            logger.info(f"Query matched {len(query_object_names)} objects")
+            
+            # Add query results to object names list
+            object_names.extend(query_object_names)
+        
+        # Remove duplicates
+        object_names = list(set(object_names))
+        
+        # If no objects to delete, stop
+        if not object_names:
+            logger.error("No objects to delete. Specify either names-file or query-filter")
+            raise typer.Exit(1)
+            
+        # Log the objects to be deleted
+        logger.info(f"Found {len(object_names)} {object_type} objects to delete")
+        
+        # In dry run mode, just show what would be deleted
+        if dry_run:
+            logger.info("Dry run mode: Changes will not be applied")
+            for name in object_names:
+                logger.info(f"  - Would delete {object_type} object: {name}")
+            return
+            
+        # Confirm deletion unless force flag is used
+        if not force:
+            logger.warning(f"About to delete {len(object_names)} {object_type} objects. Proceed? (y/n)")
+            confirmation = input().strip().lower()
+            if confirmation != 'y':
+                logger.info("Operation cancelled by user")
+                raise typer.Exit(0)
+        
+        # Delete the objects
+        deleted_count = 0
+        failed_count = 0
+        
+        for name in object_names:
+            try:
+                if xml_config.delete_object(object_type, name, context, **context_kwargs):
+                    logger.info(f"Successfully deleted {object_type} object '{name}'")
+                    deleted_count += 1
+                else:
+                    logger.warning(f"Failed to delete {object_type} object '{name}'")
+                    failed_count += 1
+            except Exception as e:
+                logger.warning(f"Error deleting {object_type} object '{name}': {e}")
+                failed_count += 1
+        
+        # Save the updated configuration if any objects were deleted
+        if deleted_count > 0:
+            if xml_config.save(output):
+                logger.info(f"Configuration saved to {output}")
+            else:
+                logger.error(f"Failed to save configuration to {output}")
+                raise typer.Exit(1)
+                
+        # Summarize the results
+        logger.info(f"Deleted {deleted_count} objects. Failed to delete {failed_count} objects.")
+        
+    except Exception as e:
+        logger.error(f"Error in bulk delete: {e}")
         raise typer.Exit(1)

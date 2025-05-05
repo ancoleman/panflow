@@ -741,11 +741,15 @@ Options:
 - `--type`, `-t`: Type of object to deduplicate (**required**)
 - `--output`, `-o`: Output file for updated configuration (**required**)
 - `--dry-run`: Show what would be done without making changes
-- `--strategy`: Strategy for choosing primary object (first, shortest)
+- `--strategy`: Strategy for choosing primary object (first, shortest, longest, alphabetical)
 - `--context`: Context (shared, device_group, vsys)
 - `--device-group`: Device group name (for Panorama device_group context)
 - `--vsys`: VSYS name (for firewall vsys context)
 - `--device-type`: Device type (firewall or panorama)
+- `--pattern`, `-p`: Pattern to filter objects (e.g. '10.0.0' for addresses)
+- `--include-file`: JSON file with list of object names to include in deduplication
+- `--exclude-file`: JSON file with list of object names to exclude from deduplication
+- `--query-filter`, `-q`: Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))')
 
 #### Deduplication Process:
 
@@ -784,6 +788,16 @@ python cli.py deduplicate --config firewall.xml --type address_group --output de
 Deduplicate in a Panorama device group:
 ```bash
 python cli.py deduplicate --config panorama.xml --type service --output deduped.xml --device-type panorama --context device_group --device-group DG1
+```
+
+Using graph query to select objects for deduplication:
+```bash
+python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a)) AND a.value CONTAINS '10.0.0'"
+```
+
+Combining query filter with include file to refine selection:
+```bash
+python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE a.value CONTAINS '192.168'" --include-file critical_objects.json
 ```
 
 #### Supported Object Types for Deduplication:
@@ -895,6 +909,134 @@ python cli.py report reference-check --config panorama.xml --name critical-serve
 # Review references before deciding whether to delete
 ```
 
+## Integration Workflows with Graph Queries
+
+The graph query system can be combined with other commands to create powerful workflows. Here are examples of using queries to drive other operations:
+
+### Query-Driven Object Deletion
+
+Identify and delete unused objects:
+
+```bash
+# Step 1: Find unused address objects
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination|contains]->(a)) RETURN a.name" --format json --output unused.json
+
+# Step 2: Parse the JSON output to get names of unused objects
+cat unused.json | jq -r '.[].a\.name' > unused_addresses.txt
+
+# Step 3: Create a script to delete each unused object
+while read name; do
+  python cli.py object delete --config config.xml --type address --name "$name" --output config_updated.xml
+  mv config_updated.xml config.xml
+done < unused_addresses.txt
+```
+
+### Query-Driven Deduplication
+
+Find duplicate IP addresses with different names and deduplicate them:
+
+```bash
+# Old approach (multi-step):
+# Step 1: Identify address objects with identical IP values
+python cli.py query execute -c config.xml -q "MATCH (a1:address), (a2:address) WHERE a1.value == a2.value AND a1.name <> a2.name RETURN a1.name, a1.value, COLLECT(a2.name) as duplicates" --format json --output duplicates.json
+
+# Step 2: Review the results before deduplication
+cat duplicates.json
+
+# Step 3: Deduplicate the address objects
+python cli.py deduplicate --config config.xml --type address --output deduped.xml
+
+# New approach (direct integration):
+# Directly deduplicate only objects with a specific subnet using query filter
+python cli.py deduplicate --config config.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE a.value CONTAINS '10.1.0'" --dry-run
+
+# Then perform the actual deduplication after reviewing
+python cli.py deduplicate --config config.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE a.value CONTAINS '10.1.0'"
+```
+
+### Query-Driven Bulk Operations
+
+Update security rules that use a specific service:
+
+```bash
+# Step 1: Find security rules using a specific service
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.name == 'http' RETURN r.name" --format json --output http_rules.json
+
+# Step 2: Extract rule names from JSON
+cat http_rules.json | jq -r '.[].r\.name' > http_rules.txt
+
+# Step 3: Create criteria JSON file based on rule names
+echo '{"name": ["'$(tr '\n' ',' < http_rules.txt | sed 's/,$//')']}' > criteria.json
+
+# Step 4: Create operations to add application filtering
+echo '{"add-profile": {"type": "url-filtering", "name": "web-filter"}}' > operations.json
+
+# Step 5: Apply bulk update
+python cli.py policy bulk-update --config config.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
+```
+
+### Query-Driven Merge Operations
+
+Merge specific objects from source to target based on query results:
+
+```bash
+# Step 1: Find all objects referenced by a specific rule
+python cli.py query execute -c source.xml -q "MATCH (r:security-rule)-[:uses-source|uses-destination|uses-service]->(o) WHERE r.name == 'Important-Rule' RETURN DISTINCT o.type, o.name" --format json --output objects_to_merge.json
+
+# Step 2: Create a script to merge each referenced object
+cat objects_to_merge.json | jq -c '.[]' | while read -r object; do
+  obj_type=$(echo $object | jq -r '.o\.type')
+  obj_name=$(echo $object | jq -r '.o\.name')
+  python cli.py merge object --source-config source.xml --target-config target.xml --type "$obj_type" --name "$obj_name" --output target_updated.xml --copy-references
+  mv target_updated.xml target.xml
+done
+
+# Step 3: Merge the rule itself
+python cli.py merge policy --source-config source.xml --target-config target.xml --type security_pre_rules --name "Important-Rule" --output target_updated.xml
+```
+
+### Query-Driven Report Generation
+
+Generate a custom report on security exposure:
+
+```bash
+# Step 1: Find rules that allow any traffic to DMZ servers
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule)-[:uses-source]->(s:address), (r)-[:uses-destination]->(d:address) WHERE r.action == 'allow' AND s.name == 'any' AND d.name CONTAINS 'DMZ' RETURN r.name, d.name, d.value" --format csv --output dmz_exposure.csv
+
+# Step 2: Generate a formatted report
+echo "# DMZ Exposure Report" > exposure_report.md
+echo "## Rules allowing unrestricted access to DMZ servers" >> exposure_report.md
+echo "" >> exposure_report.md
+cat dmz_exposure.csv | sed 's/,/ | /g' | sed '1s/.*/| Rule | Server | IP |/' | sed '1a| --- | --- | --- |' >> exposure_report.md
+```
+
+### Interactive Query Exploration for Complex Tasks
+
+Use interactive mode to explore before performing operations:
+
+```bash
+# Step 1: Launch interactive mode to explore the configuration
+python cli.py query interactive --config config.xml
+
+# In the interactive session:
+# > MATCH (r:security-rule)-[:uses-source]->(s:address-group) RETURN r.name, s.name LIMIT 5
+# > MATCH (ag:address-group)-[:contains]->(a:address) WHERE ag.name == 'Internal-Servers' RETURN a.name, a.value
+# > MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.dst_port == '3389' RETURN r.name, s.name
+
+# Step 2: After identifying the relevant objects, exit and perform operations
+# For example, create a bulk update for all rules using RDP:
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.dst_port == '3389' RETURN r.name" --format json --output rdp_rules.json
+
+# Create criteria and operations
+cat rdp_rules.json | jq -r '.[].r\.name' | jq -Rs 'split("\n") | {name: .}' > criteria.json
+echo '{"add-tag": {"name": "rdp-access"}, "add-profile": {"type": "vulnerability", "name": "strict-protection"}}' > operations.json
+
+# Apply the bulk update
+python cli.py policy bulk-update --config config.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
+```
+
+These integration workflows demonstrate how the graph query language can be a powerful tool for identifying specific objects or policies to be processed by other commands, creating an efficient and precise way to manage your PAN-OS configurations.
+
 ## Tips and Best Practices
 
 1. **Always validate your configuration** after making changes with the `config validate` command.
@@ -921,3 +1063,5 @@ python cli.py report reference-check --config panorama.xml --name critical-serve
 10. **Context matters**: Remember to specify the correct context (`shared`, `device_group`, `vsys`, or `template`) and its name when working with configurations.
 
 11. **Use package-based CLI**: Use `panflow_cli.py` instead of `cli.py` for all operations as it's the primary interface going forward. Examples throughout this guide can be adapted by changing `python cli.py` to `python panflow_cli.py`.
+
+12. **Leverage graph query filters**: Use the `--query-filter` option with commands like `policy bulk-update`, `object bulk-delete`, `deduplicate merge`, and `merge` commands to precisely select the objects or policies to operate on. This is more powerful than using simple pattern matching or name lists.

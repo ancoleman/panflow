@@ -18,6 +18,9 @@ from ..common import (
 # Import core modules
 from panflow import PANFlowConfig
 from panflow.core.deduplication import DeduplicationEngine
+from panflow.core.graph_utils import ConfigGraph
+from panflow.core.query_language import Query
+from panflow.core.query_engine import QueryExecutor
 
 # Get logger
 logger = logging.getLogger("panflow")
@@ -56,6 +59,7 @@ def find_duplicates(
     pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Pattern to filter objects (e.g. '10.0.0' for addresses)"),
     include_file: Optional[str] = typer.Option(None, "--include-file", help="JSON file with list of object names to include in results"),
     exclude_file: Optional[str] = typer.Option(None, "--exclude-file", help="JSON file with list of object names to exclude from results"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))')"),
     min_group_size: int = typer.Option(2, "--min-group-size", "-g", help="Minimum number of objects in a duplicate group to include in results"),
     version: Optional[str] = ConfigOptions.version(),
 ):
@@ -87,15 +91,62 @@ def find_duplicates(
         include_list = []
         exclude_list = []
         
+        # Process query filter if provided
+        if query_filter:
+            logger.info(f"Processing graph query filter: {query_filter}")
+            # Build graph from the configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Create a query executor
+            executor = QueryExecutor(graph)
+            
+            # Parse the query and ensure it has a RETURN clause
+            query = Query(query_filter)
+            if not query.has_return_clause():
+                # Add a return clause based on object type
+                node_type = object_type.rstrip('s')  # Strip trailing 's' if present
+                query.add_return(f"a.name as name")
+                logger.info(f"Added return clause to query: {query.query}")
+            
+            # Execute the query
+            results = executor.execute(query.query)
+            
+            # Extract object names from results
+            query_objects = []
+            for result in results:
+                if 'name' in result:
+                    query_objects.append(result['name'])
+                elif len(result) == 1:
+                    # If there's only one field, use it
+                    query_objects.append(list(result.values())[0])
+            
+            if query_objects:
+                # Add query results to include list
+                include_list = query_objects
+                logger.info(f"Using query results for include list: {len(include_list)} objects")
+            else:
+                logger.info("Query returned no results")
+        
         if include_file:
             try:
                 with open(include_file, 'r') as f:
                     include_data = json.load(f)
+                    file_include_list = []
                     if isinstance(include_data, list):
-                        include_list = include_data
+                        file_include_list = include_data
                     else:
-                        include_list = include_data.get('objects', [])
-                logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
+                        file_include_list = include_data.get('objects', [])
+                
+                # Combine with existing include_list if it exists from query_filter
+                if include_list and query_filter:
+                    # Find the intersection (only objects that are in both lists)
+                    include_list = [obj for obj in include_list if obj in file_include_list]
+                    logger.info(f"Combined query results with include file: {len(include_list)} objects remain after intersection")
+                else:
+                    # Otherwise, use file list directly
+                    include_list = file_include_list
+                    logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
             except Exception as e:
                 logger.error(f"Error loading include file {include_file}: {e}")
                 raise typer.Exit(1)
@@ -208,6 +259,7 @@ def deduplicate_objects(
     pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Pattern to filter objects (e.g. '10.0.0' for addresses)"),
     include_file: Optional[str] = typer.Option(None, "--include-file", help="JSON file with list of object names to include in deduplication"),
     exclude_file: Optional[str] = typer.Option(None, "--exclude-file", help="JSON file with list of object names to exclude from deduplication"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))')"),
     dry_run: bool = ConfigOptions.dry_run(),
     impact_report: Optional[str] = typer.Option(None, "--impact-report", "-i", help="Generate a detailed impact report and save to this file"),
     version: Optional[str] = ConfigOptions.version(),
@@ -240,15 +292,62 @@ def deduplicate_objects(
         include_list = []
         exclude_list = []
         
+        # Process query filter if provided
+        if query_filter:
+            logger.info(f"Processing graph query filter: {query_filter}")
+            # Build graph from the configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Create a query executor
+            executor = QueryExecutor(graph)
+            
+            # Parse the query and ensure it has a RETURN clause
+            query = Query(query_filter)
+            if not query.has_return_clause():
+                # Add a return clause based on object type
+                node_type = object_type.rstrip('s')  # Strip trailing 's' if present
+                query.add_return(f"a.name as name")
+                logger.info(f"Added return clause to query: {query.query}")
+            
+            # Execute the query
+            results = executor.execute(query.query)
+            
+            # Extract object names from results
+            query_objects = []
+            for result in results:
+                if 'name' in result:
+                    query_objects.append(result['name'])
+                elif len(result) == 1:
+                    # If there's only one field, use it
+                    query_objects.append(list(result.values())[0])
+            
+            if query_objects:
+                # Add query results to include list
+                include_list = query_objects
+                logger.info(f"Using query results for include list: {len(include_list)} objects")
+            else:
+                logger.info("Query returned no results")
+        
         if include_file:
             try:
                 with open(include_file, 'r') as f:
                     include_data = json.load(f)
+                    file_include_list = []
                     if isinstance(include_data, list):
-                        include_list = include_data
+                        file_include_list = include_data
                     else:
-                        include_list = include_data.get('objects', [])
-                logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
+                        file_include_list = include_data.get('objects', [])
+                
+                # Combine with existing include_list if it exists from query_filter
+                if include_list and query_filter:
+                    # Find the intersection (only objects that are in both lists)
+                    include_list = [obj for obj in include_list if obj in file_include_list]
+                    logger.info(f"Combined query results with include file: {len(include_list)} objects remain after intersection")
+                else:
+                    # Otherwise, use file list directly
+                    include_list = file_include_list
+                    logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
             except Exception as e:
                 logger.error(f"Error loading include file {include_file}: {e}")
                 raise typer.Exit(1)
@@ -501,6 +600,7 @@ def simulate_deduplication(
     pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Pattern to filter objects (e.g. '10.0.0' for addresses)"),
     include_file: Optional[str] = typer.Option(None, "--include-file", help="JSON file with list of object names to include in deduplication"),
     exclude_file: Optional[str] = typer.Option(None, "--exclude-file", help="JSON file with list of object names to exclude from deduplication"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))')"),
     detailed: bool = typer.Option(False, "--detailed", "-d", help="Include detailed policy and reference information"),
     version: Optional[str] = ConfigOptions.version(),
 ):
@@ -532,15 +632,62 @@ def simulate_deduplication(
         include_list = []
         exclude_list = []
         
+        # Process query filter if provided
+        if query_filter:
+            logger.info(f"Processing graph query filter: {query_filter}")
+            # Build graph from the configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Create a query executor
+            executor = QueryExecutor(graph)
+            
+            # Parse the query and ensure it has a RETURN clause
+            query = Query(query_filter)
+            if not query.has_return_clause():
+                # Add a return clause based on object type
+                node_type = object_type.rstrip('s')  # Strip trailing 's' if present
+                query.add_return(f"a.name as name")
+                logger.info(f"Added return clause to query: {query.query}")
+            
+            # Execute the query
+            results = executor.execute(query.query)
+            
+            # Extract object names from results
+            query_objects = []
+            for result in results:
+                if 'name' in result:
+                    query_objects.append(result['name'])
+                elif len(result) == 1:
+                    # If there's only one field, use it
+                    query_objects.append(list(result.values())[0])
+            
+            if query_objects:
+                # Add query results to include list
+                include_list = query_objects
+                logger.info(f"Using query results for include list: {len(include_list)} objects")
+            else:
+                logger.info("Query returned no results")
+        
         if include_file:
             try:
                 with open(include_file, 'r') as f:
                     include_data = json.load(f)
+                    file_include_list = []
                     if isinstance(include_data, list):
-                        include_list = include_data
+                        file_include_list = include_data
                     else:
-                        include_list = include_data.get('objects', [])
-                logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
+                        file_include_list = include_data.get('objects', [])
+                
+                # Combine with existing include_list if it exists from query_filter
+                if include_list and query_filter:
+                    # Find the intersection (only objects that are in both lists)
+                    include_list = [obj for obj in include_list if obj in file_include_list]
+                    logger.info(f"Combined query results with include file: {len(include_list)} objects remain after intersection")
+                else:
+                    # Otherwise, use file list directly
+                    include_list = file_include_list
+                    logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
             except Exception as e:
                 logger.error(f"Error loading include file {include_file}: {e}")
                 raise typer.Exit(1)
@@ -775,6 +922,7 @@ def generate_deduplication_report(
     device_group: Optional[str] = ContextOptions.device_group(),
     vsys: str = ContextOptions.vsys(),
     template: Optional[str] = ContextOptions.template(),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects to include in the report"),
     version: Optional[str] = ConfigOptions.version(),
 ):
     """Generate a comprehensive deduplication report for the configuration"""
@@ -794,6 +942,63 @@ def generate_deduplication_report(
             **context_kwargs
         )
         
+        # Process query filter if provided to get object names to include
+        query_objects_by_type = {}
+        if query_filter:
+            logger.info(f"Processing graph query filter: {query_filter}")
+            # Build graph from the configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Create a query executor
+            executor = QueryExecutor(graph)
+            
+            # Parse the query
+            query = Query(query_filter)
+            if not query.has_return_clause():
+                # Add a general return clause for objects
+                query.add_return("a.name as name, labels(a) as types")
+                logger.info(f"Added return clause to query: {query.query}")
+            
+            # Execute the query
+            results = executor.execute(query.query)
+            
+            # Extract object names from results and organize by type
+            for result in results:
+                obj_name = None
+                obj_type = None
+                
+                # Try to get the name
+                if 'name' in result:
+                    obj_name = result['name']
+                elif len(result) == 1:
+                    # If there's only one field, use it as the name
+                    obj_name = list(result.values())[0]
+                
+                # Try to determine object type
+                if 'types' in result and result['types']:
+                    # Convert from label to type (e.g., 'address' from 'address')
+                    for label in result['types']:
+                        if label.lower() in SUPPORTED_OBJECT_TYPES:
+                            obj_type = label.lower()
+                            break
+                
+                # If we have a name but no determined type, we'll apply this object to all types
+                if obj_name and not obj_type:
+                    for t in SUPPORTED_OBJECT_TYPES:
+                        if t not in query_objects_by_type:
+                            query_objects_by_type[t] = []
+                        query_objects_by_type[t].append(obj_name)
+                elif obj_name and obj_type:
+                    if obj_type not in query_objects_by_type:
+                        query_objects_by_type[obj_type] = []
+                    query_objects_by_type[obj_type].append(obj_name)
+            
+            if any(query_objects_by_type.values()):
+                logger.info(f"Query returned objects for filtering: {', '.join([f'{t}: {len(objs)}' for t, objs in query_objects_by_type.items() if objs])}")
+            else:
+                logger.info("Query returned no results for filtering")
+        
         # If no object types specified, use all supported types
         if not object_types:
             object_types = SUPPORTED_OBJECT_TYPES
@@ -809,7 +1014,9 @@ def generate_deduplication_report(
         report = {
             "summary": {
                 "total_duplicate_sets": 0,
-                "total_duplicate_objects": 0
+                "total_duplicate_objects": 0,
+                "query_filter": query_filter if query_filter else None,
+                "query_filtered": True if query_filter else False
             },
             "object_types": {}
         }
@@ -820,6 +1027,25 @@ def generate_deduplication_report(
             
             # Find duplicates and references
             duplicates, references = engine.find_duplicates(obj_type)
+            
+            # Filter duplicates based on query results if available
+            if query_filter and obj_type in query_objects_by_type and query_objects_by_type[obj_type]:
+                filtered_duplicates = {}
+                query_object_names = set(query_objects_by_type[obj_type])
+                
+                for value_key, objects in duplicates.items():
+                    # Keep only objects that match the query
+                    filtered_objects = [(name, obj) for name, obj in objects if name in query_object_names]
+                    
+                    # Only include groups with at least 2 objects
+                    if len(filtered_objects) >= 2:
+                        filtered_duplicates[value_key] = filtered_objects
+                
+                if filtered_duplicates:
+                    logger.info(f"Filtered {obj_type} duplicates using query results: {len(duplicates)} groups → {len(filtered_duplicates)} groups")
+                    duplicates = filtered_duplicates
+                else:
+                    logger.info(f"No {obj_type} duplicates match the query filter")
             
             # Calculate statistics
             duplicate_sets = len(duplicates)
@@ -833,6 +1059,8 @@ def generate_deduplication_report(
             report["object_types"][obj_type] = {
                 "duplicate_sets": duplicate_sets,
                 "duplicate_count": duplicate_count,
+                "query_filtered": True if query_filter and obj_type in query_objects_by_type and query_objects_by_type[obj_type] else False,
+                "query_matched_objects": len(query_objects_by_type.get(obj_type, [])) if query_filter else 0,
                 "duplicates": {}
             }
             
@@ -854,10 +1082,17 @@ def generate_deduplication_report(
         logger.info(f"Deduplication report saved to {output}")
         
         # Print summary
-        logger.info(f"Summary: Found {report['summary']['total_duplicate_objects']} duplicate objects across {report['summary']['total_duplicate_sets']} unique values")
+        if query_filter:
+            logger.info(f"Summary: Found {report['summary']['total_duplicate_objects']} duplicate objects across {report['summary']['total_duplicate_sets']} unique values (filtered by query)")
+        else:
+            logger.info(f"Summary: Found {report['summary']['total_duplicate_objects']} duplicate objects across {report['summary']['total_duplicate_sets']} unique values")
+            
         for obj_type, data in report["object_types"].items():
             if data["duplicate_count"] > 0:
-                logger.info(f"  - {obj_type}: {data['duplicate_count']} duplicate objects in {data['duplicate_sets']} sets")
+                if data["query_filtered"]:
+                    logger.info(f"  - {obj_type}: {data['duplicate_count']} duplicate objects in {data['duplicate_sets']} sets (filtered from {data['query_matched_objects']} query matches)")
+                else:
+                    logger.info(f"  - {obj_type}: {data['duplicate_count']} duplicate objects in {data['duplicate_sets']} sets")
             
     except Exception as e:
         logger.error(f"Error generating deduplication report: {e}")
