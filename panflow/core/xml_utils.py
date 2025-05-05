@@ -11,6 +11,8 @@ Performance optimizations:
 - Memory-efficient XML traversal
 """
 
+from pathlib import Path
+
 import os
 import sys
 from typing import Dict, Any, Optional, List, Tuple, Union, Iterator, Set
@@ -726,3 +728,38 @@ def compat_element_to_dict(element: etree._Element) -> Dict[str, Any]:
                 data[child.tag] = compat_element_to_dict(child)
     
     return data
+
+
+def load_xml_file(file_path: Union[str, Path]) -> etree._Element:
+    """
+    Load an XML file and return the root element.
+    
+    Args:
+        file_path: Path to the XML file
+        
+    Returns:
+        Root element of the XML file
+        
+    Raises:
+        ParseError: If XML parsing fails
+    """
+    logger.info(f"Loading XML file: {file_path}")
+    _, root = parse_xml(str(file_path))
+    return root
+
+
+def get_xpath_element_value(element: etree._Element, xpath: str) -> Optional[str]:
+    """
+    Get the text value of an element at the given XPath.
+    
+    Args:
+        element: Element to search from
+        xpath: XPath to search for
+        
+    Returns:
+        Text value if found, None otherwise
+    """
+    result = find_element(element, xpath)
+    if result is not None and result.text:
+        return result.text.strip()
+    return None

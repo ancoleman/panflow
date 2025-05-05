@@ -2,6 +2,8 @@
 
 This guide provides a comprehensive overview of the command-line interface (CLI) for PANFlow, which allows you to work with Palo Alto Networks PAN-OS XML configurations efficiently.
 
+> **Important Note**: PANFlow provides two CLI entry points: `panflow_cli.py` (recommended) and `cli.py` (legacy). This guide uses `cli.py` in examples, but you should replace it with `panflow_cli.py` in your commands. All functionality described here is available in both CLIs.
+
 ## Table of Contents
 
 - [Installation](#installation)
@@ -11,6 +13,7 @@ This guide provides a comprehensive overview of the command-line interface (CLI)
 - [Group Commands](#group-commands)
 - [Report Commands](#report-commands)
 - [Configuration Commands](#configuration-commands)
+- [Merge Commands](#merge-commands)
 - [Bulk Operations](#bulk-operations)
 - [Deduplication](#deduplication)
 - [Logging](#logging)
@@ -444,6 +447,242 @@ Example:
 python cli.py config validate --config firewall.xml --device-type firewall
 ```
 
+## Merge Commands
+
+Commands for merging policies and objects between configurations.
+
+### Merge Single Policy
+
+Merge a single policy from a source configuration to a target configuration:
+
+```bash
+python cli.py merge policy --source-config SOURCE_CONFIG --target-config TARGET_CONFIG --type POLICY_TYPE --name POLICY_NAME --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--source-config`: Path to source XML configuration file (**required**)
+- `--target-config`: Path to target XML configuration file (**required**)
+- `--type`, `-t`: Type of policy to merge (e.g., security_pre_rules) (**required**)
+- `--name`, `-n`: Name of the policy to merge (**required**)
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--source-context`: Source context (shared, device_group, vsys)
+- `--target-context`: Target context (shared, device_group, vsys)
+- `--source-dg`: Source device group name
+- `--target-dg`: Target device group name
+- `--position`: Position to add policy (top, bottom, before, after)
+- `--ref-policy`: Reference policy for before/after position
+- `--skip-if-exists/--replace`: Skip if policy already exists
+- `--copy-references/--no-copy-references`: Copy object references
+- `--conflict-strategy`: Strategy for resolving conflicts (skip, overwrite, merge, rename)
+- `--dry-run`: Preview changes without modifying the target configuration
+
+Example:
+```bash
+python cli.py merge policy --source-config source.xml --target-config target.xml --type security_pre_rules --name "Allow Web Traffic" --output updated.xml --position bottom
+```
+
+### Merge Multiple Policies
+
+Merge multiple policies matching criteria or from a list:
+
+```bash
+python cli.py merge policies --source-config SOURCE_CONFIG --target-config TARGET_CONFIG --type POLICY_TYPE (--names-file NAMES_FILE | --criteria CRITERIA_FILE) --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--source-config`: Path to source XML configuration file (**required**)
+- `--target-config`: Path to target XML configuration file (**required**)
+- `--type`, `-t`: Type of policy to merge (**required**)
+- `--names-file`: File containing policy names to merge (one per line)
+- `--criteria`: JSON file with filter criteria
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--source-context`, `--target-context`, `--source-dg`, `--target-dg`: (same as for single policy)
+- `--skip-if-exists/--replace`, `--copy-references/--no-copy-references`, `--conflict-strategy`, `--dry-run`: (same as for single policy)
+
+Example:
+```bash
+python cli.py merge policies --source-config source.xml --target-config target.xml --type security_pre_rules --names-file policy_list.txt --output updated.xml
+```
+
+### Merge All Policy Types
+
+Merge all policy types from source to target configuration:
+
+```bash
+python cli.py merge all --source-config SOURCE_CONFIG --target-config TARGET_CONFIG --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--source-config`: Path to source XML configuration file (**required**)
+- `--target-config`: Path to target XML configuration file (**required**)
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--source-context`, `--target-context`, `--source-dg`, `--target-dg`: (same as for single policy)
+- `--skip-if-exists/--replace`, `--copy-references/--no-copy-references`, `--conflict-strategy`, `--dry-run`: (same as for single policy)
+
+Example:
+```bash
+python cli.py merge all --source-config source.xml --target-config target.xml --output updated.xml --copy-references
+```
+
+### Merge Single Object
+
+Merge a single object from source to target configuration:
+
+```bash
+python cli.py merge object --source-config SOURCE_CONFIG --target-config TARGET_CONFIG --type OBJECT_TYPE --name OBJECT_NAME --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--source-config`: Path to source XML configuration file (**required**)
+- `--target-config`: Path to target XML configuration file (**required**)
+- `--type`, `-t`: Type of object to merge (address, service, etc.) (**required**)
+- `--name`, `-n`: Name of the object to merge (**required**)
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--source-context`, `--target-context`, `--source-dg`, `--target-dg`: (same as for single policy)
+- `--skip-if-exists/--replace`, `--copy-references/--no-copy-references`, `--conflict-strategy`, `--dry-run`: (same as for single policy)
+
+Example:
+```bash
+python cli.py merge object --source-config source.xml --target-config target.xml --type address --name web-server --output updated.xml
+```
+
+### Merge Multiple Objects
+
+Merge multiple objects matching criteria or from a list:
+
+```bash
+python cli.py merge objects --source-config SOURCE_CONFIG --target-config TARGET_CONFIG --type OBJECT_TYPE (--names-file NAMES_FILE | --criteria CRITERIA_FILE) --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--source-config`: Path to source XML configuration file (**required**)
+- `--target-config`: Path to target XML configuration file (**required**)
+- `--type`, `-t`: Type of object to merge (**required**)
+- `--names-file`: File containing object names to merge (one per line)
+- `--criteria`: JSON file with filter criteria
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--source-context`, `--target-context`, `--source-dg`, `--target-dg`: (same as for single policy)
+- `--skip-if-exists/--replace`, `--copy-references/--no-copy-references`, `--conflict-strategy`, `--dry-run`: (same as for single policy)
+
+Example:
+```bash
+python cli.py merge objects --source-config source.xml --target-config target.xml --type address --names-file address_list.txt --output updated.xml
+```
+
+### Merge All Object Types
+
+Merge all object types from source to target configuration:
+
+```bash
+python cli.py merge all-objects --source-config SOURCE_CONFIG --target-config TARGET_CONFIG --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--source-config`: Path to source XML configuration file (**required**)
+- `--target-config`: Path to target XML configuration file (**required**)
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--source-context`, `--target-context`, `--source-dg`, `--target-dg`: (same as for single policy)
+- `--skip-if-exists/--replace`, `--copy-references/--no-copy-references`, `--conflict-strategy`, `--dry-run`: (same as for single policy)
+
+Example:
+```bash
+python cli.py merge all-objects --source-config source.xml --target-config target.xml --output updated.xml --copy-references
+```
+
+## Query Commands
+
+Commands for querying the configuration using a graph-based query language.
+
+### Execute Query
+
+Execute a graph query on a PAN-OS configuration:
+
+```bash
+python cli.py query execute --config CONFIG_FILE --query QUERY [--format FORMAT] [--output OUTPUT_FILE]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--query`, `-q`: Graph query to execute (**required**)
+- `--format`, `-f`: Output format (table, json, csv). Default is table.
+- `--output`, `-o`: Output file path for saving results
+
+Example:
+```bash
+# Find all address objects
+python cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
+
+# Find rules using a specific address
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule)-[:uses-source|uses-destination]->(a:address) WHERE a.name == 'web-server' RETURN r.name"
+
+# Export results to CSV
+python cli.py query execute -c config.xml -q "MATCH (a:address-group)-[:contains]->(m:address) RETURN a.name, m.name" --format csv --output groups.csv
+```
+
+### Verify Query Syntax
+
+Verify a graph query's syntax without executing it:
+
+```bash
+python cli.py query verify --query QUERY
+```
+
+Options:
+- `--query`, `-q`: Graph query to verify (**required**)
+
+Example:
+```bash
+python cli.py query verify -q "MATCH (a:address) WHERE a.value CONTAINS '10.0.0' RETURN a.name"
+```
+
+### Show Query Examples
+
+Display example graph queries:
+
+```bash
+python cli.py query example
+```
+
+This command shows several example queries with descriptions of what they do, providing a quick reference for common query patterns.
+
+### Interactive Query Mode
+
+Launch an interactive query session:
+
+```bash
+python cli.py query interactive --config CONFIG_FILE
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+
+The interactive mode provides a REPL-like environment where you can:
+- Type and execute queries directly
+- View query results in a formatted table
+- Refine queries iteratively
+- Access query history
+- Get help on query syntax
+
+Example session:
+```
+> MATCH (a:address) RETURN a.name LIMIT 5
+| a.name       |
+|--------------| 
+| web-server-1 |
+| web-server-2 |
+| db-server    |
+| app-server   |
+| localhost    |
+
+> MATCH (a:address) WHERE a.name CONTAINS "web" RETURN a.name, a.value
+| a.name       | a.value        |
+|--------------|----------------|
+| web-server-1 | 10.0.1.10      |
+| web-server-2 | 10.0.1.11      |
+```
+
+See the [Graph Query Language Reference](docs/graph_query_reference.md) for detailed information on query syntax and capabilities.
+
 ## Bulk Operations
 
 The CLI provides powerful capabilities for performing operations on multiple objects or policies at once.
@@ -503,22 +742,81 @@ Options:
 - `--output`, `-o`: Output file for updated configuration (**required**)
 - `--dry-run`: Show what would be done without making changes
 - `--strategy`: Strategy for choosing primary object (first, shortest)
+- `--context`: Context (shared, device_group, vsys)
+- `--device-group`: Device group name (for Panorama device_group context)
+- `--vsys`: VSYS name (for firewall vsys context)
+- `--device-type`: Device type (firewall or panorama)
 
-Example:
-```bash
-python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --context vsys --vsys vsys1
-```
+#### Deduplication Process:
 
-The deduplication process:
 1. Identifies objects with identical values (e.g., IP addresses, FQDNs)
 2. Chooses a primary object based on the selected strategy
 3. Updates all references to the duplicate objects to point to the primary object
 4. Removes the duplicate objects from the configuration
 
-Adding `--dry-run` will show what duplicates would be merged without making any changes:
+#### Primary Object Selection Strategies:
 
+- `first` (default): Uses the first object found as primary
+- `shortest`: Uses the object with the shortest name as primary
+
+#### Examples:
+
+Basic deduplication:
+```bash
+python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --context vsys --vsys vsys1
+```
+
+Dry run to preview changes without modifying the configuration:
 ```bash
 python cli.py deduplicate --config firewall.xml --type address --dry-run
+```
+
+Using the shortest name strategy:
+```bash
+python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --strategy shortest
+```
+
+Deduplicate address groups:
+```bash
+python cli.py deduplicate --config firewall.xml --type address_group --output deduped.xml
+```
+
+Deduplicate in a Panorama device group:
+```bash
+python cli.py deduplicate --config panorama.xml --type service --output deduped.xml --device-type panorama --context device_group --device-group DG1
+```
+
+#### Supported Object Types for Deduplication:
+
+- `address`: IP addresses and FQDNs
+- `address_group`: Address groups
+- `service`: Service objects
+- `service_group`: Service groups
+- `application_group`: Application groups
+- `tag`: Tags
+
+#### Best Practices for Deduplication:
+
+1. **Always use `--dry-run` first** to preview changes before applying them
+2. **Back up your configuration** before performing deduplication
+3. **Start with smaller contexts** (like a specific device group) before deduplicating the entire configuration
+4. **Review reference changes carefully**, especially for objects used in security policies
+5. **Verify operation after deduplication** by checking that references are correctly maintained
+
+#### Example Workflow:
+
+```bash
+# Step 1: Find duplicate address objects in dry-run mode
+python cli.py deduplicate --config firewall.xml --type address --dry-run --context vsys --vsys vsys1
+
+# Step 2: Check references to objects that would be merged
+python cli.py report reference-check --config firewall.xml --type address --name duplicate-object-1 --output refs.json
+
+# Step 3: Perform the deduplication
+python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --context vsys --vsys vsys1
+
+# Step 4: Verify the updated configuration
+python cli.py config validate --config deduped.xml
 ```
 
 ## Logging
@@ -621,3 +919,5 @@ python cli.py report reference-check --config panorama.xml --name critical-serve
 9. **JSON files for properties** should match the structure expected by PAN-OS. Refer to the documentation or export existing objects for reference.
 
 10. **Context matters**: Remember to specify the correct context (`shared`, `device_group`, `vsys`, or `template`) and its name when working with configurations.
+
+11. **Use package-based CLI**: Use `panflow_cli.py` instead of `cli.py` for all operations as it's the primary interface going forward. Examples throughout this guide can be adapted by changing `python cli.py` to `python panflow_cli.py`.

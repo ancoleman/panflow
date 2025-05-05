@@ -11,8 +11,24 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 - **Report generation**: Built-in reports for unused objects, duplicates, and security rule coverage
 - **Bulk operations**: Powerful tools for modifying multiple configuration elements at once
 - **Deduplication engine**: Find and merge duplicate objects while updating all references
+- **Graph-based querying**: Query the configuration using a Cypher-like query language
 - **Command-line interface**: Feature-rich CLI for configuration management
 - **Functional design**: Modular architecture with separation of concerns
+
+## Documentation
+
+| Category | Description | Link |
+|----------|-------------|------|
+| **Getting Started** | Quick start guide | [Getting Started](docs/getting_started.md) |
+| **CLI Usage** | Comprehensive CLI reference | [CLI Usage Guide](CLI_USAGE.md) |
+| **CLI Migration** | Guide for transitioning from legacy to package-based CLI | [CLI Migration Guide](docs/cli_migration.md) |
+| **Graph Query Language** | Reference for the graph-based query language | [Graph Query Language](docs/graph_query_language.md) |
+| **Query Examples** | Example queries for common tasks | [Query Examples](docs/query_examples.md) |
+| **Object Merging** | Documentation on merging objects | [Object Merger](docs/object_merger.md) |
+| **Deduplication** | Guide for deduplicating objects | [Deduplication](docs/deduplication.md) |
+| **Error Handling** | Error handling and troubleshooting | [Error Handling](docs/error_handling.md) |
+| **XPath Handling** | Dynamic XPath resolver documentation | [Dynamic XPath](docs/dynamic_xpath.md) |
+| **XML Utilities** | XML manipulation utilities | [XML Utils](docs/xml_utils.md) |
 
 ## Installation
 
@@ -55,24 +71,37 @@ config.save("updated-firewall.xml")
 
 ## Command-line Usage
 
-The library includes a comprehensive CLI:
+The library includes a comprehensive CLI that can be accessed through `panflow_cli.py`:
 
 ```bash
 # List all address objects
-panflow object list --config firewall.xml --type address --context vsys --vsys vsys1
+python panflow_cli.py object list --config firewall.xml --type address --context vsys --vsys vsys1
 
 # Add a new address object
-panflow object add --config firewall.xml --type address --name web-server --properties web-server.json --output updated.xml
+python panflow_cli.py object add --config firewall.xml --type address --name web-server --properties web-server.json --output updated.xml
 
 # Generate a report of unused objects
-panflow report unused-objects --config firewall.xml --output unused.json
+python panflow_cli.py report unused-objects --config firewall.xml --output unused.json
 
 # Bulk update security policies matching criteria
-panflow policy bulk-update --config firewall.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
+python panflow_cli.py policy bulk-update --config firewall.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
 
 # Find and merge duplicate objects
-panflow deduplicate --config firewall.xml --type address --output deduped.xml
+python panflow_cli.py deduplicate --config firewall.xml --type address --output deduped.xml
+
+# Query the configuration with the graph query language
+python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
+
+# Merge a policy from one config to another
+python panflow_cli.py merge policy --source-config source.xml --target-config target.xml --type security_pre_rules --name "Allow Web" --output merged.xml
+
+# Launch interactive query mode
+python panflow_cli.py query interactive --config config.xml
 ```
+
+> **Note**: All CLI commands can be used with either `panflow_cli.py` (recommended) or `cli.py` (legacy). See the [CLI Migration Guide](docs/cli_migration.md) for details.
+
+For a complete reference of all CLI commands and options, see the [CLI Usage Guide](CLI_USAGE.md).
 
 ## Bulk Operations
 
@@ -158,7 +187,8 @@ The library is organized into logical modules:
 │       ├── panos_10_2.yaml
 │       └── panos_11_2.yaml
 ├── pyproject.toml
-├── cli.py # Command-line interface
+├── panflow_cli.py # Main command-line interface (recommended)
+├── cli.py # Legacy command-line interface (deprecated)
 ```
 
 ## XPath Mappings
@@ -237,6 +267,8 @@ changes = engine.merge_duplicates(duplicates, references, primary_name_strategy=
 config.save("deduped-firewall.xml")
 ```
 
+For more information on deduplication options and strategies, see the [Deduplication Guide](docs/deduplication.md).
+
 ### Bulk Updating Security Policies
 
 ```python
@@ -272,6 +304,36 @@ updated_count = updater.bulk_update_policies("security_pre_rules", criteria, ope
 # Save the updated configuration
 config.save("updated-panorama.xml")
 ```
+
+### Using the Graph Query API
+
+```python
+from panflow.core.graph_utils import ConfigGraph
+from panflow.core.query_language import Query
+from panflow.core.query_engine import QueryExecutor
+from panflow import PanOsXmlConfig
+
+# Load configuration
+config = PanOsXmlConfig("config.xml")
+
+# Build the graph
+graph = ConfigGraph()
+graph.build_from_xml(config.tree)
+
+# Create and execute a query
+query = Query("MATCH (r:security-rule)-[:uses-source]->(a:address) WHERE a.value CONTAINS '10.1.1' RETURN r.name, a.name")
+executor = QueryExecutor(graph)
+results = executor.execute(query)
+
+# Process the results
+for row in results:
+    print(f"Rule '{row['r.name']}' uses address '{row['a.name']}'")
+```
+
+For more information on the graph query language, see:
+- [Graph Query Language Guide](docs/graph_query_language.md)
+- [Query Examples](docs/query_examples.md)
+- [Graph Query Reference](docs/graph_query_reference.md)
 
 ## Extending for New PAN-OS Versions
 

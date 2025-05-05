@@ -5,7 +5,19 @@ PANFlow for PAN-OS XML CLI
 
 A comprehensive command-line interface for working with PAN-OS XML configurations
 using the dynamic PAN-OS XML utilities.
+
+DEPRECATION NOTICE: This script is being deprecated in favor of panflow_cli.py.
+Some functionality is only available here, but all functionality will eventually 
+be migrated to the package-based CLI accessed via panflow_cli.py.
 """
+
+import warnings
+warnings.warn(
+    "cli.py is deprecated and will be removed in a future version. "
+    "Please use panflow_cli.py instead.", 
+    DeprecationWarning, 
+    stacklevel=2
+)
 
 import os
 import sys
@@ -27,6 +39,9 @@ from panflow.core.deduplication import DeduplicationEngine
 from panflow.core.policy_merger import PolicyMerger
 from panflow.core.object_merger import ObjectMerger
 from panflow.core.conflict_resolver import ConflictStrategy
+from panflow.core.graph_utils import ConfigGraph
+from panflow.core.query_language import Query
+from panflow.core.query_engine import QueryExecutor
 from enum import Enum
 from typing import Optional, Dict, List, Any, Callable, TypeVar
 from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
@@ -39,6 +54,7 @@ group_app = typer.Typer(help="Group management commands")
 report_app = typer.Typer(help="Report generation commands")
 config_app = typer.Typer(help="Configuration management commands")
 merge_app = typer.Typer(help="Policy and Object merge commands")
+query_app = typer.Typer(help="Graph query commands")
 
 
 # Add sub-apps to main app
@@ -48,6 +64,7 @@ app.add_typer(group_app, name="group")
 app.add_typer(report_app, name="report")
 app.add_typer(config_app, name="config")
 app.add_typer(merge_app, name="merge")
+app.add_typer(query_app, name="query")
 
 # Get logger
 logger = logging.getLogger("panflow")
@@ -1370,6 +1387,215 @@ def merge_all_objects(
     except Exception as e:
         logger.error(f"Error merging all objects: {e}")
         raise typer.Exit(1)
+# Add the query commands
+@query_app.command("execute")
+def execute_query(
+    config: str = typer.Option(..., "--config", "-c", help="Path to XML configuration file"),
+    query: str = typer.Option(..., "--query", "-q", help="Graph query to execute"),
+    output_format: str = typer.Option("table", "--format", "-f", help="Output format (table, json, csv)"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path"),
+):
+    """
+    Execute a graph query on a PAN-OS configuration.
+    
+    Example:
+        panflow query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
+    """
+    try:
+        # Load the XML configuration
+        from panflow.core.xml_utils import load_xml_file
+        from panflow.core.graph_utils import ConfigGraph
+        from panflow.core.query_language import Query
+        from panflow.core.query_engine import QueryExecutor
+        from rich.console import Console
+        from rich.table import Table
+        from rich.syntax import Syntax
+        
+        xml_root = load_xml_file(config)
+        
+        # Build the graph
+        graph = ConfigGraph()
+        graph.build_from_xml(xml_root)
+        
+        # Parse and execute the query
+        parsed_query = Query(query)
+        executor = QueryExecutor(graph)
+        results = executor.execute(parsed_query)
+        
+        # Setup console
+        console = Console()
+        
+        # Display the results
+        if not results:
+            console.print("[yellow]No results found[/yellow]")
+            return
+            
+        if output_format == "json":
+            output_data = json.dumps(results, indent=2)
+            if output:
+                with open(output, "w") as f:
+                    f.write(output_data)
+                logger.info(f"Results saved to {output}")
+            else:
+                syntax = Syntax(output_data, "json", theme="monokai", line_numbers=True)
+                console.print(syntax)
+                
+        elif output_format == "csv":
+            if not output:
+                logger.warning("CSV format requires an output file")
+                return
+                
+            # Get header from first result
+            headers = list(results[0].keys())
+            
+            # Write CSV file
+            with open(output, "w") as f:
+                # Write header
+                f.write(",".join([f'"{h}"' for h in headers]) + "\n")
+                
+                # Write rows
+                for row in results:
+                    values = []
+                    for header in headers:
+                        value = row.get(header, "")
+                        if isinstance(value, str):
+                            # Escape quotes and wrap in quotes
+                            escaped_value = value.replace('"', '\\"')
+                            value = f'"{escaped_value}"'
+                        else:
+                            value = str(value)
+                        values.append(value)
+                    f.write(",".join(values) + "\n")
+                    
+            logger.info(f"Results saved to {output}")
+            
+        else:  # table format
+            # Get columns from first result
+            columns = list(results[0].keys())
+            
+            table = Table()
+            for column in columns:
+                table.add_column(column, style="cyan")
+                
+            # Add rows
+            for row in results:
+                table.add_row(*[str(row.get(col, "")) for col in columns])
+                
+            if output:
+                # Save table as text
+                with open(output, "w") as f:
+                    # Write header
+                    header = " | ".join(columns)
+                    f.write(header + "\n")
+                    f.write("-" * len(header) + "\n")
+                    
+                    # Write rows
+                    for row in results:
+                        f.write(" | ".join([str(row.get(col, "")) for col in columns]) + "\n")
+                        
+                logger.info(f"Results saved to {output}")
+            else:
+                console.print(table)
+                
+    except Exception as e:
+        logger.error(f"Error executing query: {str(e)}")
+        raise typer.Exit(1)
+
+@query_app.command("verify")
+def verify_query(
+    query: str = typer.Option(..., "--query", "-q", help="Graph query to verify"),
+):
+    """
+    Verify a graph query syntax without executing it.
+    
+    Example:
+        panflow query verify -q "MATCH (a:address) RETURN a.name"
+    """
+    try:
+        from panflow.core.query_language import Lexer, Query
+        from rich.console import Console
+        from rich.table import Table
+        
+        console = Console()
+        
+        # Parse the query to verify syntax
+        lexer = Lexer(query)
+        tokens = lexer.tokenize()
+        
+        # Display tokens
+        table = Table(title="Query Tokens")
+        table.add_column("Type", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_column("Position", style="blue")
+        
+        for token in tokens:
+            if token.type.name == "EOF":
+                continue
+            table.add_row(token.type.name, token.value, str(token.position))
+            
+        console.print(table)
+        
+        # Try to parse the query
+        parsed_query = Query(query)
+        
+        # Display success message
+        console.print("[bold green]Query syntax is valid[/bold green]")
+        
+    except Exception as e:
+        logger.error(f"Syntax Error: {str(e)}")
+        raise typer.Exit(1)
+
+@query_app.command("example")
+def example_queries():
+    """
+    Show example graph queries.
+    
+    Example:
+        panflow query example
+    """
+    from rich.console import Console
+    from rich.table import Table
+    
+    console = Console()
+    
+    examples = [
+        {
+            "name": "Find all address objects",
+            "query": "MATCH (a:address) RETURN a.name, a.value, a.addr_type",
+            "description": "This query returns all address objects with their names, values, and types."
+        },
+        {
+            "name": "Find all address groups and their members",
+            "query": "MATCH (g:address-group)-[:contains]->(a:address) RETURN g.name, a.name",
+            "description": "This query returns all address groups and their member addresses."
+        },
+        {
+            "name": "Find all security rules using a specific address",
+            "query": "MATCH (r:security-rule)-[:uses-source|uses-destination]->(a:address) WHERE a.name == 'web-server' RETURN r.name",
+            "description": "This query returns all security rules that use 'web-server' as a source or destination."
+        },
+        {
+            "name": "Find all unused address objects",
+            "query": "MATCH (a:address) WHERE NOT ((:security-rule)-[:uses-source|uses-destination]->(a)) AND NOT ((:address-group)-[:contains]->(a)) RETURN a.name",
+            "description": "This query returns all address objects that are not used in any security rule or address group."
+        },
+        {
+            "name": "Find rules allowing specific services",
+            "query": "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.name == 'http' OR s.name == 'https' RETURN r.name",
+            "description": "This query returns all security rules that allow HTTP or HTTPS services."
+        }
+    ]
+    
+    table = Table(title="Example Graph Queries")
+    table.add_column("Name", style="cyan")
+    table.add_column("Query", style="green")
+    table.add_column("Description", style="blue")
+    
+    for example in examples:
+        table.add_row(example["name"], example["query"], example["description"])
+        
+    console.print(table)
+
 # Run the CLI
 if __name__ == "__main__":
     app()

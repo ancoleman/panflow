@@ -244,6 +244,45 @@ class PolicyOptions:
             help="Reference policy for before/after position"
         )
 
+# File and output related callbacks
+def file_callback(value: str) -> str:
+    """
+    Validate that the specified file exists.
+    
+    Args:
+        value: The file path
+        
+    Returns:
+        The validated file path
+        
+    Raises:
+        typer.BadParameter: If the file does not exist
+    """
+    if not os.path.exists(value):
+        raise typer.BadParameter(f"File does not exist: {value}")
+    return value
+
+
+def output_callback(value: str) -> str:
+    """
+    Validate that the output format is supported.
+    
+    Args:
+        value: The output format
+        
+    Returns:
+        The validated output format
+        
+    Raises:
+        typer.BadParameter: If the output format is not supported
+    """
+    supported_formats = ["table", "json", "csv"]
+    if value not in supported_formats:
+        formats_str = ", ".join(supported_formats)
+        raise typer.BadParameter(f"Output format '{value}' not supported. Valid formats: {formats_str}")
+    return value
+
+
 # Helper function to create a common options decorator
 def common_options(f):
     """Decorator to apply common options to a command."""

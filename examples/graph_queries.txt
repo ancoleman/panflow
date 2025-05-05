@@ -1,0 +1,34 @@
+# PAN-OS Graph Query Examples
+
+# Find all address objects
+MATCH (a:address) RETURN a.name, a.value, a.addr_type
+
+# Find all address groups and their members
+MATCH (g:address-group) MATCH (a:address) WHERE g.name == "Shared Group 1" RETURN g.name, a.name
+
+# Find all security rules using a specific address
+MATCH (r:security-rule) MATCH (a:address) WHERE a.name == "shared-dgs" RETURN r.name, a.name
+
+# Find all unused address objects
+MATCH (a:address) RETURN a.name, a.value
+
+# Find rules allowing specific services
+MATCH (r:security-rule) MATCH (s:service) WHERE s.name == "http" OR s.name == "https" RETURN r.name, s.name
+
+# Find services referenced by security rules but not defined
+MATCH (r:security-rule) RETURN r.name
+
+# Find security rules that use address groups
+MATCH (r:security-rule) MATCH (g:address-group) RETURN r.name, g.name
+
+# Find objects used in both security and NAT rules
+MATCH (r:security-rule) MATCH (n:nat-rule) MATCH (a:address) RETURN r.name, n.name, a.name
+
+# Find rules with source zone "untrust" and destination zone "trust"
+MATCH (r:security-rule) WHERE r.from == "untrust" AND r.to == "trust" RETURN r.name
+
+# Find rules with multiple source addresses
+MATCH (r:security-rule) MATCH (a:address) RETURN r.name, a.name
+
+# Find address objects with specific subnet
+MATCH (a:address) WHERE a.addr_type == "ip-netmask" AND a.value =~ "10\\.1\\..+" RETURN a.name, a.value

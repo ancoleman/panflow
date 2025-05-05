@@ -10,6 +10,7 @@ Each module registers commands with the main Typer app.
 from . import object_commands
 from . import merge_commands
 from . import deduplicate_commands
+from . import query_commands
 
 # Optional modules - these may not exist yet
 # Will be imported by the parent package as needed
@@ -20,5 +21,6 @@ __all__ = [
     "policy_commands",
     "group_commands",
     "report_commands",
-    "config_commands"
+    "config_commands",
+    "query_commands"
 ]
