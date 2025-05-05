@@ -46,7 +46,7 @@ def list_objects(
         
         logger.info(f"Listing {object_type} objects in {context} context...")
         
-        # Get objects (the get_objects function will log details about what it finds)
+        # Get the raw objects from the API
         objects = xml_config.get_objects(object_type, context, **context_kwargs)
         
         # Filter objects using graph query if specified
@@ -88,11 +88,29 @@ def list_objects(
             objects = filtered_objects
             logger.info(f"Filtered to {len(objects)} {object_type} objects matching query")
         
-        # Display a list of object names
+        # Display a list of object names (with a single log line for each object)
         if objects:
-            logger.info(f"Found {len(objects)} {object_type} objects:")
-            for name in objects:
-                logger.info(f"  - {name}")
+            # We've already logged the count from the get_objects function,
+            # so we'll just display the details of each object
+            for name, data in objects.items():
+                # Create a summarized version of the object data
+                data_summary = ""
+                if object_type == "address":
+                    for key in ["ip-netmask", "ip-range", "fqdn"]:
+                        if key in data:
+                            data_summary = f"{key}: {data[key]}"
+                            break
+                elif object_type.endswith("_group"):
+                    if "static" in data and isinstance(data["static"], list):
+                        data_summary = f"static group with {len(data['static'])} members"
+                    elif "dynamic" in data:
+                        filter_text = data.get("dynamic", {}).get("filter", "")
+                        data_summary = f"dynamic group with filter: {filter_text}"
+                            
+                if data_summary:
+                    logger.info(f"  - {name}: {data_summary}")
+                else:
+                    logger.info(f"  - {name}")
         else:
             logger.info(f"No {object_type} objects found matching criteria")
         

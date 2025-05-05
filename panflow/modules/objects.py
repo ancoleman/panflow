@@ -54,28 +54,9 @@ def get_objects(
             # print(data)
             results[name] = data
     
-    # Log details about found objects
+    # Log summary count
     if results:
-        logger.info(f"Found {len(results)} {object_type} objects:")
-        for name, data in results.items():
-            # Create a summarized version of the object data
-            data_summary = ""
-            if object_type == "address":
-                for key in ["ip-netmask", "ip-range", "fqdn"]:
-                    if key in data:
-                        data_summary = f"{key}: {data[key]}"
-                        break
-            elif object_type.endswith("_group"):
-                if "static" in data and isinstance(data["static"], list):
-                    data_summary = f"static group with {len(data['static'])} members"
-                elif "dynamic" in data:
-                    filter_text = data.get("dynamic", {}).get("filter", "")
-                    data_summary = f"dynamic group with filter: {filter_text}"
-            
-            if data_summary:
-                logger.info(f"  - {name}: {data_summary}")
-            else:
-                logger.info(f"  - {name}")
+        logger.info(f"Found {len(results)} {object_type} objects")
     else:
         logger.info(f"No {object_type} objects found")
     

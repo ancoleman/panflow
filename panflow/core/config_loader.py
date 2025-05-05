@@ -209,6 +209,9 @@ def detect_device_type(tree: etree._ElementTree) -> str:
     """
     Detect whether a configuration is from a firewall or Panorama.
     
+    This function uses a confidence scoring system to determine the device type
+    based on characteristic XML elements found in Panorama vs Firewall configurations.
+    
     Args:
         tree: ElementTree containing the configuration
         
@@ -218,27 +221,103 @@ def detect_device_type(tree: etree._ElementTree) -> str:
     logger.debug("Detecting device type from configuration")
     
     try:
-        # Check for Panorama-specific elements
-        panorama_elements = tree.xpath("/config/devices/entry[@name='localhost.localdomain']/device-group")
-        template_elements = tree.xpath("/config/devices/entry[@name='localhost.localdomain']/template")
+        # Initialize confidence scores
+        panorama_score = 0
+        firewall_score = 0
         
-        if panorama_elements or template_elements:
-            panorama_indicators = []
-            if panorama_elements:
-                panorama_indicators.append(f"{len(panorama_elements)} device groups")
-            if template_elements:
-                panorama_indicators.append(f"{len(template_elements)} templates")
-                
-            logger.info(f"Detected device type: panorama ({', '.join(panorama_indicators)})")
+        # Define marker XPaths with their confidence weights
+        panorama_markers = {
+            # Definitive Panorama markers
+            "/config/devices/entry[@name='localhost.localdomain']/device-group": 10,
+            "/config/devices/entry[@name='localhost.localdomain']/template": 10,
+            "/config/devices/entry[@name='localhost.localdomain']/log-settings/panorama": 10,
+            "/config/panorama": 15,
+            "/config/shared": 8,
+            
+            # Strong Panorama indicators
+            "/config/devices/entry[@name='localhost.localdomain']/device-config": 7,
+            "/config/devices/entry[@name='localhost.localdomain']/template-stack": 7,
+            "/config/devices/entry[@name='localhost.localdomain']/collector-group": 7,
+            "/config/readonly/devices/localhost.localdomain/platform": 5  # Panorama platform info
+        }
+        
+        firewall_markers = {
+            # Definitive Firewall markers
+            "/config/devices/entry[@name='localhost.localdomain']/vsys": 10,
+            "/config/devices/entry[@name='localhost.localdomain']/network/interface": 9,
+            "/config/devices/entry[@name='localhost.localdomain']/network/virtual-router": 8,
+            "/config/devices/entry[@name='localhost.localdomain']/network/profiles": 7,
+            
+            # Strong Firewall indicators
+            "/config/devices/entry[@name='localhost.localdomain']/vsys/entry/zone": 8,
+            "/config/devices/entry[@name='localhost.localdomain']/vsys/entry/rulebase": 8,
+            "/config/devices/entry[@name='localhost.localdomain']/network/ike": 6,
+            "/config/devices/entry[@name='localhost.localdomain']/network/qos": 6,
+            "/config/devices/entry[@name='localhost.localdomain']/network/tunnel": 6,
+            "/config/devices/entry[@name='localhost.localdomain']/network/vlan": 5
+        }
+        
+        # Collect indicators for detailed logging
+        panorama_indicators = []
+        firewall_indicators = []
+        
+        # Check Panorama markers
+        for xpath, weight in panorama_markers.items():
+            elements = tree.xpath(xpath)
+            if elements:
+                count = len(elements)
+                panorama_score += weight
+                panorama_indicators.append(f"{xpath.split('/')[-1]}: {count}")
+        
+        # Check Firewall markers
+        for xpath, weight in firewall_markers.items():
+            elements = tree.xpath(xpath)
+            if elements:
+                count = len(elements)
+                firewall_score += weight
+                firewall_indicators.append(f"{xpath.split('/')[-1]}: {count}")
+        
+        # Special check for local interface presence
+        if tree.xpath("//network/interface/ethernet"):
+            firewall_score += 5
+            firewall_indicators.append("local-interface")
+        
+        # Special check for panorama server mode
+        if tree.xpath("//setting/panorama-server"):
+            panorama_score += 2
+            firewall_score += 5  # Firewalls generally have panorama-server settings
+            firewall_indicators.append("panorama-server")
+        
+        # Special check for log-collector-group (only firewalls have it)
+        if tree.xpath("//setting/log-collector-group"):
+            firewall_score += 4
+            firewall_indicators.append("log-collector-group")
+        
+        # Check hostname - "Panorama" in hostname is a clue
+        hostname_elements = tree.xpath("//hostname")
+        if hostname_elements and len(hostname_elements) > 0:
+            hostname = hostname_elements[0].text
+            if hostname and "panorama" in hostname.lower():
+                panorama_score += 3
+                panorama_indicators.append(f"hostname: {hostname}")
+        
+        # Log detection details at debug level
+        logger.debug(f"Panorama score: {panorama_score}, indicators: {', '.join(panorama_indicators) if panorama_indicators else 'none'}")
+        logger.debug(f"Firewall score: {firewall_score}, indicators: {', '.join(firewall_indicators) if firewall_indicators else 'none'}")
+        
+        # Determine result based on scores
+        if panorama_score > firewall_score:
+            logger.info(f"Detected device type: panorama (confidence score: {panorama_score})")
             return "panorama"
-        else:
-            # Check for firewall-specific elements
-            vsys_elements = tree.xpath("/config/devices/entry[@name='localhost.localdomain']/vsys")
-            if vsys_elements:
-                logger.info(f"Detected device type: firewall ({len(vsys_elements)} vsys)")
-            else:
-                logger.info("Detected device type: firewall (default, no specific indicators)")
+        elif firewall_score > panorama_score:
+            logger.info(f"Detected device type: firewall (confidence score: {firewall_score})")
             return "firewall"
+        else:
+            # In case of a tie, default to firewall 
+            # This is safer as most commands work with firewall context by default
+            logger.info(f"No clear device type detected (tied scores: {panorama_score}), defaulting to firewall")
+            return "firewall"
+            
     except Exception as e:
         logger.warning(f"Error detecting device type, defaulting to firewall: {e}", exc_info=True)
         return "firewall"

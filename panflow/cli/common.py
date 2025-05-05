@@ -61,10 +61,15 @@ class ConfigOptions:
     
     @staticmethod
     def device_type():
-        """Option for device type."""
+        """
+        Option for device type with auto-detection.
+        
+        When not specified, the device type will be automatically detected based on
+        the XML structure of the configuration file.
+        """
         return typer.Option(
-            "firewall", "--device-type", "-d", 
-            help="Device type (firewall or panorama)"
+            None, "--device-type", "-d", 
+            help="Device type (firewall or panorama, auto-detected if not specified)"
         )
     
     @staticmethod

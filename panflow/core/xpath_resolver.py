@@ -48,7 +48,8 @@ def load_xpath_mappings(version: str) -> Dict[str, Any]:
     
     if not os.path.exists(file_path):
         # If exact version not found, use the default
-        logger.warning(f"XPath mapping file not found for PAN-OS version {version}, using default version {DEFAULT_VERSION}")
+        if version != DEFAULT_VERSION:
+            logger.debug(f"XPath mapping file not found for PAN-OS version {version}, using default version {DEFAULT_VERSION}")
         version = DEFAULT_VERSION
         normalized_version = version.replace(".", "_")
         file_path = os.path.join(XPATH_DIR, f"panos_{normalized_version}.yaml")
@@ -64,7 +65,7 @@ def load_xpath_mappings(version: str) -> Dict[str, Any]:
         with open(file_path, 'r') as f:
             mappings = yaml.safe_load(f)
         
-        logger.info(f"Successfully loaded XPath mappings for PAN-OS version {version}")
+        logger.debug(f"Successfully loaded XPath mappings for PAN-OS version {version}")
         
         # Cache the mappings
         _xpath_cache[version] = mappings

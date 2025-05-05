@@ -42,9 +42,20 @@ logger = logging.getLogger("panflow")
 # Apply common options to the app
 CommonOptions.apply_to_app(app)
 
-# Ensure logging is initially configured
-from panflow.core.logging_utils import configure_logging
-configure_logging()
+# Let's use a clean approach to logging
+# We'll set up logging once in the main file
+import logging
+
+# Clear all existing handlers to avoid duplication
+panflow_logger = logging.getLogger("panflow")
+for handler in panflow_logger.handlers[:]:
+    panflow_logger.removeHandler(handler)
+
+# Set up a single handler for the panflow logger
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+panflow_logger.addHandler(handler)
+panflow_logger.setLevel(logging.INFO)
 
 # ===== Exception Handler =====
 def _global_exception_handler(exc_type, exc_value, exc_traceback):

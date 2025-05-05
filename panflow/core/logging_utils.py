@@ -46,11 +46,13 @@ def configure_logging(
     
     # Set the log level
     log_level = LOG_LEVELS.get(level.lower(), logging.INFO)
-    logger.setLevel(log_level)
     
-    # Remove existing handlers
+    # First, REMOVE ALL EXISTING HANDLERS to avoid duplication
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
+    
+    # Set the log level after clearing handlers
+    logger.setLevel(log_level)
     
     # Create formatters
     if json_format:
