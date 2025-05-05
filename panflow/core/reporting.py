@@ -7,7 +7,6 @@ including policy analysis, visualization, object usage statistics, and custom re
 
 import os
 import json
-import logging
 import csv
 import datetime
 from typing import Dict, Any, Optional, List, Tuple, Union, Set
@@ -16,12 +15,11 @@ from collections import Counter, defaultdict
 
 from ..core.config_loader import xpath_search, extract_element_data
 from ..core.xpath_resolver import get_object_xpath, get_policy_xpath
+from ..core.logging_utils import logger, log, log_structured
 from ..modules.objects import get_objects
 from ..modules.policies import get_policies
 from ..core.bulk_operations import ConfigQuery
-
-# Initialize logger
-logger = logging.getLogger("panflow")
+from ..core.template_loader import TemplateLoader
 
 class EnhancedReportingEngine:
     """
@@ -37,6 +35,8 @@ class EnhancedReportingEngine:
         device_type: str,
         context_type: str,
         version: str,
+        template_dir: Optional[str] = None,
+        custom_templates_dir: Optional[str] = None,
         **kwargs
     ):
         """
@@ -47,6 +47,8 @@ class EnhancedReportingEngine:
             device_type: Device type (firewall or panorama)
             context_type: Context type (shared, device_group, vsys)
             version: PAN-OS version
+            template_dir: Directory containing the default templates
+            custom_templates_dir: Directory containing custom templates that override defaults
             **kwargs: Additional context parameters (device_group, vsys, etc.)
         """
         self.tree = tree
@@ -56,7 +58,19 @@ class EnhancedReportingEngine:
         self.context_kwargs = kwargs
         self.query = ConfigQuery(tree, device_type, context_type, version, **kwargs)
         
-        logger.debug(f"Initialized EnhancedReportingEngine: {device_type}/{context_type} v{version}")
+        # Initialize template loader
+        self.template_loader = TemplateLoader(template_dir, custom_templates_dir)
+        
+        # Log initialization with structured data
+        log_structured(
+            "Initialized EnhancedReportingEngine", 
+            "debug",
+            device_type=device_type,
+            context_type=context_type,
+            version=version,
+            has_template_dir=bool(template_dir),
+            has_custom_templates=bool(custom_templates_dir)
+        )
     
     def generate_security_policy_analysis(
         self,
@@ -81,7 +95,13 @@ class EnhancedReportingEngine:
         Returns:
             Dictionary containing the analysis results
         """
-        logger.info("Generating enhanced security policy analysis")
+        log_structured(
+            "Generating enhanced security policy analysis",
+            "info",
+            device_type=self.device_type,
+            context_type=self.context_type,
+            include_hit_counts=include_hit_counts
+        )
         
         # Determine policy type if not specified
         if policy_type is None:
@@ -89,17 +109,22 @@ class EnhancedReportingEngine:
                 policy_type = "security_pre_rules"
             else:
                 policy_type = "security_rules"
-            logger.debug(f"Using default policy type: {policy_type}")
+            log("Using default policy type", "debug", {"policy_type": policy_type})
         
         # Get all policies of the specified type
         policies = get_policies(self.tree, policy_type, self.device_type, 
                                 self.context_type, self.version, **self.context_kwargs)
         
         if not policies:
-            logger.warning(f"No {policy_type} policies found")
+            log(f"No {policy_type} policies found", "warning")
             return {"error": f"No {policy_type} policies found"}
         
-        logger.info(f"Analyzing {len(policies)} {policy_type} policies")
+        log_structured(
+            f"Analyzing policies",
+            "info",
+            policy_type=policy_type,
+            policy_count=len(policies)
+        )
         
         # Prepare analysis structure
         analysis = {
@@ -393,8 +418,8 @@ class EnhancedReportingEngine:
                     logger.info(f"Security policy analysis report saved to {output_file} (CSV format)")
                 
                 elif output_format.lower() == 'html':
-                    # Generate HTML report
-                    html_report = self._generate_html_report(analysis, include_hit_counts)
+                    # Generate HTML report using template loader
+                    html_report = self.template_loader.render_security_policy_analysis(analysis, include_hit_counts)
                     with open(output_file, 'w') as f:
                         f.write(html_report)
                     logger.info(f"Security policy analysis report saved to {output_file} (HTML format)")
@@ -403,7 +428,13 @@ class EnhancedReportingEngine:
                     logger.error(f"Unsupported output format: {output_format}")
             
             except Exception as e:
-                logger.error(f"Error saving report to {output_file}: {e}")
+                log_structured(
+                    f"Error saving report to file",
+                    "error",
+                    file_path=output_file,
+                    error_type=type(e).__name__,
+                    error_message=str(e)
+                )
         
         return analysis
     
@@ -538,6 +569,8 @@ class EnhancedReportingEngine:
         """
         Generate an HTML report from the analysis data.
         
+        DEPRECATED: Use template_loader.render_security_policy_analysis() instead.
+        
         Args:
             analysis: Analysis data
             include_hit_counts: Whether hit count data is included
@@ -545,6 +578,7 @@ class EnhancedReportingEngine:
         Returns:
             HTML report as a string
         """
+        logger.warning("_generate_html_report is deprecated. Use template_loader.render_security_policy_analysis() instead.")
         # Create HTML template with Bootstrap
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -771,17 +805,28 @@ class EnhancedReportingEngine:
         Returns:
             Dictionary containing the analysis results
         """
-        logger.info(f"Generating object usage report for {object_type}")
+        log_structured(
+            "Generating object usage report",
+            "info",
+            object_type=object_type,
+            device_type=self.device_type,
+            context_type=self.context_type
+        )
         
         # Get all objects of the specified type
         objects = get_objects(self.tree, object_type, self.device_type, 
                              self.context_type, self.version, **self.context_kwargs)
         
         if not objects:
-            logger.warning(f"No {object_type} objects found")
+            log(f"No {object_type} objects found", "warning")
             return {"error": f"No {object_type} objects found"}
         
-        logger.info(f"Analyzing {len(objects)} {object_type} objects")
+        log_structured(
+            "Analyzing objects",
+            "info",
+            object_type=object_type,
+            object_count=len(objects)
+        )
         
         # Prepare analysis structure
         analysis = {
@@ -1093,8 +1138,8 @@ class EnhancedReportingEngine:
                     logger.info(f"Object usage report saved to {output_file} (CSV format)")
                 
                 elif output_format.lower() == 'html':
-                    # Generate HTML report
-                    html_report = self._generate_object_html_report(analysis, object_type)
+                    # Generate HTML report using template loader
+                    html_report = self.template_loader.render_object_usage_report(analysis)
                     with open(output_file, 'w') as f:
                         f.write(html_report)
                     logger.info(f"Object usage report saved to {output_file} (HTML format)")
@@ -1103,7 +1148,13 @@ class EnhancedReportingEngine:
                     logger.error(f"Unsupported output format: {output_format}")
             
             except Exception as e:
-                logger.error(f"Error saving report to {output_file}: {e}")
+                log_structured(
+                    f"Error saving report to file",
+                    "error",
+                    file_path=output_file,
+                    error_type=type(e).__name__,
+                    error_message=str(e)
+                )
         
         return analysis
     
@@ -1222,6 +1273,8 @@ class EnhancedReportingEngine:
         """
         Generate an HTML report from the object analysis data.
         
+        DEPRECATED: Use template_loader.render_object_usage_report() instead.
+        
         Args:
             analysis: Analysis data
             object_type: Type of object analyzed
@@ -1229,6 +1282,7 @@ class EnhancedReportingEngine:
         Returns:
             HTML report as a string
         """
+        logger.warning("_generate_object_html_report is deprecated. Use template_loader.render_object_usage_report() instead.")
         # Create HTML template with Bootstrap
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1492,13 +1546,24 @@ class EnhancedReportingEngine:
         Returns:
             Dictionary containing the report results
         """
-        logger.info("Generating custom report")
+        log_structured(
+            "Generating custom report",
+            "info",
+            device_type=self.device_type,
+            context_type=self.context_type,
+            output_format=output_format
+        )
         
         # Check required configuration parameters
         required_params = ["name", "sections"]
         for param in required_params:
             if param not in report_config:
-                logger.error(f"Missing required parameter '{param}' in report configuration")
+                log_structured(
+                    f"Missing required parameter in report configuration", 
+                    "error",
+                    parameter=param,
+                    available_params=list(report_config.keys())
+                )
                 return {"error": f"Missing required parameter '{param}' in report configuration"}
         
         # Prepare report structure
@@ -1516,13 +1581,18 @@ class EnhancedReportingEngine:
         for section_config in report_config["sections"]:
             # Check required section parameters
             if "name" not in section_config or "type" not in section_config:
-                logger.warning(f"Skipping section with missing name or type")
+                log("Skipping section with missing name or type", "warning")
                 continue
             
             section_name = section_config["name"]
             section_type = section_config["type"]
             
-            logger.info(f"Processing section '{section_name}' of type '{section_type}'")
+            log_structured(
+                "Processing report section",
+                "info",
+                section_name=section_name,
+                section_type=section_type
+            )
             
             # Process different section types
             if section_type == "policy_summary":
@@ -1565,8 +1635,8 @@ class EnhancedReportingEngine:
                     logger.info(f"Custom report saved to {output_file} (JSON format)")
                 
                 elif output_format.lower() == 'html':
-                    # Generate HTML report
-                    html_report = self._generate_custom_html_report(report)
+                    # Generate HTML report using template loader
+                    html_report = self.template_loader.render_custom_report(report)
                     with open(output_file, 'w') as f:
                         f.write(html_report)
                     logger.info(f"Custom report saved to {output_file} (HTML format)")
@@ -1575,7 +1645,13 @@ class EnhancedReportingEngine:
                     logger.error(f"Unsupported output format: {output_format}")
             
             except Exception as e:
-                logger.error(f"Error saving report to {output_file}: {e}")
+                log_structured(
+                    f"Error saving report to file",
+                    "error",
+                    file_path=output_file,
+                    error_type=type(e).__name__,
+                    error_message=str(e)
+                )
         
         return report
     
@@ -2241,12 +2317,15 @@ class EnhancedReportingEngine:
         """
         Generate an HTML report from the custom report data.
         
+        DEPRECATED: Use template_loader.render_custom_report() instead.
+        
         Args:
             report: Report data
             
         Returns:
             HTML report as a string
         """
+        logger.warning("_generate_custom_html_report is deprecated. Use template_loader.render_custom_report() instead.")
         # Create HTML template with Bootstrap
         html = f"""<!DOCTYPE html>
 <html lang="en">

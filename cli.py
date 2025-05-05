@@ -26,6 +26,9 @@ from panflow.core.logging_utils import (
 from panflow.core.deduplication import DeduplicationEngine
 from panflow.core.policy_merger import PolicyMerger
 from panflow.core.object_merger import ObjectMerger
+from panflow.core.conflict_resolver import ConflictStrategy
+from enum import Enum
+from typing import Optional, Dict, List, Any, Callable, TypeVar
 from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
 from panflow.core.bulk_operations import ConfigUpdater
 # Create main Typer app
@@ -48,6 +51,36 @@ app.add_typer(merge_app, name="merge")
 
 # Get logger
 logger = logging.getLogger("panflow")
+
+# Type variable for callback return type
+T = TypeVar('T')
+
+# Helper functions for CLI parameter validation and conversion
+def conflict_strategy_callback(value: str) -> Optional[ConflictStrategy]:
+    """
+    Validates and converts the conflict strategy string to the appropriate enum value.
+    
+    Args:
+        value: The string representation of the conflict strategy
+        
+    Returns:
+        The corresponding ConflictStrategy enum value
+        
+    Raises:
+        typer.BadParameter: If the provided value is not a valid conflict strategy
+    """
+    if not value:
+        return None
+        
+    valid_strategies = [s.value for s in ConflictStrategy]
+    
+    if value not in valid_strategies:
+        strategies_str = ", ".join(valid_strategies)
+        raise typer.BadParameter(
+            f"Invalid conflict strategy: '{value}'. Valid options are: {strategies_str}"
+        )
+    
+    return ConflictStrategy(value)
 
 # Main CLI command callback
 @app.callback()
@@ -654,8 +687,12 @@ def merge_policy(
     target_version: Optional[str] = typer.Option(None, "--target-version", help="Target PAN-OS version"),
     position: str = typer.Option("bottom", "--position", help="Position to add policy (top, bottom, before, after)"),
     ref_policy: Optional[str] = typer.Option(None, "--ref-policy", help="Reference policy for before/after position"),
-    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if policy already exists"),
+    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if policy already exists (deprecated, use conflict_strategy instead)"),
     copy_references: bool = typer.Option(True, "--copy-references/--no-copy-references", help="Copy object references"),
+    conflict_strategy: Optional[ConflictStrategy] = typer.Option("skip", "--conflict-strategy", 
+                                                              help="Strategy for resolving conflicts: skip, overwrite, merge, rename, keep_target, keep_source", 
+                                                              callback=conflict_strategy_callback),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without modifying the target configuration"),
     output_file: str = typer.Option(..., "--output", "-o", help="Output file for updated configuration")
 ):
     """Merge a policy from source configuration to target configuration"""
@@ -697,6 +734,7 @@ def merge_policy(
             copy_references,
             position,
             ref_policy,
+            conflict_strategy=conflict_strategy,
             source_device_group=source_device_group,
             target_device_group=target_device_group,
             source_vsys=source_vsys,
@@ -712,12 +750,19 @@ def merge_policy(
                 for obj_type, obj_name in merger.copied_objects:
                     logger.debug(f"  - {obj_type}: {obj_name}")
             
-            # Save the updated configuration
-            if save_config(target_tree, output_file):
-                logger.info(f"Configuration saved to {output_file}")
+            # Save the updated configuration if not in dry run mode
+            if not dry_run:
+                if save_config(target_tree, output_file):
+                    logger.info(f"Configuration saved to {output_file}")
+                else:
+                    logger.error(f"Failed to save configuration to {output_file}")
+                    raise typer.Exit(1)
             else:
-                logger.error(f"Failed to save configuration to {output_file}")
-                raise typer.Exit(1)
+                logger.info(f"Dry run mode: Changes NOT saved to {output_file}")
+                logger.info(f"If this was not a dry run, the following changes would have been made:")
+                logger.info(f"  - Policy '{policy_name}' would be added to {target_context}")
+                if copy_references and merger.copied_objects:
+                    logger.info(f"  - {len(merger.copied_objects)} referenced objects would be copied")
         else:
             logger.error(f"Failed to merge policy '{policy_name}'")
             
@@ -748,8 +793,12 @@ def merge_policies(
     target_device_type: str = typer.Option("panorama", "--target-type", help="Target device type (firewall or panorama)"),
     source_version: Optional[str] = typer.Option(None, "--source-version", help="Source PAN-OS version"),
     target_version: Optional[str] = typer.Option(None, "--target-version", help="Target PAN-OS version"),
-    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if policy already exists"),
+    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if policy already exists (deprecated, use conflict_strategy instead)"),
     copy_references: bool = typer.Option(True, "--copy-references/--no-copy-references", help="Copy object references"),
+    conflict_strategy: Optional[ConflictStrategy] = typer.Option("skip", "--conflict-strategy", 
+                                                              help="Strategy for resolving conflicts: skip, overwrite, merge, rename, keep_target, keep_source", 
+                                                              callback=conflict_strategy_callback),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without modifying the target configuration"),
     output_file: str = typer.Option(..., "--output", "-o", help="Output file for updated configuration")
 ):
     """Merge multiple policies from source configuration to target configuration"""
@@ -807,6 +856,7 @@ def merge_policies(
             filter_criteria,
             skip_if_exists,
             copy_references,
+            conflict_strategy=conflict_strategy,
             source_device_group=source_device_group,
             target_device_group=target_device_group,
             source_vsys=source_vsys,
@@ -825,12 +875,19 @@ def merge_policies(
                 if len(merger.copied_objects) > 10:
                     logger.debug(f"  ... and {len(merger.copied_objects) - 10} more")
             
-            # Save the updated configuration
-            if save_config(target_tree, output_file):
-                logger.info(f"Configuration saved to {output_file}")
+            # Save the updated configuration if not in dry run mode
+            if not dry_run:
+                if save_config(target_tree, output_file):
+                    logger.info(f"Configuration saved to {output_file}")
+                else:
+                    logger.error(f"Failed to save configuration to {output_file}")
+                    raise typer.Exit(1)
             else:
-                logger.error(f"Failed to save configuration to {output_file}")
-                raise typer.Exit(1)
+                logger.info(f"Dry run mode: Changes NOT saved to {output_file}")
+                logger.info(f"If this was not a dry run, the following changes would have been made:")
+                logger.info(f"  - {copied} policies of type {policy_type} would be added to {target_context}")
+                if copy_references and merger.copied_objects:
+                    logger.info(f"  - {len(merger.copied_objects)} referenced objects would be copied")
         else:
             logger.warning(f"No policies were merged (attempted {total})")
             
@@ -861,8 +918,12 @@ def merge_all_policies(
     target_device_type: str = typer.Option("panorama", "--target-type", help="Target device type (firewall or panorama)"),
     source_version: Optional[str] = typer.Option(None, "--source-version", help="Source PAN-OS version"),
     target_version: Optional[str] = typer.Option(None, "--target-version", help="Target PAN-OS version"),
-    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if policy already exists"),
+    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if policy already exists (deprecated, use conflict_strategy instead)"),
     copy_references: bool = typer.Option(True, "--copy-references/--no-copy-references", help="Copy object references"),
+    conflict_strategy: Optional[ConflictStrategy] = typer.Option("skip", "--conflict-strategy", 
+                                                              help="Strategy for resolving conflicts: skip, overwrite, merge, rename, keep_target, keep_source", 
+                                                              callback=conflict_strategy_callback),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without modifying the target configuration"),
     output_file: str = typer.Option(..., "--output", "-o", help="Output file for updated configuration")
 ):
     """Merge all policy types from source configuration to target configuration"""
@@ -910,6 +971,7 @@ def merge_all_policies(
             target_context,
             skip_if_exists,
             copy_references,
+            conflict_strategy=conflict_strategy,
             source_device_group=source_device_group,
             target_device_group=target_device_group,
             source_vsys=source_vsys,
@@ -940,12 +1002,22 @@ def merge_all_policies(
                 for obj_type, count in object_counts.items():
                     logger.info(f"  - {obj_type}: {count} objects copied")
             
-            # Save the updated configuration
-            if save_config(target_tree, output_file):
-                logger.info(f"Configuration saved to {output_file}")
+            # Save the updated configuration if not in dry run mode
+            if not dry_run:
+                if save_config(target_tree, output_file):
+                    logger.info(f"Configuration saved to {output_file}")
+                else:
+                    logger.error(f"Failed to save configuration to {output_file}")
+                    raise typer.Exit(1)
             else:
-                logger.error(f"Failed to save configuration to {output_file}")
-                raise typer.Exit(1)
+                logger.info(f"Dry run mode: Changes NOT saved to {output_file}")
+                logger.info(f"If this was not a dry run, the following changes would have been made:")
+                logger.info(f"  - {total_copied} policies would be added to {target_context} across all policy types")
+                for policy_type, (copied, total) in results.items():
+                    if total > 0:
+                        logger.info(f"    - {policy_type}: {copied} of {total} policies would be merged")
+                if copy_references and merger.copied_objects:
+                    logger.info(f"  - {len(merger.copied_objects)} referenced objects would be copied")
         else:
             logger.warning(f"No policies were merged (attempted {total_attempted})")
             
@@ -983,8 +1055,12 @@ def merge_object(
     target_device_type: str = typer.Option("panorama", "--target-type", help="Target device type (firewall or panorama)"),
     source_version: Optional[str] = typer.Option(None, "--source-version", help="Source PAN-OS version"),
     target_version: Optional[str] = typer.Option(None, "--target-version", help="Target PAN-OS version"),
-    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if object already exists"),
+    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if object already exists (deprecated, use conflict_strategy instead)"),
     copy_references: bool = typer.Option(True, "--copy-references/--no-copy-references", help="Copy group members"),
+    conflict_strategy: Optional[ConflictStrategy] = typer.Option("skip", "--conflict-strategy", 
+                                                              help="Strategy for resolving conflicts: skip, overwrite, merge, rename, keep_target, keep_source", 
+                                                              callback=conflict_strategy_callback),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without modifying the target configuration"),
     output_file: str = typer.Option(..., "--output", "-o", help="Output file for updated configuration")
 ):
     """Merge a single object from source configuration to target configuration"""
@@ -1024,6 +1100,7 @@ def merge_object(
             target_context,
             skip_if_exists,
             copy_references,
+            conflict_strategy=conflict_strategy,
             source_device_group=source_device_group,
             target_device_group=target_device_group,
             source_vsys=source_vsys,
@@ -1039,12 +1116,19 @@ def merge_object(
                 for obj_type, obj_name in merger.referenced_objects:
                     logger.debug(f"  - {obj_type}: {obj_name}")
             
-            # Save the updated configuration
-            if save_config(target_tree, output_file):
-                logger.info(f"Configuration saved to {output_file}")
+            # Save the updated configuration if not in dry run mode
+            if not dry_run:
+                if save_config(target_tree, output_file):
+                    logger.info(f"Configuration saved to {output_file}")
+                else:
+                    logger.error(f"Failed to save configuration to {output_file}")
+                    raise typer.Exit(1)
             else:
-                logger.error(f"Failed to save configuration to {output_file}")
-                raise typer.Exit(1)
+                logger.info(f"Dry run mode: Changes NOT saved to {output_file}")
+                logger.info(f"If this was not a dry run, the following changes would have been made:")
+                logger.info(f"  - Object '{object_name}' of type {object_type} would be added to {target_context}")
+                if copy_references and merger.referenced_objects:
+                    logger.info(f"  - {len(merger.referenced_objects)} referenced objects would be copied")
         else:
             logger.error(f"Failed to merge object '{object_name}'")
             
@@ -1075,8 +1159,12 @@ def merge_objects(
     target_device_type: str = typer.Option("panorama", "--target-type", help="Target device type (firewall or panorama)"),
     source_version: Optional[str] = typer.Option(None, "--source-version", help="Source PAN-OS version"),
     target_version: Optional[str] = typer.Option(None, "--target-version", help="Target PAN-OS version"),
-    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if object already exists"),
+    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if object already exists (deprecated, use conflict_strategy instead)"),
     copy_references: bool = typer.Option(True, "--copy-references/--no-copy-references", help="Copy group members"),
+    conflict_strategy: Optional[ConflictStrategy] = typer.Option("skip", "--conflict-strategy", 
+                                                              help="Strategy for resolving conflicts: skip, overwrite, merge, rename, keep_target, keep_source", 
+                                                              callback=conflict_strategy_callback),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without modifying the target configuration"),
     output_file: str = typer.Option(..., "--output", "-o", help="Output file for updated configuration")
 ):
     """Merge multiple objects from source configuration to target configuration"""
@@ -1134,6 +1222,7 @@ def merge_objects(
             filter_criteria,
             skip_if_exists,
             copy_references,
+            conflict_strategy=conflict_strategy,
             source_device_group=source_device_group,
             target_device_group=target_device_group,
             source_vsys=source_vsys,
@@ -1143,12 +1232,17 @@ def merge_objects(
         if copied > 0:
             logger.info(f"Successfully merged {copied} of {total} {object_type} objects")
             
-            # Save the updated configuration
-            if save_config(target_tree, output_file):
-                logger.info(f"Configuration saved to {output_file}")
+            # Save the updated configuration if not in dry run mode
+            if not dry_run:
+                if save_config(target_tree, output_file):
+                    logger.info(f"Configuration saved to {output_file}")
+                else:
+                    logger.error(f"Failed to save configuration to {output_file}")
+                    raise typer.Exit(1)
             else:
-                logger.error(f"Failed to save configuration to {output_file}")
-                raise typer.Exit(1)
+                logger.info(f"Dry run mode: Changes NOT saved to {output_file}")
+                logger.info(f"If this was not a dry run, the following changes would have been made:")
+                logger.info(f"  - {copied} {object_type} objects would be added to {target_context}")
         else:
             logger.warning(f"No {object_type} objects were merged (attempted {total})")
             
@@ -1179,8 +1273,12 @@ def merge_all_objects(
     target_device_type: str = typer.Option("panorama", "--target-type", help="Target device type (firewall or panorama)"),
     source_version: Optional[str] = typer.Option(None, "--source-version", help="Source PAN-OS version"),
     target_version: Optional[str] = typer.Option(None, "--target-version", help="Target PAN-OS version"),
-    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if object already exists"),
+    skip_if_exists: bool = typer.Option(True, "--skip-if-exists/--replace", help="Skip if object already exists (deprecated, use conflict_strategy instead)"),
     copy_references: bool = typer.Option(True, "--copy-references/--no-copy-references", help="Copy group members"),
+    conflict_strategy: Optional[ConflictStrategy] = typer.Option("skip", "--conflict-strategy", 
+                                                              help="Strategy for resolving conflicts: skip, overwrite, merge, rename, keep_target, keep_source", 
+                                                              callback=conflict_strategy_callback),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without modifying the target configuration"),
     output_file: str = typer.Option(..., "--output", "-o", help="Output file for updated configuration")
 ):
     """Merge all object types from source configuration to target configuration"""
@@ -1224,6 +1322,7 @@ def merge_all_objects(
             target_context,
             skip_if_exists,
             copy_references,
+            conflict_strategy=conflict_strategy,
             source_device_group=source_device_group,
             target_device_group=target_device_group,
             source_vsys=source_vsys,
@@ -1242,12 +1341,20 @@ def merge_all_objects(
                 if total > 0:
                     logger.info(f"  - {object_type}: {copied} of {total} objects merged")
             
-            # Save the updated configuration
-            if save_config(target_tree, output_file):
-                logger.info(f"Configuration saved to {output_file}")
+            # Save the updated configuration if not in dry run mode
+            if not dry_run:
+                if save_config(target_tree, output_file):
+                    logger.info(f"Configuration saved to {output_file}")
+                else:
+                    logger.error(f"Failed to save configuration to {output_file}")
+                    raise typer.Exit(1)
             else:
-                logger.error(f"Failed to save configuration to {output_file}")
-                raise typer.Exit(1)
+                logger.info(f"Dry run mode: Changes NOT saved to {output_file}")
+                logger.info(f"If this was not a dry run, the following changes would have been made:")
+                logger.info(f"  - {total_copied} objects would be added to {target_context} across all object types")
+                for object_type, (copied, total) in results.items():
+                    if total > 0:
+                        logger.info(f"    - {object_type}: {copied} of {total} objects would be merged")
         else:
             logger.warning(f"No objects were merged (attempted {total_attempted})")
             

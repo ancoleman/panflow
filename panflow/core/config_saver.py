@@ -22,13 +22,13 @@ except ImportError:
     HAVE_LXML = False
 
 from .xml_utils import (
-    parse_xml, prettify_xml, validate_xml, element_to_dict,
-    XmlError, XmlParseError
+    parse_xml, prettify_xml, validate_xml, element_to_dict
 )
+from .exceptions import PANFlowError, ParseError
 
 logger = logging.getLogger("panflow")
 
-class ConfigSaverError(Exception):
+class ConfigSaverError(PANFlowError):
     """Base exception for configuration saving operations."""
     pass
 

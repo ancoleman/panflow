@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}{{ report.name }}{% endblock %}
+
+{% block report_title %}{{ report.name }}{% endblock %}
+
+{% block report_description %}
+{{ report.description }} - Generated on {{ report.generation_time }} for 
+{{ report.device_type }}/{{ report.context_type }}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    {% for section_name, section_data in report.sections.items() %}
+    <div class="col-12 section">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">{{ section_name }}</h5>
+            </div>
+            <div class="card-body">
+                {% if section_data.policy_type is defined %}
+                    {% include "reports/sections/policy_section.html" %}
+                {% elif section_data.object_type is defined %}
+                    {% include "reports/sections/object_section.html" %}
+                {% else %}
+                    <pre>{{ section_data|json_encode(indent=2) }}</pre>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

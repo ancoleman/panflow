@@ -1,0 +1,234 @@
+{% if section_data.type_distribution is defined %}
+<!-- Object summary section -->
+<div class="row">
+    <div class="col-md-6">
+        <h6>Summary</h6>
+        <div class="summary-item"><strong>Object Type:</strong> {{ section_data.object_type }}</div>
+        <div class="summary-item"><strong>Total Count:</strong> {{ section_data.total_count }}</div>
+        
+        {% if section_data.object_type == "address" %}
+        <div class="summary-item"><strong>IP-Netmask:</strong> {{ section_data.type_distribution["ip-netmask"] }}</div>
+        <div class="summary-item"><strong>IP-Range:</strong> {{ section_data.type_distribution["ip-range"] }}</div>
+        <div class="summary-item"><strong>FQDN:</strong> {{ section_data.type_distribution["fqdn"] }}</div>
+        <div class="summary-item"><strong>Other:</strong> {{ section_data.type_distribution["other"] }}</div>
+        {% elif section_data.object_type.endswith("_group") %}
+        <div class="summary-item"><strong>Static Groups:</strong> {{ section_data.type_distribution["static"] }}</div>
+        <div class="summary-item"><strong>Dynamic Groups:</strong> {{ section_data.type_distribution["dynamic"] }}</div>
+        <div class="summary-item"><strong>Empty Groups:</strong> {{ section_data.member_count_distribution["0"] }}</div>
+        <div class="summary-item"><strong>Small Groups (1-5):</strong> {{ section_data.member_count_distribution["1-5"] }}</div>
+        <div class="summary-item"><strong>Medium Groups (6-20):</strong> {{ section_data.member_count_distribution["6-20"] }}</div>
+        <div class="summary-item"><strong>Large Groups (21+):</strong> {{ section_data.member_count_distribution["21+"] }}</div>
+        {% endif %}
+    </div>
+    <div class="col-md-6">
+        <h6>Type Distribution</h6>
+        <div class="chart-container">
+            {% if section_data.object_type == "address" %}
+            <canvas id="chart-type-dist" 
+                    data-type="pie" 
+                    data-labels='["IP-Netmask", "IP-Range", "FQDN", "Other"]' 
+                    data-values='[
+                        {{ section_data.type_distribution["ip-netmask"] }},
+                        {{ section_data.type_distribution["ip-range"] }},
+                        {{ section_data.type_distribution["fqdn"] }},
+                        {{ section_data.type_distribution["other"] }}
+                    ]'>
+            </canvas>
+            {% elif section_data.object_type.endswith("_group") %}
+            <canvas id="chart-type-dist" 
+                    data-type="pie" 
+                    data-labels='["Static", "Dynamic"]' 
+                    data-values='[
+                        {{ section_data.type_distribution["static"] }},
+                        {{ section_data.type_distribution["dynamic"] }}
+                    ]'>
+            </canvas>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if section_data.object_type.endswith("_group") %}
+<div class="row">
+    <div class="col-12">
+        <h6>Member Count Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-member-dist" 
+                    data-type="bar" 
+                    data-labels='["Empty (0)", "Small (1-5)", "Medium (6-20)", "Large (21+)"]' 
+                    data-values='[
+                        {{ section_data.member_count_distribution["0"] }},
+                        {{ section_data.member_count_distribution["1-5"] }},
+                        {{ section_data.member_count_distribution["6-20"] }},
+                        {{ section_data.member_count_distribution["21+"] }}
+                    ]'>
+            </canvas>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if section_data.samples is defined %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Sample Objects</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Object Name</th>
+                        <th>Properties</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for name, obj in section_data.samples.items() %}
+                    <tr class="object-row">
+                        <td>{{ name }}</td>
+                        <td>{{ obj|json_encode }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% elif section_data.unused_objects is defined %}
+<!-- Unused objects section -->
+<div class="row">
+    <div class="col-md-6">
+        <h6>Summary</h6>
+        <div class="summary-item"><strong>Object Type:</strong> {{ section_data.object_type }}</div>
+        <div class="summary-item"><strong>Total Objects:</strong> {{ section_data.total_count }}</div>
+        <div class="summary-item"><strong>Unused Objects:</strong> {{ section_data.unused_count }} ({{ section_data.unused_percentage|round(1) }}%)</div>
+    </div>
+    <div class="col-md-6">
+        <h6>Usage Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-usage-dist" 
+                    data-type="pie" 
+                    data-labels='["Used", "Unused"]' 
+                    data-values='[
+                        {{ section_data.total_count - section_data.unused_count }},
+                        {{ section_data.unused_count }}
+                    ]'>
+            </canvas>
+        </div>
+    </div>
+</div>
+
+{% if section_data.unused_count > 0 %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Unused Objects</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Object Name</th>
+                        <th>Properties</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obj in section_data.unused_objects %}
+                    <tr class="object-row">
+                        <td>{{ obj.name }}</td>
+                        <td>{{ obj.properties|json_encode }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% elif section_data.duplicate_objects is defined %}
+<!-- Duplicate objects section -->
+<div class="row">
+    <div class="col-md-6">
+        <h6>Summary</h6>
+        <div class="summary-item"><strong>Object Type:</strong> {{ section_data.object_type }}</div>
+        <div class="summary-item"><strong>Total Objects:</strong> {{ section_data.total_count }}</div>
+        <div class="summary-item"><strong>Duplicate Objects:</strong> {{ section_data.duplicate_object_count }} ({{ section_data.duplicate_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Duplicate Sets:</strong> {{ section_data.duplicate_set_count }}</div>
+    </div>
+    <div class="col-md-6">
+        <h6>Duplication Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-dup-dist" 
+                    data-type="pie" 
+                    data-labels='["Unique", "Duplicate"]' 
+                    data-values='[
+                        {{ section_data.total_count - section_data.duplicate_object_count }},
+                        {{ section_data.duplicate_object_count }}
+                    ]'>
+            </canvas>
+        </div>
+    </div>
+</div>
+
+{% if section_data.duplicate_set_count > 0 %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Duplicate Object Sets</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Value</th>
+                        <th>Objects</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dupe_set in section_data.duplicate_objects %}
+                    <tr class="object-row">
+                        <td>{{ dupe_set.value }}</td>
+                        <td>{{ dupe_set.objects|join(', ') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% elif section_data.filtered_objects is defined %}
+<!-- Object filter section -->
+<div class="row">
+    <div class="col-12">
+        <h6>Filter Summary</h6>
+        <div class="summary-item"><strong>Object Type:</strong> {{ section_data.object_type }}</div>
+        <div class="summary-item"><strong>Filter Criteria:</strong> {{ section_data.criteria|json_encode }}</div>
+        <div class="summary-item"><strong>Matching Objects:</strong> {{ section_data.filtered_count }} of {{ section_data.total_count }} ({{ section_data.filtered_percentage|round(1) }}%)</div>
+    </div>
+</div>
+
+{% if section_data.filtered_count > 0 %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Matching Objects</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Object Name</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obj in section_data.filtered_objects %}
+                    <tr class="object-row">
+                        <td>{{ obj.name }}</td>
+                        <td>{{ obj.data|json_encode }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}

@@ -1,0 +1,101 @@
+<?xml version="1.0"?>
+<config version="10.1.0">
+  <devices>
+    <entry name="localhost.localdomain">
+      <device-group>
+        <entry name="test-device-group">
+          <address>
+            <entry name="dg-address-1">
+              <ip-netmask>192.168.1.1/32</ip-netmask>
+              <description>Device group address object</description>
+              <tag>
+                <member>test-tag</member>
+              </tag>
+            </entry>
+          </address>
+          <address-group>
+            <entry name="dg-address-group-1">
+              <static>
+                <member>dg-address-1</member>
+              </static>
+              <description>Device group address group</description>
+            </entry>
+          </address-group>
+          <pre-rulebase>
+            <security>
+              <rules>
+                <entry name="test-security-rule">
+                  <action>allow</action>
+                  <source>
+                    <member>any</member>
+                  </source>
+                  <destination>
+                    <member>any</member>
+                  </destination>
+                  <service>
+                    <member>application-default</member>
+                  </service>
+                  <application>
+                    <member>web-browsing</member>
+                  </application>
+                </entry>
+              </rules>
+            </security>
+          </pre-rulebase>
+        </entry>
+      </device-group>
+      <vsys>
+        <entry name="vsys1">
+          <address>
+            <entry name="vsys-address-1">
+              <ip-netmask>10.0.0.1/32</ip-netmask>
+              <description>VSYS address object</description>
+            </entry>
+          </address>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="vsys-rule">
+                  <action>allow</action>
+                  <source>
+                    <member>any</member>
+                  </source>
+                  <destination>
+                    <member>any</member>
+                  </destination>
+                  <service>
+                    <member>application-default</member>
+                  </service>
+                  <application>
+                    <member>ssl</member>
+                  </application>
+                </entry>
+              </rules>
+            </security>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+  <shared>
+    <address>
+      <entry name="shared-address-1">
+        <ip-netmask>172.16.1.1/32</ip-netmask>
+        <description>Shared address object</description>
+      </entry>
+      <entry name="shared-address-2">
+        <ip-netmask>172.16.1.2/32</ip-netmask>
+      </entry>
+    </address>
+    <service>
+      <entry name="service-tcp-8080">
+        <protocol>
+          <tcp>
+            <port>8080</port>
+          </tcp>
+        </protocol>
+        <description>Custom TCP service</description>
+      </entry>
+    </service>
+  </shared>
+</config>

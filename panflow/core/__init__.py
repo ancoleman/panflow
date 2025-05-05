@@ -2,8 +2,18 @@
 Core package for PANFlow for PAN-OS XML utilities.
 
 This package provides the core functionality for working with PANFlow for PAN-OS XML configurations,
-including XML parsing, manipulation, and saving.
+including XML parsing, manipulation, saving, and enhanced XML abstractions.
 """
+
+# Import enhanced XML utilities
+from .xml_builder import XmlNode, XmlBuilder, XPathBuilder
+from .xml_query import XmlQuery
+from .xml_diff import XmlDiff, DiffItem, DiffType
+
+# Import from exceptions.py
+from .exceptions import (
+    PANFlowError, ParseError, XPathError, MergeError, ValidationError, CacheError
+)
 
 # Import from xml_utils.py
 from .xml_utils import (
@@ -26,10 +36,7 @@ from .xml_utils import (
     
     # Helper functions
     get_xpath_functions, get_element_manipulation_functions,
-    get_conversion_functions,
-    
-    # Custom exceptions
-    XmlError, XmlParseError, XmlXPathError, XmlMergeError
+    get_conversion_functions
 )
 
 # Import from config_saver.py
@@ -59,6 +66,9 @@ from .object_merger import (
 
 # Define the public API
 __all__ = [
+    # Enhanced XML abstractions
+    'XmlNode', 'XmlBuilder', 'XPathBuilder', 'XmlQuery', 'XmlDiff', 'DiffItem', 'DiffType',
+    
     # XML parsing
     'parse_xml',
     
@@ -92,9 +102,10 @@ __all__ = [
     'xpath_search', 'extract_element_data', 'detect_device_type',
     
     # Exceptions
-    'XmlError', 'XmlParseError', 'XmlXPathError', 'XmlMergeError',
+    'PANFlowError', 'ParseError', 'XPathError', 'MergeError', 'ValidationError', 'CacheError',
     'ConfigSaverError',
 
+    # Merger classes
     'PolicyMerger',
     'ObjectMerger'
 ]

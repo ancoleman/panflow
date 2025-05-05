@@ -195,36 +195,15 @@ def extract_element_data(element: etree._Element) -> Dict[str, Any]:
     element_name = element.get('name', 'unknown')
     logger.debug(f"Extracting data from element: {element_tag}[name='{element_name}']")
     
-    data = {}
+    # Use the compatibility function from xml_utils
+    from .xml_utils import compat_element_to_dict
     
     try:
-        # Add attributes
-        for key, value in element.attrib.items():
-            data[key] = value
-        
-        # Add child elements
-        for child in element:
-            # Check if the child element has multiple "member" children
-            members = child.xpath("./member")
-            if members:
-                # This is a list element
-                member_values = [member.text for member in members if member.text]
-                logger.debug(f"Extracted {len(member_values)} members from {child.tag}")
-                data[child.tag] = member_values
-            else:
-                # Not a list, just a single value or nested element
-                if len(child) == 0:
-                    # Simple element with text
-                    data[child.tag] = child.text
-                else:
-                    # Nested element, recursively extract data
-                    logger.debug(f"Recursively extracting nested element: {child.tag}")
-                    data[child.tag] = extract_element_data(child)
-        
+        data = compat_element_to_dict(element)
         return data
     except Exception as e:
         logger.error(f"Error extracting data from element {element_tag}[name='{element_name}']: {e}", exc_info=True)
-        return data  # Return whatever data we managed to extract before the error
+        return {}  # Return empty dict on error
 
 def detect_device_type(tree: etree._ElementTree) -> str:
     """

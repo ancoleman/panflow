@@ -1,0 +1,241 @@
+{% if section_data.action_distribution is defined %}
+<!-- Policy summary section -->
+<div class="row">
+    <div class="col-md-6">
+        <h6>Summary</h6>
+        <div class="summary-item"><strong>Policy Type:</strong> {{ section_data.policy_type }}</div>
+        <div class="summary-item"><strong>Total Count:</strong> {{ section_data.total_count }}</div>
+        <div class="summary-item"><strong>Disabled Count:</strong> {{ section_data.disabled_count }} ({{ section_data.disabled_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Policies with 'Any' Source:</strong> {{ section_data.policies_with_any_source }} ({{ section_data.any_source_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Policies with 'Any' Destination:</strong> {{ section_data.policies_with_any_destination }} ({{ section_data.any_destination_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Policies with Profile Group:</strong> {{ section_data.policies_with_profile_group }} ({{ section_data.profile_group_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Policies with Log Forwarding:</strong> {{ section_data.policies_with_log_forwarding }} ({{ section_data.log_forwarding_percentage|round(1) }}%)</div>
+    </div>
+    <div class="col-md-6">
+        <h6>Action Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-action-dist" 
+                    data-type="pie" 
+                    data-labels='{{ section_data.action_distribution.keys()|list|json_encode }}' 
+                    data-values='{{ section_data.action_distribution.values()|list|json_encode }}'>
+            </canvas>
+        </div>
+    </div>
+</div>
+
+{% if section_data.source_zone_distribution %}
+<div class="row">
+    <div class="col-md-6">
+        <h6>Source Zone Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-source-zone" 
+                    data-type="bar" 
+                    data-labels='{{ section_data.source_zone_distribution.keys()|list|json_encode }}' 
+                    data-values='{{ section_data.source_zone_distribution.values()|list|json_encode }}'>
+            </canvas>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <h6>Destination Zone Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-dest-zone" 
+                    data-type="bar" 
+                    data-labels='{{ section_data.destination_zone_distribution.keys()|list|json_encode }}' 
+                    data-values='{{ section_data.destination_zone_distribution.values()|list|json_encode }}'>
+            </canvas>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% elif section_data.any_any_rules is defined %}
+<!-- Rule coverage section -->
+<div class="row">
+    <div class="col-md-6">
+        <h6>Summary</h6>
+        <div class="summary-item"><strong>Total Rules:</strong> {{ section_data.total_count }}</div>
+        <div class="summary-item"><strong>Disabled Rules:</strong> {{ section_data.disabled_count }} ({{ section_data.disabled_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Any-Any Rules:</strong> {{ section_data.any_any_count }} ({{ section_data.any_any_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Potential Shadowing Cases:</strong> {{ section_data.shadowing_count }}</div>
+    </div>
+    <div class="col-md-6">
+        <h6>Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-rule-types" 
+                    data-type="pie" 
+                    data-labels='["Any-Any Rules", "Other Rules", "Disabled Rules"]' 
+                    data-values='[
+                        {{ section_data.any_any_count }}, 
+                        {{ section_data.total_count - section_data.any_any_count - section_data.disabled_count }},
+                        {{ section_data.disabled_count }}
+                    ]'>
+            </canvas>
+        </div>
+    </div>
+</div>
+
+{% if section_data.any_any_count > 0 %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Any-Any Rules</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Rule Name</th>
+                        <th>Action</th>
+                        <th>Any Service</th>
+                        <th>Any Application</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in section_data.any_any_rules %}
+                    <tr class="policy-row">
+                        <td>{{ rule.name }}</td>
+                        <td>{{ rule.action }}</td>
+                        <td>{{ "Yes" if rule.any_service else "No" }}</td>
+                        <td>{{ "Yes" if rule.any_application else "No" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if section_data.shadowing_count > 0 %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Potential Shadowing</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>First Rule</th>
+                        <th>First Action</th>
+                        <th>Second Rule</th>
+                        <th>Second Action</th>
+                        <th>Overlapping Fields</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for shadow in section_data.potential_shadowing %}
+                    <tr class="policy-row">
+                        <td>{{ shadow.first_rule }}</td>
+                        <td>{{ shadow.first_action }}</td>
+                        <td>{{ shadow.second_rule }}</td>
+                        <td>{{ shadow.second_action }}</td>
+                        <td>{{ shadow.overlap_fields|join(', ') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% elif section_data.hit_count_stats is defined %}
+<!-- Hit count section -->
+<div class="row">
+    <div class="col-md-6">
+        <h6>Summary</h6>
+        <div class="summary-item"><strong>Policy Type:</strong> {{ section_data.policy_type }}</div>
+        <div class="summary-item"><strong>Total Policies:</strong> {{ section_data.total_count }}</div>
+        <div class="summary-item"><strong>Zero Hits:</strong> {{ section_data.zero_hit_count }} ({{ section_data.zero_hit_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Low Hits (&lt;100):</strong> {{ section_data.low_hit_count }} ({{ section_data.low_hit_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>Medium Hits (100-999):</strong> {{ section_data.medium_hit_count }} ({{ section_data.medium_hit_percentage|round(1) }}%)</div>
+        <div class="summary-item"><strong>High Hits (1000+):</strong> {{ section_data.high_hit_count }} ({{ section_data.high_hit_percentage|round(1) }}%)</div>
+    </div>
+    <div class="col-md-6">
+        <h6>Hit Count Statistics</h6>
+        <div class="summary-item"><strong>Min Hits:</strong> {{ section_data.hit_count_stats.min }}</div>
+        <div class="summary-item"><strong>Max Hits:</strong> {{ section_data.hit_count_stats.max }}</div>
+        <div class="summary-item"><strong>Average Hits:</strong> {{ section_data.hit_count_stats.avg|round(2) }}</div>
+        <div class="summary-item"><strong>Median Hits:</strong> {{ section_data.hit_count_stats.median }}</div>
+        <div class="summary-item"><strong>Total Hits:</strong> {{ section_data.hit_count_stats.total }}</div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <h6>Hit Count Distribution</h6>
+        <div class="chart-container">
+            <canvas id="chart-hit-dist" 
+                    data-type="pie" 
+                    data-labels='["Zero Hits", "Low Hits (<100)", "Medium Hits (100-999)", "High Hits (1000+)"]' 
+                    data-values='[
+                        {{ section_data.zero_hit_count }}, 
+                        {{ section_data.low_hit_count }},
+                        {{ section_data.medium_hit_count }},
+                        {{ section_data.high_hit_count }}
+                    ]'>
+            </canvas>
+        </div>
+    </div>
+</div>
+
+{% if section_data.zero_hit_count > 0 %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Zero Hit Policies</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Policy Name</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for policy in section_data.zero_hit_policies %}
+                    <tr class="policy-row">
+                        <td>{{ policy.name }}</td>
+                        <td>{{ policy.action }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% elif section_data.filtered_policies is defined %}
+<!-- Policy filter section -->
+<div class="row">
+    <div class="col-12">
+        <h6>Filter Summary</h6>
+        <div class="summary-item"><strong>Policy Type:</strong> {{ section_data.policy_type }}</div>
+        <div class="summary-item"><strong>Filter Criteria:</strong> {{ section_data.criteria|json_encode }}</div>
+        <div class="summary-item"><strong>Matching Policies:</strong> {{ section_data.filtered_count }} of {{ section_data.total_count }} ({{ section_data.filtered_percentage|round(1) }}%)</div>
+    </div>
+</div>
+
+{% if section_data.filtered_count > 0 %}
+<div class="row mt-3">
+    <div class="col-12">
+        <h6>Matching Policies</h6>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Policy Name</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for policy in section_data.filtered_policies %}
+                    <tr class="policy-row">
+                        <td>{{ policy.name }}</td>
+                        <td>{{ policy.data|json_encode }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}

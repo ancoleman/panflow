@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}{{ analysis.object_type|capitalize }} Usage Report{% endblock %}
+
+{% block report_title %}{{ analysis.summary.object_type|capitalize }} Usage Report{% endblock %}
+
+{% block report_description %}
+Generated on {{ analysis.summary.generation_time }} for 
+{{ analysis.summary.device_type }}/{{ analysis.summary.context_type }} 
+({{ analysis.summary.object_type }})
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="summary-item"><strong>Total Objects:</strong> {{ analysis.summary.total_objects }}</div>
+                <div class="summary-item"><strong>Used:</strong> {{ analysis.summary.used_count }} ({{ analysis.summary.used_percentage|round(1) }}%)</div>
+                <div class="summary-item"><strong>Unused:</strong> {{ analysis.summary.unused_count }}</div>
+                
+                {% if analysis.summary.object_type == "address" %}
+                <div class="summary-item"><strong>IP-Netmask:</strong> {{ analysis.summary.ip_netmask_count }}</div>
+                <div class="summary-item"><strong>IP-Range:</strong> {{ analysis.summary.ip_range_count }}</div>
+                <div class="summary-item"><strong>FQDN:</strong> {{ analysis.summary.fqdn_count }}</div>
+                {% elif "_group" in analysis.summary.object_type %}
+                <div class="summary-item"><strong>Static Groups:</strong> {{ analysis.summary.static_count }}</div>
+                <div class="summary-item"><strong>Dynamic Groups:</strong> {{ analysis.summary.dynamic_count }}</div>
+                <div class="summary-item"><strong>Empty Groups:</strong> {{ analysis.summary.empty_count }}</div>
+                <div class="summary-item"><strong>Small Groups (1-5):</strong> {{ analysis.summary.small_count }}</div>
+                <div class="summary-item"><strong>Medium Groups (6-20):</strong> {{ analysis.summary.medium_count }}</div>
+                <div class="summary-item"><strong>Large Groups (21+):</strong> {{ analysis.summary.large_count }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Usage Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="usageChart" 
+                            data-type="pie" 
+                            data-labels='["Used", "Unused"]' 
+                            data-values='[{{ analysis.summary.used_count }}, {{ analysis.summary.unused_count }}]'>
+                    </canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Reference Types</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="refTypeChart" 
+                            data-type="bar" 
+                            data-labels='{{ analysis.statistics.reference_types.keys()|list|json_encode }}' 
+                            data-values='{{ analysis.statistics.reference_types.values()|list|json_encode }}'>
+                    </canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Object Details</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Used</th>
+                                <th>Policy References</th>
+                                <th>Group References</th>
+                                {% if analysis.summary.object_type == "address" %}
+                                <th>Type</th>
+                                <th>Value</th>
+                                {% elif "_group" in analysis.summary.object_type %}
+                                <th>Type</th>
+                                <th>Member Count</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for name, obj_info in analysis.objects.items() %}
+                            <tr class="object-row {{ 'object-used' if obj_info.used else 'object-unused' }}">
+                                <td>{{ name }}</td>
+                                <td>{{ "Yes" if obj_info.used else "No" }}</td>
+                                <td>{{ obj_info.references.policies|length }}</td>
+                                <td>{{ obj_info.references.groups|length }}</td>
+                                
+                                {% if analysis.summary.object_type == "address" %}
+                                <td>{{ obj_info.get('type', '') }}</td>
+                                <td>{{ obj_info.get('value', '') }}</td>
+                                {% elif "_group" in analysis.summary.object_type %}
+                                <td>{{ obj_info.get('type', '') }}</td>
+                                <td>{{ obj_info.get('members', [])|length }}</td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

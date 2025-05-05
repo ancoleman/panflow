@@ -9,6 +9,15 @@ import logging
 from typing import Dict, Any, Optional, List, Tuple, Union
 from lxml import etree
 
+# Import core exceptions
+from .core.exceptions import (
+    PANFlowError, ConfigError, ValidationError, ParseError, 
+    XPathError, ContextError, ObjectError, ObjectNotFoundError,
+    ObjectExistsError, PolicyError, PolicyNotFoundError,
+    PolicyExistsError, MergeError, ConflictError, VersionError,
+    FileOperationError, BulkOperationError, SecurityError
+)
+
 # Import core modules
 from .core.config_loader import (
     load_config_from_file, load_config_from_string, save_config,

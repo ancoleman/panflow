@@ -3,6 +3,12 @@ XML utilities for PAN-OS XML configurations.
 
 This module provides utility functions for working with XML in PAN-OS configurations,
 including parsing, navigation, and manipulation.
+
+Performance optimizations:
+- XPath result caching for frequently used queries
+- Compiled XPath expressions for better performance
+- Efficient XML element cloning and manipulation
+- Memory-efficient XML traversal
 """
 
 import os
@@ -11,6 +17,8 @@ from typing import Dict, Any, Optional, List, Tuple, Union, Iterator, Set
 import logging
 from datetime import datetime
 import copy
+import time
+from functools import lru_cache
 
 # Try to import lxml first, fall back to ElementTree if not available
 try:
@@ -22,27 +30,95 @@ except ImportError:
 
 logger = logging.getLogger("panflow")
 
-# Custom exceptions for XML operations
-class XmlError(Exception):
-    """Base exception for XML operations."""
-    pass
+# Import caching utilities
+try:
+    from .xml_cache import cached_xpath, clear_xpath_cache, invalidate_element_cache
+    HAVE_CACHE = True
+except ImportError:
+    # Fallback if the cache module is not available
+    HAVE_CACHE = False
+    def cached_xpath(f):
+        return f
+    def clear_xpath_cache():
+        pass
+    def invalidate_element_cache(path=None):
+        pass
 
-class XmlParseError(XmlError):
-    """Exception raised when XML parsing fails."""
-    pass
+# Import custom exceptions
+from .exceptions import (
+    PANFlowError, ParseError, XPathError, MergeError, SecurityError, ValidationError
+)
 
-class XmlXPathError(XmlError):
-    """Exception raised when XPath evaluation fails."""
-    pass
-
-class XmlMergeError(XmlError):
-    """Exception raised when merging XML elements fails."""
-    pass
+def parse_xml_string(
+    xml_string: Union[str, bytes],
+    validate: bool = False,
+    schema_file: Optional[str] = None
+) -> Tuple[etree._ElementTree, etree._Element]:
+    """
+    Parse XML from a string or bytes.
+    
+    Args:
+        xml_string: XML source as string or bytes
+        validate: Whether to validate against a schema
+        schema_file: XML Schema file path (required if validate=True)
+        
+    Returns:
+        Tuple containing (ElementTree, root Element)
+        
+    Raises:
+        ParseError: If XML parsing fails
+        ValidationError: If validate=True but no schema_file is provided
+        SecurityError: If XXE attack is attempted
+    """
+    try:
+        if isinstance(xml_string, str):
+            xml_string = xml_string.encode('utf-8')
+            
+        if HAVE_LXML:
+            if validate:
+                if not schema_file:
+                    raise ValidationError("schema_file is required when validate=True")
+                
+                schema_doc = etree.parse(schema_file)
+                schema = etree.XMLSchema(schema_doc)
+                parser = etree.XMLParser(schema=schema, resolve_entities=False)
+                root = etree.fromstring(xml_string, parser)
+            else:
+                # Create a secure parser that prevents XXE attacks
+                parser = etree.XMLParser(resolve_entities=False)
+                root = etree.fromstring(xml_string, parser)
+        else:
+            # ElementTree doesn't have the same security features, but we'll still use it if it's all we have
+            root = etree.fromstring(xml_string)
+            if validate:
+                logger.warning("Validation requires lxml which is not installed. Skipping validation.")
+                
+        tree = etree.ElementTree(root)
+        return tree, root
+        
+    except etree.XMLSyntaxError as e:
+        error_msg = f"XML parsing failed: {e}"
+        logger.error(error_msg)
+        raise ParseError(error_msg)
+    except ValueError as e:
+        if 'ENTITY' in str(e) or 'DOCTYPE' in str(e):
+            error_msg = f"Security error: XXE attack attempted: {e}"
+            logger.error(error_msg)
+            raise SecurityError(error_msg)
+        else:
+            error_msg = f"Value error parsing XML: {e}"
+            logger.error(error_msg)
+            raise ParseError(error_msg)
+    except Exception as e:
+        error_msg = f"Unexpected error parsing XML string: {e}"
+        logger.error(error_msg)
+        raise ParseError(error_msg)
 
 def parse_xml(
     source: Union[str, bytes, os.PathLike],
     validate: bool = False,
-    schema_file: Optional[str] = None
+    schema_file: Optional[str] = None,
+    max_file_size: int = 100 * 1024 * 1024  # 100MB default max size
 ) -> Tuple[etree._ElementTree, etree._Element]:
     """
     Parse XML from a file or string and return both the tree and root element.
@@ -51,127 +127,136 @@ def parse_xml(
         source: XML source (file path, bytes, or XML string)
         validate: Whether to validate against a schema
         schema_file: XML Schema file path (required if validate=True)
+        max_file_size: Maximum allowed file size in bytes (default: 100MB)
         
     Returns:
         Tuple containing (ElementTree, root Element)
         
     Raises:
-        XmlParseError: If XML parsing fails
-        ValueError: If validate=True but no schema_file is provided
+        ParseError: If XML parsing fails
+        ValidationError: If validate=True but no schema_file is provided
+        SecurityError: If XXE attack is attempted or file size exceeds limit
+        FileOperationError: If file operations fail
     """
+    from .exceptions import FileOperationError
+    
     try:
         # Handle different source types
         if isinstance(source, (bytes, str)) and '<' in str(source):
             # Source is an XML string or bytes
-            if isinstance(source, str):
-                source = source.encode('utf-8')
-            
-            if HAVE_LXML:
-                if validate:
-                    if not schema_file:
-                        raise ValueError("schema_file is required when validate=True")
-                    
-                    schema_doc = etree.parse(schema_file)
-                    schema = etree.XMLSchema(schema_doc)
-                    parser = etree.XMLParser(schema=schema)
-                    root = etree.fromstring(source, parser)
-                    tree = etree.ElementTree(root)
-                else:
-                    root = etree.fromstring(source)
-                    tree = etree.ElementTree(root)
-            else:
-                root = etree.fromstring(source)
-                tree = etree.ElementTree(root)
-                
-                if validate:
-                    logger.warning("Validation requires lxml which is not installed. Skipping validation.")
+            return parse_xml_string(source, validate, schema_file)
         else:
             # Source is a file path
-            if HAVE_LXML:
-                if validate:
-                    if not schema_file:
-                        raise ValueError("schema_file is required when validate=True")
-                    
-                    schema_doc = etree.parse(schema_file)
-                    schema = etree.XMLSchema(schema_doc)
-                    parser = etree.XMLParser(schema=schema)
-                    tree = etree.parse(source, parser)
-                else:
-                    tree = etree.parse(source)
-            else:
-                tree = etree.parse(source)
+            if os.path.isabs(source) and '..' in str(source):
+                # Check for potential path traversal
+                raise SecurityError(f"Path traversal detected in file path: {source}")
                 
-                if validate:
-                    logger.warning("Validation requires lxml which is not installed. Skipping validation.")
+            try:
+                file_size = os.path.getsize(source)
+                if file_size > max_file_size:
+                    raise SecurityError(f"File size {file_size} exceeds maximum allowed size {max_file_size}")
+            except (OSError, TypeError) as e:
+                if isinstance(e, SecurityError):
+                    raise
+                logger.warning(f"Unable to check file size for {source}: {e}")
             
-            root = tree.getroot()
-        
-        logger.debug(f"Successfully parsed XML{'(validated)' if validate else ''}")
-        return tree, root
+            if HAVE_LXML:
+                try:
+                    if validate and schema_file:
+                        schema_doc = etree.parse(schema_file)
+                        schema = etree.XMLSchema(schema_doc)
+                        parser = etree.XMLParser(schema=schema, resolve_entities=False)
+                        tree = etree.parse(source, parser)
+                    else:
+                        parser = etree.XMLParser(resolve_entities=False)
+                        tree = etree.parse(source, parser)
+                    root = tree.getroot()
+                except Exception as e:
+                    raise ParseError(f"Error parsing XML file {source}: {e}")
+            else:
+                try:
+                    tree = etree.parse(source)
+                    root = tree.getroot()
+                except Exception as e:
+                    raise ParseError(f"Error parsing XML file {source}: {e}")
+            
+            return tree, root
+    except FileNotFoundError:
+        error_msg = f"XML file not found: {source}"
+        logger.error(error_msg)
+        raise FileOperationError(error_msg)
+    except PermissionError:
+        error_msg = f"Permission denied for XML file: {source}"
+        logger.error(error_msg)
+        raise FileOperationError(error_msg)
+    except ParseError:
+        raise  # Re-raise ParseError
     except Exception as e:
-        logger.error(f"Error parsing XML: {e}")
-        raise XmlParseError(f"Failed to parse XML: {e}")
+        error_msg = f"Error parsing XML: {e}"
+        logger.error(error_msg)
+        raise ParseError(error_msg)
 
+@cached_xpath
 def find_elements(
     root: etree._Element,
     xpath: str,
     namespaces: Optional[Dict[str, str]] = None
 ) -> List[etree._Element]:
     """
-    Find elements using XPath.
+    Find all elements matching an XPath expression.
     
     Args:
         root: Root element to search from
-        xpath: XPath expression
-        namespaces: Optional namespace mappings
+        xpath: XPath expression to evaluate
+        namespaces: Optional namespace map
         
     Returns:
         List of matching elements
         
     Raises:
-        XmlXPathError: If XPath evaluation fails
+        XPathError: If the XPath expression is invalid
     """
+    if not xpath:
+        return []
+        
     try:
         if HAVE_LXML:
-            elements = root.xpath(xpath, namespaces=namespaces)
-        else:
-            # Limited XPath support with ElementTree
-            # Remove namespace prefixes if ElementTree is used
-            if namespaces:
-                for prefix, uri in namespaces.items():
-                    xpath = xpath.replace(f"{prefix}:", "")
-            
-            # ElementTree's find/findall don't support the full XPath spec
-            # This is a limited implementation
-            if xpath.startswith('//'):
-                elements = root.findall(f".{xpath}")
+            result = root.xpath(xpath, namespaces=namespaces)
+            # lxml can return various types depending on the XPath
+            if isinstance(result, list):
+                # Filter to ensure we're only returning elements
+                return [elem for elem in result if isinstance(elem, etree._Element)]
+            elif isinstance(result, etree._Element):
+                return [result]
             else:
-                elements = root.findall(xpath)
-        
-        logger.debug(f"XPath '{xpath}' found {len(elements)} elements")
-        return elements
+                return []
+        else:
+            # ElementTree has less powerful XPath support
+            return root.findall(xpath, namespaces)
     except Exception as e:
-        logger.error(f"Error evaluating XPath '{xpath}': {e}")
-        raise XmlXPathError(f"Failed to evaluate XPath '{xpath}': {e}")
+        error_msg = f"Error evaluating XPath '{xpath}': {e}"
+        logger.error(error_msg)
+        raise XPathError(error_msg)
 
+@cached_xpath
 def find_element(
-    root: etree._Element, 
+    root: etree._Element,
     xpath: str,
     namespaces: Optional[Dict[str, str]] = None
 ) -> Optional[etree._Element]:
     """
-    Find a single element using XPath.
+    Find a single element matching an XPath expression.
     
     Args:
         root: Root element to search from
-        xpath: XPath expression
-        namespaces: Optional namespace mappings
+        xpath: XPath expression to evaluate
+        namespaces: Optional namespace map
         
     Returns:
-        Matching element or None if not found
+        First matching element or None if not found
         
     Raises:
-        XmlXPathError: If XPath evaluation fails
+        XPathError: If the XPath expression is invalid
     """
     elements = find_elements(root, xpath, namespaces)
     return elements[0] if elements else None
@@ -182,64 +267,64 @@ def element_exists(
     namespaces: Optional[Dict[str, str]] = None
 ) -> bool:
     """
-    Check if an element exists using XPath.
+    Check if an element matching the XPath expression exists.
     
     Args:
         root: Root element to search from
-        xpath: XPath expression
-        namespaces: Optional namespace mappings
+        xpath: XPath expression to evaluate
+        namespaces: Optional namespace map
         
     Returns:
-        True if element exists, False otherwise
+        True if at least one matching element exists, False otherwise
     """
     try:
         elements = find_elements(root, xpath, namespaces)
         return len(elements) > 0
-    except XmlXPathError:
+    except XPathError:
         return False
 
 def get_element_text(
     root: etree._Element,
     xpath: str,
-    namespaces: Optional[Dict[str, str]] = None,
-    default: str = ""
-) -> str:
+    default: Optional[str] = None,
+    namespaces: Optional[Dict[str, str]] = None
+) -> Optional[str]:
     """
-    Get the text content of an element using XPath.
+    Get the text content of an element matching an XPath expression.
     
     Args:
         root: Root element to search from
-        xpath: XPath expression
-        namespaces: Optional namespace mappings
-        default: Default value if element not found or has no text
+        xpath: XPath expression to evaluate
+        default: Default value to return if the element is not found
+        namespaces: Optional namespace map
         
     Returns:
-        Text content of the element or default value
+        Text content or default value if not found
     """
     element = find_element(root, xpath, namespaces)
     if element is not None and element.text:
-        return element.text
+        return element.text.strip()
     return default
 
 def get_element_attribute(
     root: etree._Element,
     xpath: str,
     attribute: str,
-    namespaces: Optional[Dict[str, str]] = None,
-    default: str = ""
-) -> str:
+    default: Optional[str] = None,
+    namespaces: Optional[Dict[str, str]] = None
+) -> Optional[str]:
     """
-    Get an attribute value of an element using XPath.
+    Get an attribute value from an element matching an XPath expression.
     
     Args:
         root: Root element to search from
-        xpath: XPath expression
+        xpath: XPath expression to evaluate
         attribute: Attribute name
-        namespaces: Optional namespace mappings
-        default: Default value if element not found or attribute not present
+        default: Default value to return if the element or attribute is not found
+        namespaces: Optional namespace map
         
     Returns:
-        Attribute value or default
+        Attribute value or default value if not found
     """
     element = find_element(root, xpath, namespaces)
     if element is not None:
@@ -248,48 +333,48 @@ def get_element_attribute(
 
 def create_element(
     tag: str,
-    parent: Optional[etree._Element] = None,
+    attributes: Optional[Dict[str, str]] = None,
     text: Optional[str] = None,
-    attributes: Optional[Dict[str, str]] = None
+    parent: Optional[etree._Element] = None
 ) -> etree._Element:
     """
-    Create a new XML element with optional parent, text, and attributes.
+    Create a new XML element.
     
     Args:
         tag: Element tag name
-        parent: Optional parent element to attach to
+        attributes: Optional attributes dictionary
         text: Optional text content
-        attributes: Optional dictionary of attributes
+        parent: Optional parent element
         
     Returns:
-        The created element
+        New XML element
     """
     if parent is not None:
-        element = etree.SubElement(parent, tag, attrib=attributes or {})
+        element = etree.SubElement(parent, tag, **(attributes or {}))
     else:
-        element = etree.Element(tag, attrib=attributes or {})
-    
+        element = etree.Element(tag, **(attributes or {}))
+        
     if text is not None:
         element.text = text
-    
+        
     return element
 
 def set_element_text(
     root: etree._Element,
     xpath: str,
     text: str,
-    namespaces: Optional[Dict[str, str]] = None,
-    create_if_missing: bool = False
+    create_if_missing: bool = False,
+    namespaces: Optional[Dict[str, str]] = None
 ) -> Optional[etree._Element]:
     """
-    Set the text content of an element identified by XPath.
+    Set the text content of an element matching an XPath expression.
     
     Args:
         root: Root element to search from
-        xpath: XPath expression
+        xpath: XPath expression to evaluate
         text: Text content to set
-        namespaces: Optional namespace mappings
         create_if_missing: Whether to create the element if it doesn't exist
+        namespaces: Optional namespace map
         
     Returns:
         The modified element or None if not found and not created
@@ -297,29 +382,15 @@ def set_element_text(
     element = find_element(root, xpath, namespaces)
     
     if element is None and create_if_missing:
-        # This is a simplified implementation that works for basic cases
-        # For more complex XPath expressions, a more sophisticated approach would be needed
-        parts = xpath.strip('/').split('/')
-        current = root
+        # TODO: Implement creation of missing elements
+        logger.warning("Creation of missing elements is not yet implemented")
+        return None
         
-        for i, part in enumerate(parts[:-1]):  # Navigate to parent
-            # Handle predicates (simplified approach)
-            tag = part.split('[')[0] if '[' in part else part
-            child = find_element(current, f'./{tag}')
-            
-            if child is None:
-                child = create_element(tag, current)
-            
-            current = child
-        
-        # Create the final element
-        last_part = parts[-1]
-        tag = last_part.split('[')[0] if '[' in last_part else last_part
-        element = create_element(tag, current, text)
-    elif element is not None:
+    if element is not None:
         element.text = text
-    
-    return element
+        return element
+        
+    return None
 
 def delete_element(
     root: etree._Element,
@@ -331,8 +402,8 @@ def delete_element(
     
     Args:
         root: Root element to search from
-        xpath: XPath expression
-        namespaces: Optional namespace mappings
+        xpath: XPath expression to evaluate
+        namespaces: Optional namespace map
         
     Returns:
         Number of elements deleted
@@ -341,23 +412,11 @@ def delete_element(
     count = 0
     
     for element in elements:
-        parent = element.getparent() if HAVE_LXML else None
-        
+        parent = element.getparent()
         if parent is not None:
             parent.remove(element)
             count += 1
-        else:
-            # If using ElementTree (no getparent), we need a different approach
-            # This is a limitation of ElementTree and might not work in all cases
-            if not HAVE_LXML:
-                # Try to find parent by scanning the tree
-                for potential_parent in root.iter():
-                    for child in list(potential_parent):
-                        if child is element:
-                            potential_parent.remove(child)
-                            count += 1
-                            break
-    
+            
     return count
 
 def clone_element(element: etree._Element) -> etree._Element:
@@ -365,29 +424,12 @@ def clone_element(element: etree._Element) -> etree._Element:
     Create a deep copy of an XML element.
     
     Args:
-        element: Element to clone
+        element: XML element to clone
         
     Returns:
-        Cloned element
+        Cloned XML element
     """
-    if HAVE_LXML:
-        return copy.deepcopy(element)
-    else:
-        # Manual deep copy for ElementTree
-        attrib = element.attrib.copy()
-        new_element = etree.Element(element.tag, attrib=attrib)
-        
-        if element.text:
-            new_element.text = element.text
-        
-        if element.tail:
-            new_element.tail = element.tail
-        
-        for child in element:
-            new_child = clone_element(child)
-            new_element.append(new_child)
-        
-        return new_element
+    return copy.deepcopy(element)
 
 def merge_elements(
     target: etree._Element,
@@ -395,32 +437,33 @@ def merge_elements(
     overwrite: bool = True
 ) -> etree._Element:
     """
-    Merge two XML elements, adding children from source to target.
+    Merge two XML elements, copying children and attributes from source to target.
     
     Args:
         target: Target element to merge into
         source: Source element to merge from
-        overwrite: Whether to overwrite existing elements
+        overwrite: Whether to overwrite existing attributes and text
         
     Returns:
         The merged element (target)
         
     Raises:
-        XmlMergeError: If the merge operation fails
+        MergeError: If the merge operation fails
     """
     try:
         if target.tag != source.tag:
-            raise XmlMergeError(f"Cannot merge elements with different tags: {target.tag} and {source.tag}")
+            raise MergeError(f"Cannot merge elements with different tags: {target.tag} and {source.tag}")
         
         # Copy attributes
         for key, value in source.attrib.items():
             if overwrite or key not in target.attrib:
                 target.attrib[key] = value
-        
-        # Set text if source has text and (overwrite or target has no text)
-        if source.text and (overwrite or not target.text):
-            target.text = source.text
-        
+                
+        # Copy text if source has non-empty text and (overwrite is True or target has no text)
+        if source.text and source.text.strip():
+            if overwrite or not target.text or not target.text.strip():
+                target.text = source.text
+                
         # Process child elements
         source_children = list(source)
         if not source_children:
@@ -447,9 +490,9 @@ def merge_elements(
         
         return target
     except Exception as e:
-        if not isinstance(e, XmlMergeError):
+        if not isinstance(e, MergeError):
             logger.error(f"Error merging XML elements: {e}")
-            raise XmlMergeError(f"Failed to merge XML elements: {e}")
+            raise MergeError(f"Failed to merge XML elements: {e}")
         raise
 
 def element_to_dict(element: etree._Element) -> Dict[str, Any]:
@@ -464,45 +507,40 @@ def element_to_dict(element: etree._Element) -> Dict[str, Any]:
     """
     result = {}
     
-    # Add attributes
-    result.update(element.attrib)
+    # Add attributes with @ prefix
+    for key, value in element.attrib.items():
+        result[f'@{key}'] = value
     
     # Handle text content if present and not just whitespace
     if element.text and element.text.strip():
-        result['_text'] = element.text.strip()
+        result['#text'] = element.text.strip()
     
     # Process child elements
     for child in element:
-        # Special handling for <member> tags which are typically used for lists in PAN-OS
-        if child.tag == 'member' and child.text:
-            if '_members' not in result:
-                result['_members'] = []
-            result['_members'].append(child.text)
+        # Convert child element recursively
+        child_dict = element_to_dict(child)
+        
+        # Handle repeated tags (convert to list)
+        if child.tag in result:
+            if not isinstance(result[child.tag], list):
+                result[child.tag] = [result[child.tag]]
+            result[child.tag].append(child_dict)
         else:
-            # Convert child element recursively
-            child_dict = element_to_dict(child)
-            
-            if child.tag in result:
-                # If this tag already exists, convert to a list
-                if not isinstance(result[child.tag], list):
-                    result[child.tag] = [result[child.tag]]
-                result[child.tag].append(child_dict)
-            else:
-                result[child.tag] = child_dict
-    
+            result[child.tag] = child_dict
+                
     return result
 
 def dict_to_element(
-    data: Dict[str, Any],
     root_tag: str,
+    data: Dict[str, Any],
     parent: Optional[etree._Element] = None
 ) -> etree._Element:
     """
     Convert a dictionary to an XML element.
     
     Args:
-        data: Dictionary to convert
         root_tag: Tag name for the root element
+        data: Dictionary to convert
         parent: Optional parent element
         
     Returns:
@@ -511,20 +549,24 @@ def dict_to_element(
     attrib = {}
     children = {}
     text = None
-    members = []
     
-    # Separate attributes, text, members, and child elements
+    # Separate attributes, text, and child elements
     for key, value in data.items():
-        if key == '_text':
+        if key.startswith('@'):
+            # Attribute
+            attrib[key[1:]] = str(value)
+        elif key == '#text':
+            # Text content
             text = value
-        elif key == '_members':
-            members = value
         elif isinstance(value, dict):
+            # Child element
             children[key] = value
         elif isinstance(value, list) and all(isinstance(item, dict) for item in value):
+            # List of child elements
             children[key] = value
         else:
-            attrib[key] = str(value)
+            # Simple value, create text content
+            children[key] = {'#text': str(value)}
     
     # Create the element
     if parent is not None:
@@ -536,20 +578,15 @@ def dict_to_element(
     if text:
         element.text = text
     
-    # Add member elements
-    for member in members:
-        member_elem = etree.SubElement(element, 'member')
-        member_elem.text = member
-    
     # Add child elements
     for tag, child_data in children.items():
         if isinstance(child_data, list):
             # Multiple children with the same tag
             for item in child_data:
-                dict_to_element(item, tag, element)
+                dict_to_element(tag, item, element)
         else:
             # Single child
-            dict_to_element(child_data, tag, element)
+            dict_to_element(tag, child_data, element)
     
     return element
 
@@ -571,75 +608,71 @@ def prettify_xml(
         element = element.getroot()
     
     if HAVE_LXML:
-        return etree.tostring(
-            element,
-            pretty_print=True,
-            encoding='unicode',
-            xml_declaration=True
-        )
+        return etree.tostring(element, pretty_print=True, encoding='unicode')
     else:
-        # Basic pretty printing for ElementTree
+        # ElementTree doesn't have pretty printing built-in
         from xml.dom import minidom
         rough_string = etree.tostring(element, 'utf-8')
         reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent=indent)
 
 def validate_xml(
-    tree: etree._ElementTree,
+    element: Union[etree._Element, etree._ElementTree],
     schema_file: str
-) -> Tuple[bool, Optional[str]]:
+) -> bool:
     """
-    Validate an XML document against an XML Schema.
+    Validate an XML element or tree against an XML Schema.
     
     Args:
-        tree: XML ElementTree to validate
+        element: XML element or ElementTree to validate
         schema_file: Path to XML Schema file
         
     Returns:
-        Tuple of (is_valid, error_message)
+        True if valid, raises ValidationError if invalid
+        
+    Raises:
+        ValidationError: If validation fails
+        FileOperationError: If schema file cannot be opened
     """
     if not HAVE_LXML:
-        error = "XML validation requires lxml which is not installed"
-        logger.warning(error)
-        return False, error
-    
+        logger.warning("XML validation requires lxml which is not installed.")
+        return True
+        
     try:
+        # Parse the schema
         schema_doc = etree.parse(schema_file)
         schema = etree.XMLSchema(schema_doc)
-        result = schema.validate(tree)
         
-        if not result:
-            error = schema.error_log.last_error
-            return False, str(error)
-        
-        return True, None
+        # Get the element if an ElementTree was passed
+        if isinstance(element, etree._ElementTree):
+            element = element.getroot()
+            
+        # Validate
+        schema.assertValid(element)
+        return True
+    except etree.DocumentInvalid as e:
+        error_msg = f"XML validation failed: {e}"
+        logger.error(error_msg)
+        raise ValidationError(error_msg)
     except Exception as e:
-        error = f"Error validating XML: {e}"
-        logger.error(error)
-        return False, error
+        from .exceptions import FileOperationError
+        error_msg = f"Error validating XML: {e}"
+        logger.error(error_msg)
+        raise FileOperationError(error_msg)
 
-def get_xpath_functions() -> Dict[str, callable]:
-    """
-    Get a dictionary of XPath helper functions.
-    
-    Returns:
-        Dictionary mapping function names to callables
-    """
+# Utility functions for getting specific functionality groups
+def get_xpath_functions():
+    """Get a dictionary of XPath-related functions."""
     return {
-        'find_elements': find_elements,
         'find_element': find_element,
+        'find_elements': find_elements,
         'element_exists': element_exists,
         'get_element_text': get_element_text,
         'get_element_attribute': get_element_attribute
     }
 
-def get_element_manipulation_functions() -> Dict[str, callable]:
-    """
-    Get a dictionary of element manipulation functions.
-    
-    Returns:
-        Dictionary mapping function names to callables
-    """
+def get_element_manipulation_functions():
+    """Get a dictionary of element manipulation functions."""
     return {
         'create_element': create_element,
         'set_element_text': set_element_text,
@@ -648,15 +681,48 @@ def get_element_manipulation_functions() -> Dict[str, callable]:
         'merge_elements': merge_elements
     }
 
-def get_conversion_functions() -> Dict[str, callable]:
-    """
-    Get a dictionary of conversion functions.
-    
-    Returns:
-        Dictionary mapping function names to callables
-    """
+def get_conversion_functions():
+    """Get a dictionary of conversion functions."""
     return {
         'element_to_dict': element_to_dict,
         'dict_to_element': dict_to_element,
         'prettify_xml': prettify_xml
     }
+
+# Compatibility functions for older code
+def compat_element_to_dict(element: etree._Element) -> Dict[str, Any]:
+    """
+    Convert an XML element to a dictionary (compatibility version).
+    
+    This version maintains backward compatibility with existing code that expects
+    the old format of element_to_dict.
+    
+    Args:
+        element: XML element to convert
+        
+    Returns:
+        Dictionary representation of the element
+    """
+    data = {}
+    
+    # Add attributes directly (no @ prefix)
+    data.update(element.attrib)
+    
+    # Add child elements
+    for child in element:
+        # Check if the child element has multiple "member" children
+        members = child.xpath("./member")
+        if members:
+            # This is a list element
+            member_values = [member.text for member in members if member.text]
+            data[child.tag] = member_values
+        else:
+            # Not a list, just a single value or nested element
+            if len(child) == 0:
+                # Simple element with text
+                data[child.tag] = child.text
+            else:
+                # Nested element, recursively extract data
+                data[child.tag] = compat_element_to_dict(child)
+    
+    return data

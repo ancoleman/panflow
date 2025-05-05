@@ -5,7 +5,7 @@ description = "A comprehensive set of utilities for working with PAN-OS XML conf
 authors = ["Anton Coleman <acoleman@paloaltonetworks.com>"]
 license = "MIT"
 readme = "README.md"
-repository = ""
+repository = "https://code.pan.run/gcs-automation/panflow"
 keywords = ["panos", "xml", "firewall", "panorama", "configuration"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: System :: Networking :: Firewalls",
 ]
 packages = [
-    { include = "panos_xml_utils" }
+    { include = "panflow" }
 ]
 
 [tool.poetry.dependencies]
@@ -71,4 +71,4 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 python_classes = "Test*"
-addopts = "--cov=panos_xml_utils --cov-report=term-missing"
+addopts = "--cov=panflow --cov-report=term-missing"

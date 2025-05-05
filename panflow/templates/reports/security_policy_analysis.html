@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Security Policy Analysis Report{% endblock %}
+
+{% block report_title %}Security Policy Analysis Report{% endblock %}
+
+{% block report_description %}
+Generated on {{ analysis.summary.generation_time }} for 
+{{ analysis.summary.device_type }}/{{ analysis.summary.context_type }} 
+({{ analysis.summary.policy_type }})
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="summary-item"><strong>Total Policies:</strong> {{ analysis.summary.total_policies }}</div>
+                <div class="summary-item"><strong>Enabled:</strong> {{ analysis.summary.enabled_count }}</div>
+                <div class="summary-item"><strong>Disabled:</strong> {{ analysis.summary.disabled_count }}</div>
+                <div class="summary-item"><strong>Any Source:</strong> {{ analysis.summary.any_source_count }}</div>
+                <div class="summary-item"><strong>Any Destination:</strong> {{ analysis.summary.any_destination_count }}</div>
+                <div class="summary-item"><strong>Any Application:</strong> {{ analysis.summary.any_application_count }}</div>
+                <div class="summary-item"><strong>Any Service:</strong> {{ analysis.summary.any_service_count }}</div>
+                <div class="summary-item"><strong>With Profile Group:</strong> {{ analysis.summary.with_profile_group_count }}</div>
+                <div class="summary-item"><strong>Without Profile Group:</strong> {{ analysis.summary.without_profile_group_count }}</div>
+                <div class="summary-item"><strong>With Log Forwarding:</strong> {{ analysis.summary.with_log_forwarding_count }}</div>
+                <div class="summary-item"><strong>Without Log Forwarding:</strong> {{ analysis.summary.without_log_forwarding_count }}</div>
+            </div>
+        </div>
+    </div>
+
+    {% if include_hit_counts and analysis.statistics.hit_counts %}
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Hit Count Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="summary-item"><strong>Min:</strong> {{ analysis.statistics.hit_counts.min }}</div>
+                <div class="summary-item"><strong>Max:</strong> {{ analysis.statistics.hit_counts.max }}</div>
+                <div class="summary-item"><strong>Average:</strong> {{ analysis.statistics.hit_counts.avg|round(2) }}</div>
+                <div class="summary-item"><strong>Median:</strong> {{ analysis.statistics.hit_counts.median }}</div>
+                <div class="summary-item"><strong>Total:</strong> {{ analysis.statistics.hit_counts.total }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Action Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="actionChart" 
+                            data-type="pie" 
+                            data-labels='{{ analysis.statistics.actions.keys()|list|json_encode }}' 
+                            data-values='{{ analysis.statistics.actions.values()|list|json_encode }}'>
+                    </canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0">Policy Details</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Action</th>
+                                <th>Status</th>
+                                <th>Source</th>
+                                <th>Destination</th>
+                                <th>Service</th>
+                                <th>Application</th>
+                                <th>Security Profiles</th>
+                                <th>Logging</th>
+                                {% if include_hit_counts %}
+                                <th>Hit Count</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for name, policy_info in analysis.policies.items() %}
+                            <tr class="policy-row {{ 'policy-disabled' if policy_info.disabled else 'policy-enabled' }}">
+                                <td>{{ name }}</td>
+                                <td>{{ policy_info.action }}</td>
+                                <td>{{ "Disabled" if policy_info.disabled else "Enabled" }}</td>
+                                <td>{{ policy_info.source_count }} {{ "(any)" if policy_info.has_any_source else "" }}</td>
+                                <td>{{ policy_info.destination_count }} {{ "(any)" if policy_info.has_any_destination else "" }}</td>
+                                <td>{{ policy_info.service_count }} {{ "(any)" if policy_info.has_any_service else "" }}</td>
+                                <td>{{ policy_info.application_count }} {{ "(any)" if policy_info.has_any_application else "" }}</td>
+                                <td>{{ "Yes" if policy_info.has_profile_group else "No" }}</td>
+                                <td>{{ "Yes" if policy_info.has_log_forwarding else "No" }}</td>
+                                {% if include_hit_counts %}
+                                <td>{{ policy_info.get('hit_count', 'N/A') }}</td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

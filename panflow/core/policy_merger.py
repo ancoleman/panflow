@@ -13,6 +13,7 @@ import copy
 from .xpath_resolver import get_policy_xpath
 from .config_loader import xpath_search
 from .xml_utils import clone_element, merge_elements
+from .conflict_resolver import ConflictResolver, ConflictStrategy
 
 # Initialize logger
 logger = logging.getLogger("panflow")
@@ -24,6 +25,72 @@ class PolicyMerger:
     Provides methods for copying policies from one configuration to another,
     with options to handle conflicts and dependencies.
     """
+    
+    # Dictionary defining version-specific attributes for each policy type
+    # Format: policy_type -> {attribute -> {version: required}}
+    VERSION_SPECIFIC_ATTRIBUTES = {
+        "security": {  # Security rules
+            "source": {"10.1": True, "10.2": True, "11.2": True},
+            "destination": {"10.1": True, "10.2": True, "11.2": True},
+            "service": {"10.1": True, "10.2": True, "11.2": True},
+            "application": {"10.1": True, "10.2": True, "11.2": True},
+            "action": {"10.1": True, "10.2": True, "11.2": True},
+            "source-user": {"10.1": False, "10.2": False, "11.2": False},
+            "category": {"10.1": False, "10.2": False, "11.2": False},
+            "profile-setting": {"10.1": False, "10.2": False, "11.2": False},
+            "tag": {"10.1": False, "10.2": False, "11.2": False},
+            "negate-source": {"10.1": False, "10.2": False, "11.2": False},
+            "negate-destination": {"10.1": False, "10.2": False, "11.2": False},
+            "source-hip": {"10.1": False, "10.2": False, "11.2": False},
+            "destination-hip": {"10.1": False, "10.2": False, "11.2": False},
+            "source-address-translation": {"10.1": False, "10.2": False, "11.2": False},
+            "destination-address-translation": {"10.1": False, "10.2": False, "11.2": False},
+            "schedule": {"10.1": False, "10.2": False, "11.2": False},
+            "disable-server-response-inspection": {"10.2": False, "11.2": False},  # Added in 10.2+
+            "ssl-decrypt-mirror": {"11.2": False},  # Added in 11.0+
+            "url-category-match": {"11.2": False},  # Added in 11.0+
+            "rule-type": {"11.2": False},  # Added in 11.0+
+        },
+        "nat": {  # NAT rules
+            "source": {"10.1": True, "10.2": True, "11.2": True},
+            "destination": {"10.1": True, "10.2": True, "11.2": True},
+            "service": {"10.1": True, "10.2": True, "11.2": True},
+            "to": {"10.1": True, "10.2": True, "11.2": True},
+            "source-translation": {"10.1": False, "10.2": False, "11.2": False},
+            "destination-translation": {"10.1": False, "10.2": False, "11.2": False},
+            "tag": {"10.1": False, "10.2": False, "11.2": False},
+            "disabled": {"10.1": False, "10.2": False, "11.2": False},
+            "nat-type": {"10.1": False, "10.2": False, "11.2": False},
+            "fallback": {"10.2": True, "11.2": True},  # Changed to required in 10.2+
+            "source-address-translation": {"10.1": False, "10.2": False, "11.2": False},
+            "destination-address-translation": {"10.1": False, "10.2": False, "11.2": False},
+        },
+        "pbf": {  # Policy-based forwarding rules
+            "source": {"10.1": True, "10.2": True, "11.2": True},
+            "destination": {"10.1": True, "10.2": True, "11.2": True},
+            "service": {"10.1": True, "10.2": True, "11.2": True},
+            "forwarding": {"10.1": True, "10.2": True, "11.2": True},
+            "tag": {"10.1": False, "10.2": False, "11.2": False},
+            "disabled": {"10.1": False, "10.2": False, "11.2": False},
+            "enforce-symmetric-return": {"10.1": False, "10.2": False, "11.2": False},
+            "symmetric-return-addresses": {"10.2": False, "11.2": False},  # Added in 10.2+
+        },
+        "decryption": {  # SSL Decryption rules
+            "source": {"10.1": True, "10.2": True, "11.2": True},
+            "destination": {"10.1": True, "10.2": True, "11.2": True},
+            "service": {"10.1": True, "10.2": True, "11.2": True},
+            "category": {"10.1": False, "10.2": False, "11.2": False},
+            "tag": {"10.1": False, "10.2": False, "11.2": False},
+            "disabled": {"10.1": False, "10.2": False, "11.2": False},
+            "type": {"10.1": True, "10.2": True, "11.2": True},
+            "decryption-profile": {"10.1": False, "10.2": False, "11.2": False},
+            "ssl-certificate": {"10.1": False, "10.2": False, "11.2": False},
+            "ssl-forward-proxy": {"10.1": False, "10.2": False, "11.2": False},
+            "ssl-inbound-inspection": {"10.1": False, "10.2": False, "11.2": False},
+            "ssl-protocol-version-min": {"10.2": False, "11.2": False},  # Added in 10.2+
+            "tls13-action": {"11.2": False},  # Added in 11.0+
+        },
+    }
     
     def __init__(
         self,
@@ -58,6 +125,9 @@ class PolicyMerger:
         self.skipped_policies = []
         self.copied_objects = []
         
+        # Initialize conflict resolver
+        self.conflict_resolver = ConflictResolver(ConflictStrategy.SKIP)
+        
         # Object references to track
         self.object_references = {
             "address": set(),
@@ -66,6 +136,16 @@ class PolicyMerger:
             "service_group": set(),
             "application_group": set(),
             "security_profile_group": set(),
+            "virus": set(),              # Antivirus profiles
+            "spyware": set(),            # Anti-spyware profiles
+            "vulnerability": set(),      # Vulnerability profiles
+            "url-filtering": set(),      # URL filtering profiles
+            "file-blocking": set(),      # File blocking profiles
+            "wildfire-analysis": set(),  # WildFire Analysis profiles
+            "dns-security": set(),       # DNS Security profiles
+            "data-filtering": set(),     # Data filtering profiles
+            "schedule": set(),           # Schedule objects
+            "custom-url-category": set(),# Custom URL categories
             "tag": set()
         }
         
@@ -81,6 +161,7 @@ class PolicyMerger:
         copy_references: bool = True,
         position: str = "bottom",
         ref_policy_name: Optional[str] = None,
+        conflict_strategy: Optional[ConflictStrategy] = None,
         **kwargs
     ) -> bool:
         """
@@ -91,10 +172,11 @@ class PolicyMerger:
             policy_name: Name of the policy to copy
             source_context_type: Type of source context (shared, device_group, vsys)
             target_context_type: Type of target context (shared, device_group, vsys)
-            skip_if_exists: Skip if policy already exists in target
+            skip_if_exists: Skip if policy already exists in target (deprecated, use conflict_strategy instead)
             copy_references: Copy object references (address objects, etc.)
             position: Where to place the policy ("top", "bottom", "before", "after")
             ref_policy_name: Reference policy name for "before" and "after" positions
+            conflict_strategy: Strategy to use when resolving conflicts with existing policies
             **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
             
         Returns:
@@ -143,15 +225,37 @@ class PolicyMerger:
         
         target_elements = xpath_search(self.target_tree, target_xpath)
         if target_elements:
-            if skip_if_exists:
-                logger.warning(f"Policy '{policy_name}' already exists in target, skipping")
-                self.skipped_policies.append((policy_name, "Already exists in target"))
+            # Handle conflict using conflict resolution strategy
+            if conflict_strategy is None:
+                # Use skip_if_exists for backward compatibility
+                if skip_if_exists:
+                    conflict_strategy = ConflictStrategy.SKIP
+                else:
+                    conflict_strategy = ConflictStrategy.OVERWRITE
+            
+            # Resolve the conflict
+            success, resolved_policy, message = self.conflict_resolver.resolve_conflict(
+                source_policy, target_elements[0], policy_type, policy_name, conflict_strategy, **kwargs
+            )
+            
+            if not success:
+                logger.warning(f"Policy '{policy_name}' conflict resolution: {message}")
+                self.skipped_policies.append((policy_name, message))
                 return False
-            else:
-                # Remove existing policy
-                parent = target_elements[0].getparent()
+            
+            # Remove the existing policy
+            parent = target_elements[0].getparent()
+            if parent is not None:
+                logger.info(f"Removing existing policy '{policy_name}' from target")
                 parent.remove(target_elements[0])
-                logger.info(f"Removed existing policy '{policy_name}' from target")
+                
+                # If the conflict strategy provided a new policy, use that
+                if resolved_policy is not None:
+                    source_policy = resolved_policy
+            else:
+                logger.error(f"Cannot remove existing policy '{policy_name}' - parent element not found")
+                self.skipped_policies.append((policy_name, "Cannot remove existing policy"))
+                return False
         
         # Get the target parent element
         target_parent_xpath = get_policy_xpath(
@@ -175,6 +279,11 @@ class PolicyMerger:
         try:
             logger.debug(f"Cloning policy element: {policy_name}")
             new_policy = clone_element(source_policy)
+            
+            # Handle version-specific attribute differences if source and target versions differ
+            if self.source_version != self.target_version:
+                logger.debug(f"Handling version-specific attributes for {policy_type} '{policy_name}'")
+                new_policy = self._handle_version_specific_attributes(new_policy, policy_type)
         except Exception as e:
             logger.error(f"Failed to clone policy '{policy_name}': {e}", exc_info=True)
             self.skipped_policies.append((policy_name, f"Cloning failed: {str(e)}"))
@@ -221,6 +330,7 @@ class PolicyMerger:
         filter_criteria: Optional[Dict[str, Any]] = None,
         skip_if_exists: bool = True,
         copy_references: bool = True,
+        conflict_strategy: Optional[ConflictStrategy] = None,
         **kwargs
     ) -> Tuple[int, int]:
         """
@@ -232,8 +342,9 @@ class PolicyMerger:
             target_context_type: Type of target context (shared, device_group, vsys)
             policy_names: List of policy names to copy (if None, use filter_criteria)
             filter_criteria: Dictionary of criteria to select policies
-            skip_if_exists: Skip if policy already exists in target
+            skip_if_exists: Skip if policy already exists in target (deprecated, use conflict_strategy instead)
             copy_references: Copy object references (address objects, etc.)
+            conflict_strategy: Strategy to use when resolving conflicts with existing policies
             **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
             
         Returns:
@@ -313,6 +424,7 @@ class PolicyMerger:
                 skip_if_exists,
                 copy_references,
                 position="bottom",  # Default to adding at bottom
+                conflict_strategy=conflict_strategy,
                 **kwargs
             )
             
@@ -329,6 +441,7 @@ class PolicyMerger:
         target_context_type: str,
         skip_if_exists: bool = True,
         copy_references: bool = True,
+        conflict_strategy: Optional[ConflictStrategy] = None,
         **kwargs
     ) -> Dict[str, Tuple[int, int]]:
         """
@@ -338,8 +451,9 @@ class PolicyMerger:
             policy_types: List of policy types to merge
             source_context_type: Type of source context (shared, device_group, vsys)
             target_context_type: Type of target context (shared, device_group, vsys)
-            skip_if_exists: Skip if policy already exists in target
+            skip_if_exists: Skip if policy already exists in target (deprecated, use conflict_strategy instead)
             copy_references: Copy object references (address objects, etc.)
+            conflict_strategy: Strategy to use when resolving conflicts with existing policies
             **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
             
         Returns:
@@ -360,6 +474,7 @@ class PolicyMerger:
                 None,  # No filter criteria
                 skip_if_exists,
                 copy_references,
+                conflict_strategy=conflict_strategy,
                 **kwargs
             )
             
@@ -561,6 +676,36 @@ class PolicyMerger:
                     self.object_references["security_profile_group"].add(profile.text)
                     logger.debug(f"Added profile group reference: {profile.text}")
                     
+            # Collect individual security profiles
+            profile_setting = policy.find('./profile-setting')
+            if profile_setting is not None:
+                profiles_elem = profile_setting.find('./profiles')
+                if profiles_elem is not None:
+                    # Check for each security profile type
+                    security_profile_types = [
+                        "virus", "spyware", "vulnerability", "url-filtering", 
+                        "file-blocking", "wildfire-analysis", "dns-security", "data-filtering"
+                    ]
+                    
+                    for profile_type in security_profile_types:
+                        profile_elem = profiles_elem.find(f'./{profile_type}')
+                        if profile_elem is not None and profile_elem.text:
+                            self.object_references[profile_type].add(profile_elem.text)
+                            logger.debug(f"Added {profile_type} profile reference: {profile_elem.text}")
+                            
+            # Collect schedule reference
+            schedule_elem = policy.find('./schedule')
+            if schedule_elem is not None and schedule_elem.text:
+                schedule_name = schedule_elem.text
+                self.object_references["schedule"].add(schedule_name)
+                logger.debug(f"Added schedule reference: {schedule_name}")
+            
+            # Collect URL category references
+            for category in policy.xpath('./category/member'):
+                if category.text:
+                    self.object_references["custom-url-category"].add(category.text)
+                    logger.debug(f"Added URL category reference: {category.text}")
+                    
             # Collect tags
             for tag in policy.xpath('./tag/member'):
                 if tag.text:
@@ -594,6 +739,16 @@ class PolicyMerger:
             "service_group": "/service-group/entry[@name='{0}']",
             "application_group": "/application-group/entry[@name='{0}']",
             "security_profile_group": "/profile-group/entry[@name='{0}']",
+            "virus": "/profiles/virus/entry[@name='{0}']",
+            "spyware": "/profiles/spyware/entry[@name='{0}']",
+            "vulnerability": "/profiles/vulnerability/entry[@name='{0}']",
+            "url-filtering": "/profiles/url-filtering/entry[@name='{0}']",
+            "file-blocking": "/profiles/file-blocking/entry[@name='{0}']",
+            "wildfire-analysis": "/profiles/wildfire-analysis/entry[@name='{0}']",
+            "dns-security": "/profiles/dns-security/entry[@name='{0}']",
+            "data-filtering": "/profiles/data-filtering/entry[@name='{0}']",
+            "schedule": "/schedule/entry[@name='{0}']",
+            "custom-url-category": "/profiles/custom-url-category/entry[@name='{0}']",
             "tag": "/tag/entry[@name='{0}']"
         }
         
@@ -721,3 +876,156 @@ class PolicyMerger:
             # Restore any references we haven't processed yet
             for k, v in old_refs.items():
                 self.object_references[k].update(v)
+                
+    def _handle_version_specific_attributes(
+        self,
+        policy_element: etree._Element,
+        policy_type: str
+    ) -> etree._Element:
+        """
+        Handle version-specific attributes for policies being copied between different PAN-OS versions.
+        
+        This method checks for attributes that may be available in the source version but not in
+        the target version, or vice versa. It modifies the policy as needed to ensure compatibility
+        with the target version.
+        
+        Args:
+            policy_element: The XML element of the policy to process
+            policy_type: The type of policy (security, nat, etc.)
+            
+        Returns:
+            etree._Element: The modified policy element
+        """
+        policy_name = policy_element.get("name", "unknown")
+        logger.debug(f"Handling version-specific attributes for {policy_type} policy '{policy_name}'")
+        
+        # Normalize policy type to match keys in VERSION_SPECIFIC_ATTRIBUTES
+        if policy_type == "security_pre_rules" or policy_type == "security_post_rules" or policy_type == "security_rules":
+            policy_type_normalized = "security"
+        elif policy_type == "nat_pre_rules" or policy_type == "nat_post_rules" or policy_type == "nat_rules":
+            policy_type_normalized = "nat"
+        elif policy_type == "pbf_pre_rules" or policy_type == "pbf_post_rules" or policy_type == "pbf_rules":
+            policy_type_normalized = "pbf"
+        elif policy_type == "decryption_pre_rules" or policy_type == "decryption_post_rules" or policy_type == "decryption_rules":
+            policy_type_normalized = "decryption"
+        else:
+            logger.warning(f"Unknown policy type '{policy_type}', applying default handling")
+            policy_type_normalized = "security"  # Default to security rules
+        
+        # If we have version-specific definitions for this policy type
+        if policy_type_normalized in self.VERSION_SPECIFIC_ATTRIBUTES:
+            attributes = self.VERSION_SPECIFIC_ATTRIBUTES[policy_type_normalized]
+            
+            # When copying from newer to older version, remove attributes not supported in target version
+            if self.source_version > self.target_version:
+                # Go through all attributes defined for this policy type
+                for attr_name, attr_versions in attributes.items():
+                    # Check if attribute is supported in newer (source) but not in older (target) version
+                    if (self.source_version in attr_versions and attr_versions[self.source_version] is not None and
+                        (self.target_version not in attr_versions or attr_versions[self.target_version] is None)):
+                        
+                        # Find all elements with this attribute name
+                        attr_elements = policy_element.findall(f'./{attr_name}')
+                        for elem in attr_elements:
+                            if elem is not None and elem.getparent() is not None:
+                                logger.debug(f"Removing newer attribute '{attr_name}' from {policy_type} '{policy_name}'")
+                                elem.getparent().remove(elem)
+            
+            # Handle specific version transitions
+            if self.source_version == "11.2" and self.target_version == "10.2":
+                self._handle_11_2_to_10_2_changes(policy_element, policy_type_normalized)
+            elif self.source_version == "11.2" and self.target_version == "10.1":
+                self._handle_11_2_to_10_1_changes(policy_element, policy_type_normalized)
+            elif self.source_version == "10.2" and self.target_version == "10.1":
+                self._handle_10_2_to_10_1_changes(policy_element, policy_type_normalized)
+        
+        return policy_element
+    
+    def _handle_11_2_to_10_2_changes(self, policy_element: etree._Element, policy_type: str) -> None:
+        """Handle specific changes when going from PAN-OS 11.2 to 10.2."""
+        policy_name = policy_element.get("name", "unknown")
+        
+        if policy_type == "security":
+            # Remove elements specific to 11.x
+            for element_name in ["ssl-decrypt-mirror", "url-category-match", "rule-type"]:
+                elem = policy_element.find(f'./{element_name}')
+                if elem is not None and elem.getparent() is not None:
+                    logger.debug(f"Removing 11.x element '{element_name}' from security rule '{policy_name}'")
+                    elem.getparent().remove(elem)
+        
+        elif policy_type == "decryption":
+            # Remove elements specific to 11.x
+            elem = policy_element.find('./tls13-action')
+            if elem is not None and elem.getparent() is not None:
+                logger.debug(f"Removing 11.x element 'tls13-action' from decryption rule '{policy_name}'")
+                elem.getparent().remove(elem)
+    
+    def _handle_11_2_to_10_1_changes(self, policy_element: etree._Element, policy_type: str) -> None:
+        """Handle specific changes when going from PAN-OS 11.2 to 10.1."""
+        policy_name = policy_element.get("name", "unknown")
+        
+        # First apply 11.2 to 10.2 changes
+        self._handle_11_2_to_10_2_changes(policy_element, policy_type)
+        
+        # Then apply additional changes specific to 10.1
+        if policy_type == "security":
+            # Remove elements specific to 10.2+
+            elem = policy_element.find('./disable-server-response-inspection')
+            if elem is not None and elem.getparent() is not None:
+                logger.debug(f"Removing 10.2+ element 'disable-server-response-inspection' from security rule '{policy_name}'")
+                elem.getparent().remove(elem)
+        
+        elif policy_type == "nat":
+            # Handle fallback which became required in 10.2+
+            fallback_elem = policy_element.find('./fallback')
+            if fallback_elem is None:
+                logger.debug(f"Adding required 'fallback' element for NAT rule '{policy_name}' in 10.1")
+                fallback = etree.SubElement(policy_element, "fallback")
+                fallback.text = "none"
+                
+        elif policy_type == "pbf":
+            # Remove elements specific to 10.2+
+            elem = policy_element.find('./symmetric-return-addresses')
+            if elem is not None and elem.getparent() is not None:
+                logger.debug(f"Removing 10.2+ element 'symmetric-return-addresses' from PBF rule '{policy_name}'")
+                elem.getparent().remove(elem)
+                
+        elif policy_type == "decryption":
+            # Remove elements specific to 10.2+
+            elem = policy_element.find('./ssl-protocol-version-min')
+            if elem is not None and elem.getparent() is not None:
+                logger.debug(f"Removing 10.2+ element 'ssl-protocol-version-min' from decryption rule '{policy_name}'")
+                elem.getparent().remove(elem)
+    
+    def _handle_10_2_to_10_1_changes(self, policy_element: etree._Element, policy_type: str) -> None:
+        """Handle specific changes when going from PAN-OS 10.2 to 10.1."""
+        policy_name = policy_element.get("name", "unknown")
+        
+        if policy_type == "security":
+            # Remove elements specific to 10.2+
+            elem = policy_element.find('./disable-server-response-inspection')
+            if elem is not None and elem.getparent() is not None:
+                logger.debug(f"Removing 10.2+ element 'disable-server-response-inspection' from security rule '{policy_name}'")
+                elem.getparent().remove(elem)
+        
+        elif policy_type == "nat":
+            # Handle fallback which became required in 10.2+
+            fallback_elem = policy_element.find('./fallback')
+            if fallback_elem is None:
+                logger.debug(f"Adding required 'fallback' element for NAT rule '{policy_name}' in 10.1")
+                fallback = etree.SubElement(policy_element, "fallback")
+                fallback.text = "none"
+                
+        elif policy_type == "pbf":
+            # Remove elements specific to 10.2+
+            elem = policy_element.find('./symmetric-return-addresses')
+            if elem is not None and elem.getparent() is not None:
+                logger.debug(f"Removing 10.2+ element 'symmetric-return-addresses' from PBF rule '{policy_name}'")
+                elem.getparent().remove(elem)
+                
+        elif policy_type == "decryption":
+            # Remove elements specific to 10.2+
+            elem = policy_element.find('./ssl-protocol-version-min')
+            if elem is not None and elem.getparent() is not None:
+                logger.debug(f"Removing 10.2+ element 'ssl-protocol-version-min' from decryption rule '{policy_name}'")
+                elem.getparent().remove(elem)
