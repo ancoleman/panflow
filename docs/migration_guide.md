@@ -1,6 +1,6 @@
-# Migration Guide: PAN-OS XML Utilities
+# Migration Guide: PANFlow
 
-This guide will help you transition from the old monolithic `PanOsXmlUtils` class to the new modular, functional design of the PAN-OS XML Utilities.
+This guide will help you transition from the old monolithic `PanOsXmlUtils` class to the new modular, functional design of the PANFlow tool.
 
 ## Key Changes
 
@@ -16,7 +16,7 @@ Here's a quick reference for migrating common patterns:
 
 | Old (Monolithic) | New (Modular) |
 |------------------|---------------|
-| `utils = PanOsXmlUtils("config.xml", "firewall")` | `config = PanOsXmlConfig("config.xml", device_type="firewall")` |
+| `utils = PanOsXmlUtils("config.xml", "firewall")` | `config = PANFlowConfig("config.xml", device_type="firewall")` |
 | `objects = utils.get_objects("address", "vsys", vsys="vsys1")` | `objects = config.get_objects("address", "vsys", vsys="vsys1")` |
 | `utils.add_object("address", "vsys", "web-server", {...})` | `config.add_object("address", "web-server", {...}, "vsys")` |
 | `utils.save_config("output.xml")` | `config.save("output.xml")` |
@@ -35,13 +35,13 @@ utils = PanOsXmlUtils("config.xml", "firewall")
 
 **New:**
 ```python
-from panos_xml_utils import PanOsXmlConfig
+from panflow import PANFlowConfig
 
 # Initialize the configuration
-config = PanOsXmlConfig(config_file="config.xml", device_type="firewall")
+config = PANFlowConfig(config_file="config.xml", device_type="firewall")
 
 # With version specification (optional)
-config = PanOsXmlConfig(config_file="config.xml", device_type="firewall", version="11.0")
+config = PANFlowConfig(config_file="config.xml", device_type="firewall", version="11.0")
 ```
 
 ### 2. Getting Objects
@@ -151,7 +151,7 @@ python cli.py object list --config firewall.xml --type address
 
 **New:**
 ```bash
-panos-xml-utils object list --config firewall.xml --type address
+panflow object list --config firewall.xml --type address
 ```
 
 The parameter structure remains mostly the same, with the addition of a new `--version` parameter to explicitly specify a PAN-OS version.
@@ -162,9 +162,9 @@ If you need more control, you can use the low-level functions directly:
 
 ```python
 from lxml import etree
-from panos_xml_utils.core.config_loader import load_config_from_file
-from panos_xml_utils.core.xpath_resolver import get_object_xpath
-from panos_xml_utils.modules.objects import get_objects
+from panflow.core.config_loader import load_config_from_file
+from panflow.core.xpath_resolver import get_object_xpath
+from panflow.modules.objects import get_objects
 
 # Load a configuration
 tree, version = load_config_from_file("config.xml")
@@ -181,19 +181,19 @@ objects = get_objects(tree, "address", "firewall", "vsys", version, vsys="vsys1"
 The new library makes it easy to work with different PAN-OS versions:
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
-from panos_xml_utils.core.xpath_resolver import get_all_versions
+from panflow import PANFlowConfig
+from panflow.core.xpath_resolver import get_all_versions
 
 # Get all supported versions
 versions = get_all_versions()
 print(f"Supported versions: {versions}")
 
 # Explicitly specify version
-config_101 = PanOsXmlConfig("firewall_10.1.xml", version="10.1")
-config_112 = PanOsXmlConfig("firewall_11.2.xml", version="11.2")
+config_101 = PANFlowConfig("firewall_10.1.xml", version="10.1")
+config_112 = PANFlowConfig("firewall_11.2.xml", version="11.2")
 
 # Let the library auto-detect version
-config_auto = PanOsXmlConfig("firewall.xml")
+config_auto = PANFlowConfig("firewall.xml")
 print(f"Detected version: {config_auto.version}")
 ```
 
@@ -207,9 +207,9 @@ print(f"Detected version: {config_auto.version}")
 
 4. **Configuration Context**: Be explicit about context to avoid confusion (shared vs. device_group vs. vsys).
 
-## When to Use PanOsXmlConfig vs. Direct Functions
+## When to Use PANFlowConfig vs. Direct Functions
 
-- **Use PanOsXmlConfig**: For most cases, especially when working with a single configuration file and performing multiple operations.
+- **Use PANFlowConfig**: For most cases, especially when working with a single configuration file and performing multiple operations.
 
 - **Use Direct Functions**: When you need more control, are processing multiple files, or want to minimize dependencies.
 

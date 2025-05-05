@@ -1,6 +1,6 @@
 # Object Merge Documentation
 
-This documentation covers the object merge functionality added to the PAN-OS XML Utilities package, allowing you to copy and merge objects between different configurations, device groups, or virtual systems.
+This documentation covers the object merge functionality in the PANFlow tool, allowing you to copy and merge objects between different configurations, device groups, or virtual systems.
 
 ## Table of Contents
 
@@ -8,7 +8,7 @@ This documentation covers the object merge functionality added to the PAN-OS XML
 - [Key Features](#key-features)
 - [Using Object Merger](#using-object-merger)
   - [ObjectMerger Class](#objectmerger-class)
-  - [PanOsXmlConfig Helper Methods](#panosxmlconfig-helper-methods)
+  - [PANFlowConfig Helper Methods](#panflowconfig-helper-methods)
   - [Command-Line Interface](#command-line-interface)
 - [Use Cases](#use-cases)
 - [Code Examples](#code-examples)
@@ -99,16 +99,16 @@ results = merger.merge_all_objects(
 )
 ```
 
-### PanOsXmlConfig Helper Methods
+### PANFlowConfig Helper Methods
 
-The `PanOsXmlConfig` class provides a simplified interface:
+The `PANFlowConfig` class provides a simplified interface:
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
+from panflow import PANFlowConfig
 
 # Load source and target configurations
-source_config = PanOsXmlConfig("panorama.xml")
-target_config = PanOsXmlConfig("panorama_target.xml")
+source_config = PANFlowConfig("panorama.xml")
+target_config = PANFlowConfig("panorama_target.xml")
 
 # Merge an object
 success = source_config.merge_object(
@@ -259,11 +259,11 @@ python cli.py merge objects \
 ### Example 1: Merge a Single Address Object
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
+from panflow import PANFlowConfig
 
 # Load configurations
-source_config = PanOsXmlConfig("panorama.xml")
-target_config = PanOsXmlConfig("panorama.xml")  # Same file for in-place update
+source_config = PANFlowConfig("panorama.xml")
+target_config = PANFlowConfig("panorama.xml")  # Same file for in-place update
 
 # Merge an address object from shared to a device group
 success = source_config.merge_object(
@@ -287,12 +287,12 @@ else:
 ### Example 2: Merge an Address Group with All Members
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
-from panos_xml_utils.core.object_merger import ObjectMerger
+from panflow import PANFlowConfig
+from panflow.core.object_merger import ObjectMerger
 
 # Load configurations
-source_config = PanOsXmlConfig("panorama.xml")
-target_config = PanOsXmlConfig("panorama.xml")
+source_config = PANFlowConfig("panorama.xml")
+target_config = PANFlowConfig("panorama.xml")
 
 # Create merger
 merger = ObjectMerger(
@@ -328,12 +328,12 @@ if success:
 ### Example 3: Merge Objects Matching Criteria
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
-from panos_xml_utils.core.object_merger import ObjectMerger
+from panflow import PANFlowConfig
+from panflow.core.object_merger import ObjectMerger
 
 # Load configurations
-source_config = PanOsXmlConfig("panorama.xml")
-target_config = PanOsXmlConfig("panorama_target.xml")
+source_config = PANFlowConfig("panorama.xml")
+target_config = PANFlowConfig("panorama_target.xml")
 
 # Create merger
 merger = ObjectMerger(
@@ -371,12 +371,12 @@ if copied > 0:
 ### Example 4: Merge All Object Types
 
 ```python
-from panos_xml_utils import PanOsXmlConfig
-from panos_xml_utils.core.object_merger import ObjectMerger
+from panflow import PANFlowConfig
+from panflow.core.object_merger import ObjectMerger
 
 # Load configurations
-source_config = PanOsXmlConfig("panorama.xml")
-target_config = PanOsXmlConfig("panorama_target.xml")
+source_config = PANFlowConfig("panorama.xml")
+target_config = PANFlowConfig("panorama_target.xml")
 
 # Create merger
 merger = ObjectMerger(

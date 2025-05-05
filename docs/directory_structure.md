@@ -1,12 +1,12 @@
-# PAN-OS XML Utilities Project Structure
+# PANFlow Project Structure
 
-This document outlines the revised directory structure and organization of the PAN-OS XML Utilities project, including the newly added features.
+This document outlines the revised directory structure and organization of the PANFlow project, including the newly added features.
 
 ## Directory Structure
 
 ```
-panos_xml_utils/
-├── __init__.py              # Package exports and PanOsXmlConfig class
+panflow/
+├── __init__.py              # Package exports and PANFlowConfig class
 ├── core/
 │   ├── __init__.py          # Core module exports
 │   ├── config_loader.py     # XML configuration loading functions
@@ -78,7 +78,7 @@ The `bulk_operations.py` module provides a framework for performing operations o
 
 Example usage in CLI:
 ```
-python cli.py policy bulk-update --config CONFIG_FILE --type POLICY_TYPE --criteria CRITERIA_FILE --operations OPERATIONS_FILE --output OUTPUT_FILE
+panflow policy bulk-update --config CONFIG_FILE --type POLICY_TYPE --criteria CRITERIA_FILE --operations OPERATIONS_FILE --output OUTPUT_FILE
 ```
 
 ### Deduplication Engine
@@ -91,12 +91,12 @@ The `deduplication.py` module provides tools for identifying and merging duplica
 
 Example usage in CLI:
 ```
-python cli.py deduplicate --config CONFIG_FILE --type OBJECT_TYPE --output OUTPUT_FILE [--dry-run] [--strategy STRATEGY]
+panflow deduplicate --config CONFIG_FILE --type OBJECT_TYPE --output OUTPUT_FILE [--dry-run] [--strategy STRATEGY]
 ```
 
 ## CLI Command Groups
 
-The command-line interface (`cli.py`) organizes functionality into logical command groups:
+The command-line interface organizes functionality into logical command groups:
 
 1. **Object commands**: List, add, update, delete, and filter objects
 2. **Policy commands**: List, add, update, delete, filter, and bulk-update policies
@@ -107,7 +107,7 @@ The command-line interface (`cli.py`) organizes functionality into logical comma
 
 ## Class Overview
 
-### PanOsXmlConfig
+### PANFlowConfig
 
 The main class that provides an object-oriented interface to the functional core. It handles:
 

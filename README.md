@@ -52,10 +52,10 @@ pip install panflow
 ## Basic Usage
 
 ```python
-from panflow import PanOsXmlConfig
+from panflow import PANFlowConfig
 
 # Load a configuration file
-config = PanOsXmlConfig("firewall.xml")
+config = PANFlowConfig(config_file="firewall.xml")
 
 # Get all address objects in vsys1
 address_objects = config.get_objects("address", "vsys", vsys="vsys1")
@@ -267,7 +267,7 @@ The library automatically handles differences between PAN-OS versions:
 
 ```python
 # Load configuration with explicit version
-config = PanOsXmlConfig("firewall.xml", version="10.1")
+config = PANFlowConfig("firewall.xml", version="10.1")
 
 # Get available versions
 from panflow.core.xpath_resolver import get_all_versions
@@ -300,11 +300,11 @@ duplicates = config.generate_duplicate_objects_report("vsys", vsys="vsys1")
 ### Finding and Merging Duplicate Objects
 
 ```python
-from panflow import PanOsXmlConfig
+from panflow import PANFlowConfig
 from panflow.core.deduplication import DeduplicationEngine
 
 # Load configuration
-config = PanOsXmlConfig("firewall.xml")
+config = PANFlowConfig("firewall.xml")
 
 # Create deduplication engine
 engine = DeduplicationEngine(config.tree, "firewall", "vsys", config.version, vsys="vsys1")
@@ -324,11 +324,11 @@ For more information on deduplication options and strategies, see the [Deduplica
 ### Bulk Updating Security Policies
 
 ```python
-from panflow import PanOsXmlConfig
+from panflow import PANFlowConfig
 from panflow.core.bulk_operations import ConfigUpdater
 
 # Load configuration
-config = PanOsXmlConfig("panorama.xml")
+config = PANFlowConfig("panorama.xml")
 
 # Create configuration updater
 updater = ConfigUpdater(config.tree, "panorama", "device_group", config.version, device_group="DG1")
@@ -363,10 +363,10 @@ config.save("updated-panorama.xml")
 from panflow.core.graph_utils import ConfigGraph
 from panflow.core.query_language import Query
 from panflow.core.query_engine import QueryExecutor
-from panflow import PanOsXmlConfig
+from panflow import PANFlowConfig
 
 # Load configuration
-config = PanOsXmlConfig("config.xml")
+config = PANFlowConfig("config.xml")
 
 # Build the graph
 graph = ConfigGraph()
