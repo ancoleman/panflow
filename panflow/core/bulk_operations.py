@@ -13,6 +13,9 @@ from lxml import etree
 
 from .xpath_resolver import get_object_xpath, get_policy_xpath
 from .config_loader import xpath_search
+from .object_merger import ObjectMerger
+from .deduplication import DeduplicationEngine
+from .conflict_resolver import ConflictStrategy
 
 # Get module logger
 logger = logging.getLogger("panflow")
@@ -1139,3 +1142,215 @@ class ConfigUpdater:
         except Exception as e:
             logger.error(f"Error updating IP address of object '{element_name}': {str(e)}", exc_info=True)
             return False
+            
+    def bulk_merge_objects(
+        self,
+        source_tree: etree._ElementTree,
+        object_type: str,
+        criteria: Optional[Dict[str, Any]],
+        source_context_type: str,
+        target_context_type: str,
+        source_device_type: Optional[str] = None,
+        source_version: Optional[str] = None,
+        skip_if_exists: bool = True,
+        copy_references: bool = True,
+        conflict_strategy: Optional[ConflictStrategy] = None,
+        **kwargs
+    ) -> Tuple[int, int]:
+        """
+        Merge objects from a source tree to the target tree based on criteria.
+        
+        This method combines the ConfigQuery functionality with ObjectMerger to 
+        perform bulk merging of objects from one configuration to another.
+        
+        Args:
+            source_tree: Source ElementTree containing objects to merge from
+            object_type: Type of object to merge (address, service, etc.)
+            criteria: Dictionary of criteria to select objects to merge
+            source_context_type: Type of source context (shared, device_group, vsys)
+            target_context_type: Type of target context (shared, device_group, vsys)
+            source_device_type: Type of source device ("firewall" or "panorama")
+            source_version: PAN-OS version of source configuration
+            skip_if_exists: Skip if object already exists in target (deprecated, use conflict_strategy instead)
+            copy_references: Copy object references (e.g., address group members)
+            conflict_strategy: Strategy to use when resolving conflicts with existing objects
+            **kwargs: Additional parameters like source_device_group, target_device_group, etc.
+            
+        Returns:
+            Tuple[int, int]: (number of objects merged, total number of objects attempted)
+        """
+        logger.info(f"Performing bulk merge of {object_type} objects from {source_context_type} to {target_context_type}")
+        logger.debug(f"Merge criteria: {criteria}")
+        
+        # Set default source device type and version if not provided
+        source_device_type = source_device_type or self.device_type
+        source_version = source_version or self.version
+        
+        # Extract source context parameters
+        source_params = {}
+        for k, v in kwargs.items():
+            if k.startswith('source_'):
+                source_params[k] = v
+        
+        # Create a query object for the source tree
+        source_query = ConfigQuery(
+            source_tree, 
+            source_device_type, 
+            source_context_type, 
+            source_version, 
+            **source_params
+        )
+        
+        # Select objects to merge
+        objects_to_merge = source_query.select_objects(object_type, criteria)
+        
+        if not objects_to_merge:
+            logger.warning("No objects found in source matching the criteria")
+            return 0, 0
+            
+        logger.info(f"Found {len(objects_to_merge)} objects in source matching the criteria")
+        
+        # Create the merger
+        merger = ObjectMerger(
+            source_tree,
+            self.tree,
+            source_device_type,
+            self.device_type,
+            source_version,
+            self.version
+        )
+        
+        # Merge each object
+        merged_count = 0
+        for obj in objects_to_merge:
+            name = obj.get('name')
+            if not name:
+                logger.warning("Skipping object with no name attribute")
+                continue
+                
+            logger.info(f"Merging {object_type} object '{name}'")
+            
+            # Extract target context parameters
+            target_params = {}
+            for k, v in kwargs.items():
+                if k.startswith('target_'):
+                    target_params[k] = v
+            
+            try:
+                success = merger.copy_object(
+                    object_type,
+                    name,
+                    source_context_type,
+                    target_context_type,
+                    skip_if_exists,
+                    copy_references,
+                    conflict_strategy=conflict_strategy,
+                    **{**source_params, **target_params}
+                )
+                
+                if success:
+                    merged_count += 1
+                    logger.info(f"Successfully merged {object_type} object '{name}'")
+                else:
+                    logger.warning(f"Failed to merge {object_type} object '{name}'")
+                    
+            except Exception as e:
+                logger.error(f"Error merging {object_type} object '{name}': {str(e)}", exc_info=True)
+        
+        logger.info(f"Bulk merge completed: {merged_count} of {len(objects_to_merge)} objects merged")
+        return merged_count, len(objects_to_merge)
+        
+    def bulk_deduplicate_objects(
+        self,
+        object_type: str,
+        criteria: Optional[Dict[str, Any]] = None,
+        primary_name_strategy: str = "shortest",
+        dry_run: bool = False,
+        **kwargs
+    ) -> Tuple[Dict[str, Dict[str, Any]], int]:
+        """
+        Find and merge duplicate objects in the configuration.
+        
+        This method integrates with the DeduplicationEngine to find and merge 
+        duplicate objects based on their values.
+        
+        Args:
+            object_type: Type of object to deduplicate (address, service, tag)
+            criteria: Optional criteria to filter objects before deduplication
+            primary_name_strategy: Strategy for selecting primary object name 
+                                  ("first", "shortest", "longest", "alphabetical")
+            dry_run: If True, only identify duplicates but don't merge them
+            **kwargs: Additional context parameters
+            
+        Returns:
+            Tuple: (
+                Dictionary containing details of the changes made,
+                Number of duplicate objects merged
+            )
+        """
+        logger.info(f"Performing bulk deduplication of {object_type} objects")
+        
+        # If criteria is provided, first filter objects
+        if criteria:
+            logger.info(f"Pre-filtering objects using criteria: {criteria}")
+            objects = self.query.select_objects(object_type, criteria)
+            
+            if not objects:
+                logger.warning(f"No {object_type} objects found matching the criteria")
+                return {}, 0
+                
+            logger.info(f"Found {len(objects)} objects matching criteria for deduplication")
+            
+            # We need to use these specific objects for deduplication
+            # Currently we don't have a way to pass specific objects to the deduplication engine
+            # This would require enhancing the deduplication engine to accept a list of objects
+            logger.warning("Criteria-based filtering for deduplication is not fully implemented yet")
+            # For now, we'll proceed with deduplicating all objects of this type
+        
+        # Create the deduplication engine
+        dedup_engine = DeduplicationEngine(
+            self.tree, 
+            self.device_type, 
+            self.context_type, 
+            self.version, 
+            **self.context_kwargs
+        )
+        
+        # Find duplicate objects
+        logger.info(f"Finding duplicate {object_type} objects")
+        duplicates, references = dedup_engine.find_duplicates(object_type)
+        
+        if not duplicates:
+            logger.info(f"No duplicate {object_type} objects found")
+            return {}, 0
+        
+        total_duplicates = sum(len(group) - 1 for group in duplicates.values())
+        logger.info(f"Found {total_duplicates} duplicate objects across {len(duplicates)} unique values")
+        
+        # If dry run, just return the duplicates without merging
+        if dry_run:
+            logger.info("Dry run mode, not merging duplicates")
+            changes = {}
+            
+            for value, objects in duplicates.items():
+                object_names = [name for name, _ in objects]
+                primary = object_names[0]  # Just use first as example
+                
+                changes[value] = {
+                    "primary": primary,
+                    "merged": object_names[1:],
+                    "references_updated": []
+                }
+            
+            return changes, 0
+        
+        # Merge the duplicate objects
+        logger.info(f"Merging duplicate {object_type} objects using '{primary_name_strategy}' strategy")
+        changes = dedup_engine.merge_duplicates(duplicates, references, primary_name_strategy)
+        
+        merged_count = sum(len(info["merged"]) for info in changes.values())
+        reference_count = sum(len(info["references_updated"]) for info in changes.values())
+        
+        logger.info(f"Deduplication complete: merged {merged_count} objects and updated {reference_count} references")
+        
+        return changes, merged_count

@@ -2,7 +2,12 @@
 
 This guide provides a comprehensive overview of the command-line interface (CLI) for PANFlow, which allows you to work with Palo Alto Networks PAN-OS XML configurations efficiently.
 
-> **Important Note**: PANFlow provides two CLI entry points: `panflow_cli.py` (recommended) and `cli.py` (legacy). This guide uses `cli.py` in examples, but you should replace it with `panflow_cli.py` in your commands. All functionality described here is available in both CLIs.
+> **Important Note**: PANFlow provides two CLI entry points: 
+> 
+> - `panflow_cli.py` (recommended): The package-based CLI with enhanced functionality
+> - `cli.py` (legacy): The original CLI that remains for backward compatibility
+> 
+> This guide generally shows examples using the recommended `panflow_cli.py`. All functionality described in this guide is available in both CLIs, with identical parameters and options.
 
 ## Table of Contents
 
@@ -164,6 +169,127 @@ python cli.py object filter --config firewall.xml --type address --query-filter 
 
 # Combine criteria with graph query (objects must match both)
 python cli.py object filter --config firewall.xml --type address --criteria subnets.json --query-filter "MATCH (a:address) WHERE NOT (()-[:uses]->(a))"
+```
+
+### Find Objects
+
+Find objects throughout the configuration regardless of context:
+
+```bash
+# Legacy CLI
+python cli.py object find --config CONFIG_FILE --type OBJECT_TYPE 
+  [--name NAME | --pattern PATTERN | --criteria CRITERIA_FILE] 
+  [--value VALUE | --ip-contains IP | --port-equals PORT] 
+  [--query-filter QUERY] [--output OUTPUT_FILE] [options]
+  
+# Package-based CLI (recommended)
+python panflow_cli.py object find --config CONFIG_FILE --type OBJECT_TYPE 
+  [--name NAME | --pattern PATTERN | --criteria CRITERIA_FILE] 
+  [--value VALUE | --ip-contains IP | --port-equals PORT] 
+  [--query-filter QUERY] [--output OUTPUT_FILE] [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--type`, `-t`: Type of object to find (**required**)
+- `--name`, `-n`: Name of the object to find (exact match)
+- `--pattern`, `-p`: Regex pattern to match object names (for partial matching)
+- `--criteria`: JSON file with value criteria
+- `--value`, `-v`: Simple value to filter objects by (supports wildcards with *)
+- `--ip-contains`: Filter address objects by IP/subnet containing this value
+- `--port-equals`: Filter service objects by exact port match
+- `--query-filter`, `-q`: Graph query filter to further refine results
+- `--output`, `-o`: Output file for results (JSON format)
+
+Note: You must specify one of `--name`, `--pattern`, `--criteria`, `--value`, `--ip-contains`, or `--port-equals`.
+
+This command searches across all contexts (shared, device groups, vsys, templates) to find objects with a specific name, matching a pattern, or matching specific criteria, making it especially useful for Panorama configurations where objects might exist in multiple device groups.
+
+Examples:
+```bash
+# Find all instances of an object by exact name throughout the configuration
+python panflow_cli.py object find --config panorama.xml --type address --name web-server --output locations.json
+
+# Find all objects with names matching a pattern (using regex)
+python panflow_cli.py object find --config panorama.xml --type address --pattern "web-.*" --output web-servers.json
+
+# Find address objects containing a specific IP (simple filtering)
+python panflow_cli.py object find --config panorama.xml --type address --ip-contains "10.88.0"
+
+# Find service objects with a specific port
+python panflow_cli.py object find --config panorama.xml --type service --port-equals "8080"
+
+# Find objects containing a value (with wildcard support)
+python panflow_cli.py object find --config panorama.xml --type address --value "10.*.0.0"
+
+# Combine name pattern and value filtering
+python panflow_cli.py object find --config panorama.xml --type address --pattern "web-.*" --ip-contains "10.0.0"
+
+# Use advanced graph query filtering for complex cases
+python panflow_cli.py object find --config panorama.xml --type address --pattern "web-.*" 
+    --query-filter "MATCH (a:address) WHERE a.value =~ '.*10\\.0\\.0.*'"
+
+# Traditional method using criteria file
+python panflow_cli.py object find --config panorama.xml --type address --criteria ip-criteria.json
+
+# Example criteria file (ip-criteria.json) for finding address objects with a specific value:
+# {"ip-netmask": "10.0.0.0/24"}
+
+# Example criteria file for finding service objects with specific ports:
+# {"port": "8080"}
+```
+
+The integration with the graph query system is particularly powerful, allowing you to combine the context-aware object finder with the flexible query language to create sophisticated search patterns. For instance, you could find all address objects whose names match a pattern but only if they're used in security rules with a specific source zone.
+
+### Find Duplicate Objects
+
+Find objects with the same name in different contexts or the same value but different names:
+
+```bash
+# Legacy CLI
+python cli.py object find-duplicates --config CONFIG_FILE [--by-name | --by-value --type OBJECT_TYPE] 
+    [--value VALUE | --ip-contains IP | --port-equals PORT] [--query-filter QUERY] [--output OUTPUT_FILE] [options]
+
+# Package-based CLI (recommended)
+python panflow_cli.py object find-duplicates --config CONFIG_FILE [--by-name | --by-value --type OBJECT_TYPE] 
+    [--value VALUE | --ip-contains IP | --port-equals PORT] [--query-filter QUERY] [--output OUTPUT_FILE] [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--by-name`: Find objects with the same name in different contexts
+- `--by-value`: Find objects with the same value but different names
+- `--type`, `-t`: Type of object for by-value search (required with --by-value)
+- `--value`, `-v`: Simple value to filter objects by (supports wildcards with *)
+- `--ip-contains`: Filter address objects by IP/subnet containing this value
+- `--port-equals`: Filter service objects by exact port match
+- `--query-filter`, `-q`: Advanced graph query filter for complex filtering
+- `--output`, `-o`: Output file for results (JSON format)
+
+Note: You must specify either `--by-name` or `--by-value`.
+
+This command helps identify redundant or conflicting object definitions across different contexts, which is especially valuable for Panorama configurations with multiple device groups.
+
+Examples:
+```bash
+# Find objects with the same name in different contexts
+python panflow_cli.py object find-duplicates --config panorama.xml --by-name --output duplicate-names.json
+
+# Find address objects with the same IP value but different names
+python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type address --output duplicate-values.json
+
+# Find service objects with the same port but different names
+python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type service --output duplicate-services.json
+
+# Find duplicate address objects containing a specific IP
+python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type address --ip-contains "10.88.0"
+
+# Find duplicate service objects with a specific port
+python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type service --port-equals "8080"
+
+# Use advanced graph query filtering for complex cases
+python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type address 
+    --query-filter "MATCH (a:address) WHERE a.value =~ '.*10\\.0\\.0.*'"
 ```
 
 ## Policy Commands

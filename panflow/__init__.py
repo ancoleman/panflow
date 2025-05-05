@@ -30,6 +30,13 @@ from .core.xpath_resolver import (
 
 from .core.policy_merger import PolicyMerger
 from .core.object_merger import ObjectMerger
+from .core.deduplication import DeduplicationEngine
+from .core.bulk_operations import ConfigQuery, ConfigUpdater
+from .core.conflict_resolver import ConflictStrategy
+from .core.object_finder import (
+    find_objects_by_name, find_objects_by_value, find_all_locations,
+    find_duplicate_names, find_duplicate_values, ObjectLocation
+)
 
 # Import functional modules
 from .modules.objects import (
@@ -192,6 +199,7 @@ class PANFlowConfig:
         copy_references=True,
         position="bottom",
         ref_policy_name=None,
+        conflict_strategy=None,
         **kwargs
     ):
         """
@@ -207,6 +215,7 @@ class PANFlowConfig:
             copy_references: Copy object references (address objects, etc.)
             position: Where to place the policy ("top", "bottom", "before", "after")
             ref_policy_name: Reference policy name for "before" and "after" positions
+            conflict_strategy: Strategy for handling conflicts (overrides skip_if_exists)
             **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
             
         Returns:
@@ -242,6 +251,7 @@ class PANFlowConfig:
             copy_references,
             position,
             ref_policy_name,
+            conflict_strategy=conflict_strategy,
             **kwargs
         )
     
@@ -254,6 +264,7 @@ class PANFlowConfig:
         target_context_type,
         skip_if_exists=True,
         copy_references=True,
+        conflict_strategy=None,
         **kwargs
     ):
         """
@@ -267,6 +278,7 @@ class PANFlowConfig:
             target_context_type: Target context type (shared, device_group, vsys)
             skip_if_exists: Skip if object already exists in target
             copy_references: Copy object references (e.g., address group members)
+            conflict_strategy: Strategy for handling conflicts (overrides skip_if_exists)
             **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
             
         Returns:
@@ -300,7 +312,328 @@ class PANFlowConfig:
             target_context_type,
             skip_if_exists,
             copy_references,
+            conflict_strategy=conflict_strategy,
             **kwargs
+        )
+        
+    def bulk_merge_objects(
+        self,
+        target_config,
+        object_type,
+        source_context_type,
+        target_context_type,
+        criteria=None,
+        skip_if_exists=True,
+        copy_references=True,
+        conflict_strategy=None,
+        **kwargs
+    ) -> Tuple[int, int]:
+        """
+        Bulk merge objects matching criteria from this configuration to target.
+        
+        Args:
+            target_config: Target PANFlowConfig object or path to target configuration file
+            object_type: Type of object to merge (address, service, etc.)
+            source_context_type: Source context type (shared, device_group, vsys)
+            target_context_type: Target context type (shared, device_group, vsys)
+            criteria: Dictionary of criteria for selecting objects to merge
+            skip_if_exists: Skip if object already exists in target
+            copy_references: Copy object references (e.g., address group members)
+            conflict_strategy: Strategy for handling conflicts (overrides skip_if_exists)
+            **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
+            
+        Returns:
+            Tuple[int, int]: (number of objects merged, total number of objects attempted)
+        """
+        # Handle target_config as file path or PANFlowConfig object
+        if isinstance(target_config, str):
+            from .core.config_loader import load_config_from_file, detect_device_type
+            target_tree, target_version = load_config_from_file(target_config)
+            target_device_type = detect_device_type(target_tree)
+        else:
+            target_tree = target_config.tree
+            target_version = target_config.version
+            target_device_type = target_config.device_type
+        
+        # Create updater for target configuration
+        updater = ConfigUpdater(
+            target_tree,
+            target_device_type,
+            target_context_type,
+            target_version,
+            **{k: v for k, v in kwargs.items() if k.startswith('target_')}
+        )
+        
+        # Extract source parameters
+        source_params = {k: v for k, v in kwargs.items() if k.startswith('source_')}
+        
+        # Perform bulk merge
+        return updater.bulk_merge_objects(
+            self.tree,
+            object_type,
+            criteria,
+            source_context_type,
+            target_context_type,
+            self.device_type,
+            self.version,
+            skip_if_exists,
+            copy_references,
+            conflict_strategy,
+            **{**source_params, **{k: v for k, v in kwargs.items() if k.startswith('target_')}}
+        )
+    
+    def merge_objects_by_type(
+        self,
+        target_config,
+        object_types,
+        source_context_type,
+        target_context_type,
+        criteria=None,
+        skip_if_exists=True,
+        copy_references=True,
+        conflict_strategy=None,
+        **kwargs
+    ) -> Dict[str, Tuple[int, int]]:
+        """
+        Merge multiple object types from this configuration to target.
+        
+        Args:
+            target_config: Target PANFlowConfig object or path to target configuration file
+            object_types: List of object types to merge (address, service, etc.)
+            source_context_type: Source context type (shared, device_group, vsys)
+            target_context_type: Target context type (shared, device_group, vsys)
+            criteria: Dictionary of criteria for selecting objects to merge
+            skip_if_exists: Skip if object already exists in target
+            copy_references: Copy object references (e.g., address group members)
+            conflict_strategy: Strategy for handling conflicts (overrides skip_if_exists)
+            **kwargs: Additional parameters (source_device_group, target_device_group, etc.)
+            
+        Returns:
+            Dict[str, Tuple[int, int]]: Dictionary mapping object types to (copied, total) counts
+        """
+        results = {}
+        
+        for object_type in object_types:
+            merged, total = self.bulk_merge_objects(
+                target_config,
+                object_type,
+                source_context_type,
+                target_context_type,
+                criteria,
+                skip_if_exists,
+                copy_references,
+                conflict_strategy,
+                **kwargs
+            )
+            results[object_type] = (merged, total)
+        
+        return results
+    
+    def deduplicate_objects(
+        self,
+        object_type,
+        context_type,
+        criteria=None,
+        primary_name_strategy="shortest",
+        dry_run=False,
+        **kwargs
+    ) -> Tuple[Dict[str, Dict[str, Any]], int]:
+        """
+        Find and merge duplicate objects in the configuration.
+        
+        Args:
+            object_type: Type of object to deduplicate (address, service, tag)
+            context_type: Context type (shared, device_group, vsys)
+            criteria: Optional criteria to filter objects before deduplication
+            primary_name_strategy: Strategy for selecting primary object name
+                                  ("first", "shortest", "longest", "alphabetical")
+            dry_run: If True, only identify duplicates but don't merge them
+            **kwargs: Additional context parameters (device_group, vsys, etc.)
+            
+        Returns:
+            Tuple: (
+                Dictionary containing details of the changes made,
+                Number of duplicate objects merged
+            )
+        """
+        # Create updater for this configuration
+        updater = ConfigUpdater(
+            self.tree,
+            self.device_type,
+            context_type,
+            self.version,
+            **kwargs
+        )
+        
+        # Perform deduplication
+        return updater.bulk_deduplicate_objects(
+            object_type,
+            criteria,
+            primary_name_strategy,
+            dry_run,
+            **kwargs
+        )
+    
+    def deduplicate_all_object_types(
+        self,
+        context_type,
+        object_types=None,
+        criteria=None,
+        primary_name_strategy="shortest",
+        dry_run=False,
+        **kwargs
+    ) -> Dict[str, Tuple[Dict[str, Dict[str, Any]], int]]:
+        """
+        Find and merge duplicate objects of multiple types in the configuration.
+        
+        Args:
+            context_type: Context type (shared, device_group, vsys)
+            object_types: List of object types to deduplicate (address, service, tag)
+                         If None, defaults to ["address", "service", "tag"]
+            criteria: Optional criteria to filter objects before deduplication
+            primary_name_strategy: Strategy for selecting primary object name
+                                  ("first", "shortest", "longest", "alphabetical")
+            dry_run: If True, only identify duplicates but don't merge them
+            **kwargs: Additional context parameters (device_group, vsys, etc.)
+            
+        Returns:
+            Dict: Dictionary mapping object types to (changes, merged_count) tuples
+        """
+        if object_types is None:
+            object_types = ["address", "service", "tag"]
+        
+        results = {}
+        
+        for object_type in object_types:
+            changes, merged_count = self.deduplicate_objects(
+                object_type,
+                context_type,
+                criteria,
+                primary_name_strategy,
+                dry_run,
+                **kwargs
+            )
+            results[object_type] = (changes, merged_count)
+        
+        return results
+    
+    # Global object finder methods
+    def find_objects_by_name(
+        self,
+        object_type: str,
+        object_name: str,
+        use_regex: bool = False
+    ) -> List[ObjectLocation]:
+        """
+        Find all objects with a specific name throughout the configuration.
+        
+        This method searches across all contexts (shared, device groups, vsys, templates)
+        to find objects with the given name, regardless of where they are located.
+        
+        Args:
+            object_type: Type of object to find (address, service, etc.)
+            object_name: Name of the object to find (exact match or regex pattern)
+            use_regex: If True, treat object_name as a regex pattern for partial matching
+            
+        Returns:
+            List of ObjectLocation objects representing all matching objects
+        """
+        return find_objects_by_name(
+            self.tree,
+            object_type,
+            object_name,
+            self.device_type,
+            self.version,
+            use_regex
+        )
+    
+    def find_objects_by_value(
+        self,
+        object_type: str,
+        value_criteria: Dict[str, Any]
+    ) -> List[ObjectLocation]:
+        """
+        Find all objects matching specific value criteria throughout the configuration.
+        
+        This method searches across all contexts (shared, device groups, vsys, templates)
+        to find objects with matching values, regardless of where they are located.
+        
+        Args:
+            object_type: Type of object to find (address, service, etc.)
+            value_criteria: Dictionary of criteria to match against object values
+                Example for address: {"ip-netmask": "10.0.0.0/24"}
+                Example for service: {"protocol": "tcp", "port": "8080"}
+                Example for tag: {"color": "red"}
+            
+        Returns:
+            List of ObjectLocation objects representing all matching objects
+        """
+        return find_objects_by_value(
+            self.tree,
+            object_type,
+            value_criteria,
+            self.device_type,
+            self.version
+        )
+    
+    def find_all_object_locations(self) -> Dict[str, Dict[str, List[ObjectLocation]]]:
+        """
+        Find the locations of all objects in the configuration.
+        
+        This method creates a comprehensive map of all objects in the configuration,
+        organized by object type and name, with each object potentially having
+        multiple locations across different contexts.
+        
+        Returns:
+            Dict mapping object types to dicts mapping object names to lists of locations
+        """
+        return find_all_locations(
+            self.tree,
+            self.device_type,
+            self.version
+        )
+    
+    def find_duplicate_object_names(self) -> Dict[str, Dict[str, List[ObjectLocation]]]:
+        """
+        Find objects with the same name across different contexts.
+        
+        This is useful for identifying objects that have the same name but
+        potentially different definitions in different device groups, templates,
+        or vsys.
+        
+        Returns:
+            Dict mapping object types to dicts mapping duplicate names to lists of locations
+        """
+        return find_duplicate_names(
+            self.tree,
+            self.device_type,
+            self.version
+        )
+    
+    def find_duplicate_object_values(
+        self,
+        object_type: str
+    ) -> Dict[str, List[ObjectLocation]]:
+        """
+        Find objects with the same value but different names.
+        
+        This is useful for identifying redundant objects that define the same values
+        but have different names, which could be consolidated to simplify the configuration.
+        
+        This method works best with address, service, and tag objects which have
+        clear value definitions.
+        
+        Args:
+            object_type: Type of object to find duplicates for
+            
+        Returns:
+            Dict mapping values to lists of locations
+        """
+        return find_duplicate_values(
+            self.tree,
+            object_type,
+            self.device_type,
+            self.version
         )
 
 # Function to configure logging
