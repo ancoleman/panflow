@@ -64,10 +64,18 @@ Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
 - `--type`, `-t`: Type of object to list (e.g., address, service, etc.) (**required**)
 - `--output`, `-o`: Output file for results (JSON format)
+- `--query-filter`, `-q`: Graph query filter to select objects
 
-Example:
+Examples:
 ```bash
+# List all address objects
 python cli.py object list --config firewall.xml --type address --context vsys --vsys vsys1
+
+# List only address objects containing a specific subnet
+python cli.py object list --config firewall.xml --type address --query-filter "MATCH (a:address) WHERE a.value CONTAINS '10.0.0'"
+
+# List address objects that are not used in any rule
+python cli.py object list --config firewall.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))"
 ```
 
 ### Add Object
@@ -131,21 +139,31 @@ python cli.py object delete --config firewall.xml --type address --name old-serv
 
 ### Filter Objects
 
-Filter objects based on criteria:
+Filter objects based on criteria or graph query:
 
 ```bash
-python cli.py object filter --config CONFIG_FILE --type OBJECT_TYPE --criteria CRITERIA_FILE [--output OUTPUT_FILE] [options]
+python cli.py object filter --config CONFIG_FILE --type OBJECT_TYPE [--criteria CRITERIA_FILE] [--query-filter QUERY] [--output OUTPUT_FILE] [options]
 ```
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
 - `--type`, `-t`: Type of object to filter (**required**)
-- `--criteria`: JSON file with filter criteria (**required**)
+- `--criteria`: JSON file with filter criteria 
+- `--query-filter`, `-q`: Graph query filter to select objects
 - `--output`, `-o`: Output file for results (JSON format)
 
-Example:
+Note: You must specify either `--criteria` or `--query-filter` (or both).
+
+Examples:
 ```bash
+# Filter objects using criteria file
 python cli.py object filter --config firewall.xml --type address --criteria filter-criteria.json --output filtered.json
+
+# Filter objects using graph query
+python cli.py object filter --config firewall.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))" --output unused.json
+
+# Combine criteria with graph query (objects must match both)
+python cli.py object filter --config firewall.xml --type address --criteria subnets.json --query-filter "MATCH (a:address) WHERE NOT (()-[:uses]->(a))"
 ```
 
 ## Policy Commands
@@ -157,17 +175,54 @@ Commands for managing security rules, NAT rules, and other PAN-OS policies.
 List policies of a specific type:
 
 ```bash
-python cli.py policy list --config CONFIG_FILE --type POLICY_TYPE [--output OUTPUT_FILE] [options]
+python cli.py policy list --config CONFIG_FILE --type POLICY_TYPE [--query-filter QUERY] [--output OUTPUT_FILE] [options]
 ```
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
 - `--type`, `-t`: Type of policy to list (e.g., security_pre_rules, nat_rules) (**required**)
+- `--query-filter`, `-q`: Graph query filter to select policies
 - `--output`, `-o`: Output file for results (JSON format)
 
-Example:
+Examples:
 ```bash
+# List all security pre-rules
 python cli.py policy list --config panorama.xml --type security_pre_rules --context device_group --device-group DG1
+
+# List only rules that use a specific service
+python cli.py policy list --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.name == 'http'"
+
+# List rules using any as source and application-default as service
+python cli.py policy list --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-source]->(s:address), (r)-[:uses-service]->(sv:service) WHERE s.name == 'any' AND sv.name == 'application-default'"
+```
+
+### Filter Policies
+
+Filter policies based on criteria or graph query:
+
+```bash
+python cli.py policy filter --config CONFIG_FILE --type POLICY_TYPE [--criteria CRITERIA_FILE] [--query-filter QUERY] [--output OUTPUT_FILE] [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--type`, `-t`: Type of policy to filter (**required**)
+- `--criteria`: JSON file with filter criteria
+- `--query-filter`, `-q`: Graph query filter to select policies
+- `--output`, `-o`: Output file for results (JSON format)
+
+Note: You must specify either `--criteria` or `--query-filter` (or both).
+
+Examples:
+```bash
+# Filter policies using criteria file
+python cli.py policy filter --config panorama.xml --type security_pre_rules --criteria rule-criteria.json --output filtered-rules.json
+
+# Filter policies using graph query
+python cli.py policy filter --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-destination]->(a:address) WHERE a.value CONTAINS '192.168.1'" --output internal_rules.json
+
+# Combine criteria with graph query
+python cli.py policy filter --config firewall.xml --type security_rules --criteria allow_rules.json --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.name == 'http'"
 ```
 
 ### Add Policy
@@ -250,22 +305,32 @@ python cli.py policy filter --config panorama.xml --type security_pre_rules --cr
 
 ### Bulk Update Policies
 
-Update multiple policies matching criteria with specified operations:
+Update multiple policies matching criteria or graph query with specified operations:
 
 ```bash
-python cli.py policy bulk-update --config CONFIG_FILE --type POLICY_TYPE --criteria CRITERIA_FILE --operations OPERATIONS_FILE --output OUTPUT_FILE [options]
+python cli.py policy bulk-update --config CONFIG_FILE --type POLICY_TYPE [--criteria CRITERIA_FILE] [--query-filter QUERY] --operations OPERATIONS_FILE --output OUTPUT_FILE [options]
 ```
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
 - `--type`, `-t`: Type of policy to update (**required**)
-- `--criteria`: JSON file with filter criteria (**required**)
+- `--criteria`: JSON file with filter criteria
+- `--query-filter`, `-q`: Graph query filter to select policies
 - `--operations`: JSON file with update operations (**required**)
 - `--output`, `-o`: Output file for updated configuration (**required**)
 
-Example:
+Note: You must specify either `--criteria` or `--query-filter` (or both).
+
+Examples:
 ```bash
+# Update policies matching criteria file
 python cli.py policy bulk-update --config panorama.xml --type security_pre_rules --criteria criteria.json --operations operations.json --output updated.xml
+
+# Update policies matching graph query
+python cli.py policy bulk-update --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.dst_port == '3389'" --operations rdp_protection.json --output updated.xml
+
+# Update policies matching both criteria and query
+python cli.py policy bulk-update --config firewall.xml --type security_rules --criteria allow_rules.json --query-filter "MATCH (r:security-rule)-[:uses-source]->(a:address) WHERE a.name == 'any'" --operations add_logging.json --output updated.xml
 ```
 
 Example criteria file (criteria.json):
@@ -687,9 +752,40 @@ See the [Graph Query Language Reference](docs/graph_query_reference.md) for deta
 
 The CLI provides powerful capabilities for performing operations on multiple objects or policies at once.
 
+### Bulk Delete Objects
+
+Delete multiple objects based on a list or graph query:
+
+```bash
+python cli.py object bulk-delete --config CONFIG_FILE --type OBJECT_TYPE [--names-file NAMES_FILE] [--query-filter QUERY] --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--type`, `-t`: Type of object to delete (**required**)
+- `--names-file`: Text file with object names to delete (one per line)
+- `--query-filter`, `-q`: Graph query filter to select objects to delete
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--dry-run`: Show what would be deleted without making changes
+- `--force`: Delete objects without confirmation
+
+Note: You must specify either `--names-file` or `--query-filter`.
+
+Examples:
+```bash
+# Delete objects listed in a file
+python cli.py object bulk-delete --config config.xml --type address --names-file objects_to_delete.txt --output updated.xml
+
+# Delete unused address objects using query filter
+python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination|contains]->(a))" --output updated.xml
+
+# Preview objects that would be deleted without making changes
+python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE a.value CONTAINS '192.168.1'" --dry-run
+```
+
 ### Bulk Update Policies
 
-Apply the same changes to multiple policies matching specific criteria:
+Apply the same changes to multiple policies matching specific criteria or graph query:
 
 ```bash
 python cli.py policy bulk-update --config CONFIG_FILE --type POLICY_TYPE --criteria CRITERIA_FILE --operations OPERATIONS_FILE --output OUTPUT_FILE [options]

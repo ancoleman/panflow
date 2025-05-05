@@ -28,6 +28,7 @@ def list_objects(
     config: str = ConfigOptions.config_file(),
     object_type: str = ObjectOptions.object_type(),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE a.value CONTAINS \"10.0.0\"')"),
     device_type: str = ConfigOptions.device_type(),
     context: str = ContextOptions.context_type(),
     device_group: Optional[str] = ContextOptions.device_group(),
@@ -47,6 +48,53 @@ def list_objects(
         
         # Get objects (the get_objects function will log details about what it finds)
         objects = xml_config.get_objects(object_type, context, **context_kwargs)
+        
+        # Filter objects using graph query if specified
+        if query_filter:
+            logger.info(f"Filtering objects using query: {query_filter}")
+            
+            # Build the graph
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Prepare a query that returns object names
+            # If the query doesn't already have a RETURN clause, append one that returns object names
+            if "RETURN" not in query_filter.upper():
+                query_text = f"{query_filter} RETURN a.name"
+            else:
+                query_text = query_filter
+            
+            # Execute the query
+            query = Query(query_text)
+            executor = QueryExecutor(graph)
+            results = executor.execute(query)
+            
+            # Extract object names from the results
+            matching_objects = []
+            for row in results:
+                if 'a.name' in row:
+                    matching_objects.append(row['a.name'])
+                elif len(row) == 1:  # If there's only one column, use its value
+                    matching_objects.append(list(row.values())[0])
+            
+            logger.info(f"Query matched {len(matching_objects)} objects")
+            
+            # Filter the objects to only include the matched names
+            filtered_objects = {}
+            for name in matching_objects:
+                if name in objects:
+                    filtered_objects[name] = objects[name]
+            
+            objects = filtered_objects
+            logger.info(f"Filtered to {len(objects)} {object_type} objects matching query")
+        
+        # Display a list of object names
+        if objects:
+            logger.info(f"Found {len(objects)} {object_type} objects:")
+            for name in objects:
+                logger.info(f"  - {name}")
+        else:
+            logger.info(f"No {object_type} objects found matching criteria")
         
         # Save to file if requested
         if output:
@@ -189,7 +237,8 @@ def delete_object(
 def filter_objects(
     config: str = ConfigOptions.config_file(),
     object_type: str = ObjectOptions.object_type(),
-    criteria_file: str = typer.Option(..., "--criteria", help="JSON file with filter criteria"),
+    criteria_file: Optional[str] = typer.Option(None, "--criteria", help="JSON file with filter criteria"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))')"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
     device_type: str = ConfigOptions.device_type(),
     context: str = ContextOptions.context_type(),
@@ -198,30 +247,91 @@ def filter_objects(
     template: Optional[str] = ContextOptions.template(),
     version: Optional[str] = ConfigOptions.version(),
 ):
-    """Filter objects based on criteria"""
+    """Filter objects based on criteria or graph query"""
     try:
         # Initialize the configuration
         xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
-        # Read criteria from file
-        with open(criteria_file, 'r') as f:
-            criteria = json.load(f)
+        # Ensure at least one filter method is specified
+        if not criteria_file and not query_filter:
+            logger.error("You must specify either --criteria or --query-filter")
+            raise typer.Exit(1)
+        
+        # Read criteria from file if specified
+        criteria = None
+        if criteria_file:
+            with open(criteria_file, 'r') as f:
+                criteria = json.load(f)
+            logger.info(f"Loaded criteria from {criteria_file}")
         
         # Get context kwargs
         context_kwargs = ContextOptions.get_context_kwargs(context, device_group, vsys, template)
         
-        # Filter objects
-        filtered_objects = xml_config.filter_objects(object_type, criteria, context, **context_kwargs)
-        logger.info(f"Found {len(filtered_objects)} {object_type} objects matching criteria")
+        # Get all objects first
+        objects = xml_config.get_objects(object_type, context, **context_kwargs)
+        
+        # Use criteria to filter objects if specified
+        if criteria:
+            filtered_objects = xml_config.filter_objects(object_type, criteria, context, **context_kwargs)
+            logger.info(f"Found {len(filtered_objects)} {object_type} objects matching criteria")
+        else:
+            # If no criteria, start with all objects
+            filtered_objects = list(objects.keys())
+        
+        # Further filter using graph query if specified
+        if query_filter:
+            logger.info(f"Filtering objects using query: {query_filter}")
+            
+            # Build the graph
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Prepare a query that returns object names
+            # If the query doesn't already have a RETURN clause, append one that returns object names
+            if "RETURN" not in query_filter.upper():
+                query_text = f"{query_filter} RETURN a.name"
+            else:
+                query_text = query_filter
+            
+            # Execute the query
+            query = Query(query_text)
+            executor = QueryExecutor(graph)
+            results = executor.execute(query)
+            
+            # Extract object names from the results
+            matching_objects = []
+            for row in results:
+                if 'a.name' in row:
+                    matching_objects.append(row['a.name'])
+                elif len(row) == 1:  # If there's only one column, use its value
+                    matching_objects.append(list(row.values())[0])
+            
+            logger.info(f"Query matched {len(matching_objects)} objects")
+            
+            # Combine with criteria results if both were used
+            if criteria:
+                # Keep only objects that match both filters
+                filtered_objects = [name for name in filtered_objects if name in matching_objects]
+                logger.info(f"Combined filters matched {len(filtered_objects)} objects")
+            else:
+                # Use only query results
+                filtered_objects = matching_objects
+        
+        # Get the full object data for the filtered names
+        result_objects = {}
+        for name in filtered_objects:
+            if name in objects:
+                result_objects[name] = objects[name]
         
         # Display filtered objects
-        for name in filtered_objects:
+        logger.info(f"Final result: {len(result_objects)} {object_type} objects")
+        for name in result_objects:
             logger.info(f"  - {name}")
         
         # Save to file if requested
         if output:
             with open(output, 'w') as f:
-                json.dump(filtered_objects, f, indent=2)
+                json.dump(result_objects, f, indent=2)
             logger.info(f"Filtered objects saved to {output}")
             
     except Exception as e:
