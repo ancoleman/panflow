@@ -436,8 +436,13 @@ def find_all_locations(
     default_object_types = [
         "address", "address-group", "service", "service-group", 
         "tag", "application-filter", "application-group",
-        "security-profile-group", "url-category", "schedule",
-        "application-override", "dynamic-user-group", "region"
+        "security-profile-group", "schedule", "region",
+        # Using correct naming from YAML object definition keys:
+        "dynamic_user_group"  # Changed from "dynamic-user-group" to match YAML
+        # Note: In the YAML, the key is "dynamic_user_group" (with underscores)
+        # but the actual path is "/dynamic-user-group/" (with hyphens)
+        # Removed "url-category" as it's not defined in YAML mappings
+        # Removed "application-override" as it's a policy type, not an object type
     ]
     
     # Use specific type if provided, otherwise use all types
