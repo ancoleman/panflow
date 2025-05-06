@@ -96,7 +96,7 @@ Common properties include:
 ### 1. List all address objects
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value, a.addr_type"
+python cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value, a.addr_type"
 ```
 
 This query matches all address objects and returns their names, values, and address types.
@@ -104,7 +104,7 @@ This query matches all address objects and returns their names, values, and addr
 ### 2. Find an address object by name
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.name == 'web-server' RETURN a.name, a.value"
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.name == 'web-server' RETURN a.name, a.value"
 ```
 
 This query matches address objects with the name "web-server" and returns the name and value.
@@ -112,7 +112,7 @@ This query matches address objects with the name "web-server" and returns the na
 ### 3. Find address objects with a specific IP pattern
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.value =~ '10\\.1\\..*' RETURN a.name, a.value"
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.value =~ '10\\.1\\..*' RETURN a.name, a.value"
 ```
 
 This query uses a regular expression to match address objects with values starting with "10.1." and returns their names and values.
@@ -120,7 +120,7 @@ This query uses a regular expression to match address objects with values starti
 ### 4. Find all security rules
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) RETURN r.name"
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) RETURN r.name"
 ```
 
 This query matches all security rules and returns their names.
@@ -128,7 +128,7 @@ This query matches all security rules and returns their names.
 ### 5. Find security rules with a specific word in the name
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.name =~ '.*allow.*' RETURN r.name"
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.name =~ '.*allow.*' RETURN r.name"
 ```
 
 This query uses a regular expression to match security rules with "allow" in their names.
@@ -136,7 +136,7 @@ This query uses a regular expression to match security rules with "allow" in the
 ### 6. List all address groups
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (g:address-group) RETURN g.name"
+python cli.py query execute -c config.xml -q "MATCH (g:address-group) RETURN g.name"
 ```
 
 This query matches all address groups and returns their names.
@@ -144,7 +144,7 @@ This query matches all address groups and returns their names.
 ### 7. Find address objects used in a specific security rule
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.name == 'test-shared policy' RETURN r.name, r.edges_out" --format json
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.name == 'test-shared policy' RETURN r.name, r.edges_out" --format json
 ```
 
 This query finds the security rule named "test-shared policy" and returns its outgoing relationships, which show the objects it references.
@@ -152,7 +152,7 @@ This query finds the security rule named "test-shared policy" and returns its ou
 ### 8. Find security rules using a specific address
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (a:address) WHERE a.name == 'shared-dgs' AND r.edges_out CONTAINS {target: a.id, type: 'uses-destination'} RETURN r.name"
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (a:address) WHERE a.name == 'shared-dgs' AND r.edges_out CONTAINS {target: a.id, type: 'uses-destination'} RETURN r.name"
 ```
 
 This advanced query finds security rules that use the address "shared-dgs" as a destination.
@@ -160,7 +160,7 @@ This advanced query finds security rules that use the address "shared-dgs" as a 
 ### 9. List all services and their ports
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (s:service) RETURN s.name, s.protocol, s.port"
+python cli.py query execute -c config.xml -q "MATCH (s:service) RETURN s.name, s.protocol, s.port"
 ```
 
 This query matches all service objects and returns their names, protocols, and ports.
@@ -168,7 +168,7 @@ This query matches all service objects and returns their names, protocols, and p
 ### 10. Find unused address objects
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.edges_in.length == 0 RETURN a.name, a.value"
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.edges_in.length == 0 RETURN a.name, a.value"
 ```
 
 This query finds address objects that have no incoming relationships, meaning they are not referenced by any rule or group.
@@ -176,7 +176,7 @@ This query finds address objects that have no incoming relationships, meaning th
 ### 11. Find security rules with multiple destination addresses
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.edges_out.length > 2 RETURN r.name, r.edges_out.length" --format json
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.edges_out.length > 2 RETURN r.name, r.edges_out.length" --format json
 ```
 
 This query finds security rules that reference more than 2 objects and returns the rule name and the count of referenced objects.
@@ -184,7 +184,7 @@ This query finds security rules that reference more than 2 objects and returns t
 ### 12. Find address objects that start with a specific prefix
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.name =~ '^web-.*' RETURN a.name, a.value"
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.name =~ '^web-.*' RETURN a.name, a.value"
 ```
 
 This query uses a regular expression to find address objects with names starting with "web-".
@@ -192,7 +192,7 @@ This query uses a regular expression to find address objects with names starting
 ### 13. Count security rules by their first word
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) RETURN r.name.split('-')[0], COUNT(*)" --format json
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) RETURN r.name.split('-')[0], COUNT(*)" --format json
 ```
 
 This advanced query splits rule names by "-" and counts rules by their first word.
@@ -200,7 +200,7 @@ This advanced query splits rule names by "-" and counts rules by their first wor
 ### 14. Find addresses in a specific subnet
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.addr_type == 'ip-netmask' AND a.value =~ '192\\.168\\.1\\..*' RETURN a.name, a.value"
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.addr_type == 'ip-netmask' AND a.value =~ '192\\.168\\.1\\..*' RETURN a.name, a.value"
 ```
 
 This query finds address objects in the 192.168.1.x subnet.
@@ -208,7 +208,7 @@ This query finds address objects in the 192.168.1.x subnet.
 ### 15. Find security rules that allow HTTP or HTTPS
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (s:service) WHERE s.name == 'http' OR s.name == 'https' RETURN r.name, s.name"
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (s:service) WHERE s.name == 'http' OR s.name == 'https' RETURN r.name, s.name"
 ```
 
 This query finds security rules that allow HTTP or HTTPS services.
@@ -216,7 +216,7 @@ This query finds security rules that allow HTTP or HTTPS services.
 ### 16. Visualize the relationship between a rule and its references
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.name == 'test-shared policy' RETURN r.name, r.edges_out" --format json
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.name == 'test-shared policy' RETURN r.name, r.edges_out" --format json
 ```
 
 This query returns detailed information about the relationships between a rule and the objects it references, in JSON format for better visualization.
@@ -224,7 +224,7 @@ This query returns detailed information about the relationships between a rule a
 ### 17. Find address objects with no value defined (placeholder objects)
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.value == null RETURN a.name"
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.value == null RETURN a.name"
 ```
 
 This query finds address objects that have no value defined, often indicating placeholder objects.
@@ -232,7 +232,7 @@ This query finds address objects that have no value defined, often indicating pl
 ### 18. Find address groups that contain a specific address
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (g:address-group) MATCH (a:address) WHERE a.name == 'shared-dgs' AND g.edges_out CONTAINS {target: a.id, type: 'contains'} RETURN g.name"
+python cli.py query execute -c config.xml -q "MATCH (g:address-group) MATCH (a:address) WHERE a.name == 'shared-dgs' AND g.edges_out CONTAINS {target: a.id, type: 'contains'} RETURN g.name"
 ```
 
 This advanced query finds address groups that contain the address "shared-dgs".
@@ -240,7 +240,7 @@ This advanced query finds address groups that contain the address "shared-dgs".
 ### 19. Find rules with a specific source zone
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.from == 'trust' RETURN r.name"
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.from == 'trust' RETURN r.name"
 ```
 
 This query finds security rules with a source zone of "trust".
@@ -248,7 +248,7 @@ This query finds security rules with a source zone of "trust".
 ### 20. Export all configuration objects to JSON
 
 ```bash
-python panflow_cli.py query execute -c config.xml -q "MATCH (n) RETURN n.type, n.name, n" --format json --output config_objects.json
+python cli.py query execute -c config.xml -q "MATCH (n) RETURN n.type, n.name, n" --format json --output config_objects.json
 ```
 
 This query matches all nodes in the graph, regardless of type, and exports them to a JSON file with their type, name, and all properties.
@@ -258,7 +258,7 @@ This query matches all nodes in the graph, regardless of type, and exports them 
 For exploratory analysis, you can use the interactive mode:
 
 ```bash
-python panflow_cli.py query interactive -c config.xml
+python cli.py query interactive -c config.xml
 ```
 
 In interactive mode, you can enter queries one after another and see the results immediately. This is useful for exploring the configuration and refining your queries iteratively.

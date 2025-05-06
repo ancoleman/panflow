@@ -517,29 +517,29 @@ def find_objects(
     Examples:
     
         # Find all instances of an object by exact name throughout the configuration
-        python panflow_cli.py object find --config panorama.xml --type address --name web-server
+        python cli.py object find --config panorama.xml --type address --name web-server
         
         # Find all objects with names matching a pattern (using regex)
-        python panflow_cli.py object find --config panorama.xml --type address --pattern "web-.*"
+        python cli.py object find --config panorama.xml --type address --pattern "web-.*"
         
         # Find address objects containing a specific IP (simple filtering)
-        python panflow_cli.py object find --config panorama.xml --type address --ip-contains "10.88.0"
+        python cli.py object find --config panorama.xml --type address --ip-contains "10.88.0"
         
         # Find service objects with a specific port
-        python panflow_cli.py object find --config panorama.xml --type service --port-equals "8080"
+        python cli.py object find --config panorama.xml --type service --port-equals "8080"
         
         # Find objects containing a value (with wildcard support)
-        python panflow_cli.py object find --config panorama.xml --type address --value "10.*.0.0"
+        python cli.py object find --config panorama.xml --type address --value "10.*.0.0"
         
         # Combine name pattern and value filtering
-        python panflow_cli.py object find --config panorama.xml --type address --pattern "web-.*" --ip-contains "10.0.0"
+        python cli.py object find --config panorama.xml --type address --pattern "web-.*" --ip-contains "10.0.0"
         
         # Use advanced graph query filtering for complex cases
-        python panflow_cli.py object find --config panorama.xml --type address --pattern "web-.*" 
+        python cli.py object find --config panorama.xml --type address --pattern "web-.*" 
             --query-filter "MATCH (a:address) WHERE a.value =~ '.*10\\.0\\.0.*'"
         
         # Traditional method using criteria file
-        python panflow_cli.py object find --config panorama.xml --type address --criteria ip-criteria.json
+        python cli.py object find --config panorama.xml --type address --criteria ip-criteria.json
         
         # Example criteria file (ip-criteria.json) for finding address objects with a specific value:
         # {"ip-netmask": "10.0.0.0/24"}
@@ -700,22 +700,22 @@ def find_duplicate_objects(
     Examples:
     
         # Find objects with the same name in different contexts
-        python panflow_cli.py object find-duplicates --config panorama.xml --by-name --output duplicate-names.json
+        python cli.py object find-duplicates --config panorama.xml --by-name --output duplicate-names.json
         
         # Find address objects with the same IP value but different names
-        python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type address --output duplicate-values.json
+        python cli.py object find-duplicates --config panorama.xml --by-value --type address --output duplicate-values.json
         
         # Find service objects with the same port but different names
-        python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type service --output duplicate-services.json
+        python cli.py object find-duplicates --config panorama.xml --by-value --type service --output duplicate-services.json
         
         # Find duplicate address objects containing a specific IP
-        python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type address --ip-contains "10.88.0"
+        python cli.py object find-duplicates --config panorama.xml --by-value --type address --ip-contains "10.88.0"
         
         # Find duplicate service objects with a specific port
-        python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type service --port-equals "8080"
+        python cli.py object find-duplicates --config panorama.xml --by-value --type service --port-equals "8080"
         
         # Use advanced graph query filtering for complex cases
-        python panflow_cli.py object find-duplicates --config panorama.xml --by-value --type address 
+        python cli.py object find-duplicates --config panorama.xml --by-value --type address 
             --query-filter "MATCH (a:address) WHERE a.value =~ '.*10\\.0\\.0.*'"
     """
     try:
