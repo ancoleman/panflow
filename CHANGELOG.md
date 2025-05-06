@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.1.1] - 2025-05-06
+
+### Added
+- Performance optimization to only search for specified object types in find-duplicates
+
+### Fixed
+- Fixed XPath query construction in object_finder that prevented find-duplicates from working properly
+- Removed extraneous warnings when searching for specific object types
+
 ## [0.1.0] - 2025-05-06
 
 ### Added
@@ -36,5 +45,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.0...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.1...HEAD
+[0.1.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.0...v0.1.1
 [0.1.0]: https://code.pan.run/gcs-automation/panflow/releases/tag/v0.1.0

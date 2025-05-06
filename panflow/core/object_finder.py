@@ -202,15 +202,14 @@ def find_objects_by_name(
                         logger.debug(f"Found {obj_loc}")
             else:
                 # For regex matching, we need to get all objects of this type and filter by name
-                base_xpath = get_object_xpath(
+                all_elements_xpath = get_object_xpath(
                     object_type,
                     device_type,
                     context_type,
                     version,
                     **context_params
                 )
-                # The base_xpath already includes '/entry' (it's the path to all entries of this type)
-                all_elements_xpath = base_xpath
+                # The xpath already includes '/entry' (it's the path to all entries of this type)
                 elements = xpath_search(tree, all_elements_xpath)
                 
                 logger.debug(f"Found {len(elements)} elements to check in {context_type}")
@@ -313,7 +312,8 @@ def find_objects_by_value(
             )
             
             # Get all objects of this type in this context
-            xpath = f"{xpath_base}/entry"
+            # Use xpath_base directly as it already includes the /entry part
+            xpath = xpath_base
             elements = xpath_search(tree, xpath)
             
             # Filter elements based on value criteria
@@ -412,7 +412,8 @@ def _matches_criteria(element: etree._Element, criteria: Dict[str, Any]) -> bool
 def find_all_locations(
     tree: etree._ElementTree,
     device_type: str,
-    version: str
+    version: str,
+    specific_object_type: Optional[str] = None
 ) -> Dict[str, Dict[str, List[ObjectLocation]]]:
     """
     Find the locations of all objects in the configuration.
@@ -421,19 +422,26 @@ def find_all_locations(
         tree: ElementTree containing the configuration
         device_type: Type of device ("firewall" or "panorama")
         version: PAN-OS version
+        specific_object_type: Optional specific object type to search for (if None, search all types)
         
     Returns:
         Dict mapping object types to dicts mapping object names to lists of locations
     """
-    logger.info(f"Finding all object locations in the configuration")
+    if specific_object_type:
+        logger.info(f"Finding all {specific_object_type} object locations in the configuration")
+    else:
+        logger.info(f"Finding all object locations in the configuration")
     
     # Define object types to search for
-    object_types = [
+    default_object_types = [
         "address", "address-group", "service", "service-group", 
         "tag", "application-filter", "application-group",
         "security-profile-group", "url-category", "schedule",
         "application-override", "dynamic-user-group", "region"
     ]
+    
+    # Use specific type if provided, otherwise use all types
+    object_types = [specific_object_type] if specific_object_type else default_object_types
     
     # Build result structure
     results = {}
@@ -496,7 +504,8 @@ def find_all_locations(
                 )
                 
                 # Get all objects of this type in this context
-                xpath = f"{xpath_base}/entry"
+                # Use xpath_base directly as it already includes the /entry part
+                xpath = xpath_base
                 elements = xpath_search(tree, xpath)
                 
                 for element in elements:
@@ -548,7 +557,8 @@ def find_duplicate_names(
     """
     logger.info(f"Finding objects with duplicate names across different contexts")
     
-    # Get all object locations
+    # Get all object locations for all object types
+    # For duplicate names, we need to check all object types
     all_locations = find_all_locations(tree, device_type, version)
     
     # Filter to only include objects with multiple locations
@@ -602,8 +612,8 @@ def find_duplicate_values(
     """
     logger.info(f"Finding {object_type} objects with duplicate values but different names")
     
-    # Get all object locations
-    all_locations = find_all_locations(tree, device_type, version)
+    # Get all object locations for the specified object type
+    all_locations = find_all_locations(tree, device_type, version, specific_object_type=object_type)
     
     # Get locations for the specific object type
     if object_type not in all_locations:
