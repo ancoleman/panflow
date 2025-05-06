@@ -1,0 +1,111 @@
+name: Build Binaries
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build with PyInstaller
+        run: |
+          chmod +x build_scripts/build.sh
+          ./build_scripts/build.sh
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: panflow-linux
+          path: dist/panflow
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build with PyInstaller
+        run: |
+          python build_scripts/build_binary.py
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: panflow-windows
+          path: dist/panflow.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build with PyInstaller
+        run: |
+          chmod +x build_scripts/build.sh
+          ./build_scripts/build.sh
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: panflow-macos
+          path: dist/panflow
+
+  release-binaries:
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Download Linux Binary
+        uses: actions/download-artifact@v3
+        with:
+          name: panflow-linux
+          path: ./
+      - name: Download Windows Binary
+        uses: actions/download-artifact@v3
+        with:
+          name: panflow-windows
+          path: ./
+      - name: Download macOS Binary
+        uses: actions/download-artifact@v3
+        with:
+          name: panflow-macos
+          path: ./
+      - name: Rename binaries
+        run: |
+          mv panflow panflow-linux
+          mv panflow.exe panflow-windows.exe
+          mv panflow-macos panflow-macos
+          chmod +x panflow-linux panflow-macos
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            panflow-linux
+            panflow-windows.exe
+            panflow-macos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

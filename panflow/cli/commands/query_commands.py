@@ -22,6 +22,7 @@ from panflow.core.xml_utils import load_xml_file
 from panflow.core.graph_utils import ConfigGraph
 from panflow.core.query_language import Query, Lexer
 from panflow.core.query_engine import QueryExecutor
+from panflow.core.graph_service import GraphService
 from panflow.cli.common import CommonOptions, file_callback, output_callback
 
 # Set up logging
@@ -74,14 +75,9 @@ def execute(
         # Load the XML configuration
         xml_root = load_xml_file(config_file)
         
-        # Build the graph
-        graph = ConfigGraph()
-        graph.build_from_xml(xml_root)
-        
-        # Parse and execute the query
-        parsed_query = Query(query)
-        executor = QueryExecutor(graph)
-        results = executor.execute(parsed_query)
+        # Use GraphService to execute the query
+        graph_service = GraphService()
+        results = graph_service.execute_custom_query(xml_root, query)
         
         # Display the results
         _display_results(results, output_format, output_file)
@@ -114,12 +110,8 @@ def interactive(
         # Load the XML configuration
         xml_root = load_xml_file(config_file)
         
-        # Build the graph
-        graph = ConfigGraph()
-        graph.build_from_xml(xml_root)
-        
-        # Create executor
-        executor = QueryExecutor(graph)
+        # Create graph service
+        graph_service = GraphService()
         
         console.print("[bold green]PAN-OS Graph Query Shell[/bold green]")
         console.print("Enter graph queries or 'exit' to quit")
@@ -136,9 +128,8 @@ def interactive(
                 if not user_input.strip():
                     continue
                     
-                # Parse and execute the query
-                parsed_query = Query(user_input)
-                results = executor.execute(parsed_query)
+                # Execute the query through GraphService
+                results = graph_service.execute_custom_query(xml_root, user_input)
                 
                 # Display the results as a table
                 _display_results(results, "table", None)

@@ -3,6 +3,27 @@ old/
 test_files/
 __pycache__/
 
+# Development
+.coverage
+.pytest_cache/
+.venv/
+.python-version
+*.pyc
+*.pyo
+*.pyd
+dist/
+build/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Claude files
+CLAUDE.md
+.claude/
+**/.claude/settings.local.json
+
 #mac
 .DS_Store
-**/.claude/settings.local.json

@@ -36,9 +36,107 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 
 ## Installation
 
+### Using Poetry (Recommended for Developers)
+
+[Poetry](https://python-poetry.org/) is a modern dependency management and packaging tool for Python. It's the recommended way to install PANFlow for development.
+
+1. **Install Poetry** (if not already installed):
+
+   ```bash
+   # On Linux, macOS, WSL
+   curl -sSL https://install.python-poetry.org | python3 -
+
+   # On Windows PowerShell
+   (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -
+   ```
+
+   See the [Poetry documentation](https://python-poetry.org/docs/#installation) for more installation options.
+
+2. **Install PANFlow using Poetry**:
+
+   ```bash
+   # Clone the repository
+   git clone https://code.pan.run/gcs-automation/panflow.git
+   cd panflow
+
+   # Install the package and all dependencies
+   poetry install
+   
+   # Activate the virtual environment
+   poetry shell
+   ```
+
+3. **Run PANFlow**:
+
+   ```bash
+   # Inside the Poetry shell, you can run PANFlow directly
+   panflow --help
+   
+   # Or without activating the shell
+   poetry run panflow --help
+   ```
+
+### Using pip
+
+If you prefer pip, you can install PANFlow with:
+
 ```bash
 pip install panflow
 ```
+
+After installation, you can run it with:
+
+```bash
+panflow --help
+```
+
+### Standalone Binaries
+
+For users who prefer a standalone executable without installing Python or any dependencies, we provide pre-built binaries for Windows, macOS, and Linux.
+
+1. Download the appropriate binary for your platform from the [Releases page](https://code.pan.run/gcs-automation/panflow/-/releases):
+   - `panflow-windows.exe` - For Windows users
+   - `panflow-macos` - For macOS users
+   - `panflow-linux` - For Linux users
+
+2. Make the binary executable (Linux/macOS):
+   ```bash
+   chmod +x panflow-linux  # or panflow-macos
+   ```
+
+3. Install to your system (optional):
+
+   **Linux/macOS**:
+   ```bash
+   # Using the included install script
+   ./build_scripts/install.sh
+   
+   # Or install manually
+   sudo cp panflow-linux /usr/local/bin/panflow  # or panflow-macos
+   ```
+
+   **Windows**:
+   ```
+   # Using the included install script
+   build_scripts\install.bat
+   
+   # Or install manually by moving the executable to a location in your PATH
+   ```
+
+   **Building from source**:
+   ```bash
+   # Build for your current platform
+   ./build_scripts/build.sh
+   
+   # You'll find the binary in the dist/ directory
+   ```
+
+4. Run PANFlow:
+   ```bash
+   panflow --help  # If installed in your PATH
+   # Or run directly
+   ./panflow-linux --help  # or panflow-macos or panflow-windows.exe
+   ```
 
 ## Key Concepts
 
@@ -405,6 +503,81 @@ To add support for a new PAN-OS version:
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Development Setup
+
+1. **Set up the development environment**:
+
+   ```bash
+   # Clone the repository
+   git clone https://code.pan.run/gcs-automation/panflow.git
+   cd panflow
+   
+   # Install with Poetry for development
+   poetry install
+   
+   # Activate the virtual environment
+   poetry shell
+   ```
+
+2. **Run tests**:
+
+   ```bash
+   # Run the full test suite
+   pytest
+   
+   # Run with coverage
+   pytest --cov=panflow
+   ```
+
+3. **Code formatting and linting**:
+
+   ```bash
+   # Format code with Black
+   black .
+   
+   # Sort imports with isort
+   isort .
+   
+   # Run type checking with mypy
+   mypy panflow
+   
+   # Run flake8 for linting
+   flake8 panflow
+   ```
+
+### Project Structure
+
+The project uses Poetry for dependency management and packaging. The main configuration is in `pyproject.toml`:
+
+```toml
+[tool.poetry.scripts]
+panflow = "panflow.cli:app"
+```
+
+This creates the `panflow` command-line entry point, which points to the `app` object in the `panflow.cli` module. When you install the package using Poetry or pip, this entry point allows you to run the application with the `panflow` command.
+
+### Continuous Integration and Deployment
+
+The project uses GitLab CI/CD for continuous integration and deployment. The configuration is in `.gitlab-ci.yml`:
+
+- **Test Stage**: Runs tests and linting
+- **Build Stage**: Creates Python packages and standalone binaries for all platforms
+- **Release Stage**: Creates a GitLab Release with all artifacts
+
+To create a new release:
+
+1. Tag a commit:
+   ```bash
+   git tag -a v0.1.0 -m "Release v0.1.0"
+   git push origin v0.1.0
+   ```
+
+2. The CI/CD pipeline will automatically build the packages and binaries and create a release
+
+You can find all releases at: https://code.pan.run/gcs-automation/panflow/-/releases
+
+For a detailed list of changes between versions, please see the [CHANGELOG.md](CHANGELOG.md) file.
 
 ## License
 

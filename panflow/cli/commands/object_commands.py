@@ -13,6 +13,7 @@ from panflow import PANFlowConfig
 from panflow.core.graph_utils import ConfigGraph
 from panflow.core.query_language import Query
 from panflow.core.query_engine import QueryExecutor
+from panflow.core.graph_service import GraphService
 from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
 
 from ..app import object_app
@@ -547,8 +548,9 @@ def find_objects(
         # {"port": "8080"}
     """
     try:
-        # Initialize the configuration
+        # Initialize the configuration and graph service
         xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
+        graph_service = GraphService()
         
         results = []
         
@@ -584,21 +586,11 @@ def find_objects(
             if object_type == "address" and ip_contains:
                 logger.info(f"Finding address objects containing IP '{ip_contains}' throughout the configuration...")
                 
-                # Convert the simple IP string to a proper regex pattern for address objects
-                ip_pattern = ip_contains.replace(".", "\\.")  # Escape dots for regex
-                
-                # Generate a graph query to find address objects containing this IP
-                query_text = f"MATCH (a:address) WHERE a.value =~ '.*{ip_pattern}.*' RETURN a.name"
-                
-                # Use the graph query system with our simplified syntax
-                graph = ConfigGraph()
-                graph.build_from_xml(xml_config.tree)
-                query = Query(query_text)
-                executor = QueryExecutor(graph)
-                query_results = executor.execute(query)
-                
-                # Get all matching object names
-                matching_names = [row['a.name'] for row in query_results if 'a.name' in row]
+                # Use the graph service to find address objects containing the IP
+                matching_names = graph_service.find_address_objects_containing_ip(
+                    xml_config.tree, 
+                    ip_contains
+                )
                 
                 # Find the full object information across all contexts
                 for obj_name in matching_names:
@@ -608,18 +600,11 @@ def find_objects(
             elif object_type == "service" and port_equals:
                 logger.info(f"Finding service objects with port '{port_equals}' throughout the configuration...")
                 
-                # Generate a graph query to find service objects with this port
-                query_text = f"MATCH (s:service) WHERE s.dst_port == '{port_equals}' RETURN s.name"
-                
-                # Use the graph query system with our simplified syntax
-                graph = ConfigGraph()
-                graph.build_from_xml(xml_config.tree)
-                query = Query(query_text)
-                executor = QueryExecutor(graph)
-                query_results = executor.execute(query)
-                
-                # Get all matching object names
-                matching_names = [row['s.name'] for row in query_results if 's.name' in row]
+                # Use the graph service to find service objects with the port
+                matching_names = graph_service.find_service_objects_with_port(
+                    xml_config.tree, 
+                    port_equals
+                )
                 
                 # Find the full object information across all contexts
                 for obj_name in matching_names:
@@ -629,21 +614,13 @@ def find_objects(
             elif value:
                 logger.info(f"Finding {object_type} objects with value containing '{value}' throughout the configuration...")
                 
-                # Convert wildcards to regex pattern
-                regex_pattern = value.replace(".", "\\.").replace("*", ".*")
-                
-                # Generate a graph query to find objects with values matching this pattern
-                query_text = f"MATCH (a:{object_type}) WHERE a.value =~ '.*{regex_pattern}.*' RETURN a.name"
-                
-                # Use the graph query system with our simplified syntax
-                graph = ConfigGraph()
-                graph.build_from_xml(xml_config.tree)
-                query = Query(query_text)
-                executor = QueryExecutor(graph)
-                query_results = executor.execute(query)
-                
-                # Get all matching object names
-                matching_names = [row['a.name'] for row in query_results if 'a.name' in row]
+                # Use the graph service to find objects with values matching the pattern
+                matching_names = graph_service.find_objects_by_value_pattern(
+                    xml_config.tree, 
+                    object_type, 
+                    value,
+                    wildcard_support=True
+                )
                 
                 # Find the full object information across all contexts
                 for obj_name in matching_names:
@@ -654,14 +631,13 @@ def find_objects(
                 # If no search method was provided, perform a search for all objects
                 logger.info(f"Finding all {object_type} objects throughout the configuration...")
                 
-                # First find all objects of this type using the graph
-                graph = ConfigGraph()
-                graph.build_from_xml(xml_config.tree)
-                query = Query(f"MATCH (a:{object_type}) RETURN a.name")
-                executor = QueryExecutor(graph)
-                query_results = executor.execute(query)
+                # Use the graph service to execute a simple query for all objects of this type
+                query_results = graph_service.execute_custom_query(
+                    xml_config.tree,
+                    f"MATCH (a:{object_type}) RETURN a.name"
+                )
                 
-                # Get all object names
+                # Extract names from the results
                 all_obj_names = [row['a.name'] for row in query_results if 'a.name' in row]
                 
                 # Find the full object information across all contexts
@@ -673,35 +649,13 @@ def find_objects(
         if query_filter and results:
             logger.info(f"Applying graph query filter: {query_filter}")
             
-            # Build a graph from the configuration
-            from panflow.core.graph_utils import ConfigGraph
-            from panflow.core.query_language import Query
-            from panflow.core.query_engine import QueryExecutor
-            
-            graph = ConfigGraph()
-            graph.build_from_xml(xml_config.tree)
-            
-            # Prepare a query that returns object names
-            if "RETURN" not in query_filter.upper():
-                query_text = f"{query_filter} RETURN a.name"
-            else:
-                query_text = query_filter
-                
-            # Execute the query
-            query = Query(query_text)
-            executor = QueryExecutor(graph)
-            query_results = executor.execute(query)
-            
-            # Extract object names from the query results
-            matching_names = []
-            for row in query_results:
-                if 'a.name' in row:
-                    matching_names.append(row['a.name'])
-                elif len(row) == 1:  # If there's only one column, use its value
-                    matching_names.append(list(row.values())[0])
-                    
-            # Filter the object finder results by the names that also matched the query
-            filtered_results = [loc for loc in results if loc.object_name in matching_names]
+            # Use the graph service to filter the results
+            filtered_results = graph_service.filter_objects_by_query(
+                xml_config.tree,
+                results,
+                object_type,
+                query_filter
+            )
             
             logger.info(f"Graph query matched {len(filtered_results)} of {len(results)} objects")
             results = filtered_results
@@ -765,8 +719,9 @@ def find_duplicate_objects(
             --query-filter "MATCH (a:address) WHERE a.value =~ '.*10\\.0\\.0.*'"
     """
     try:
-        # Initialize the configuration
+        # Initialize the configuration and graph service
         xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
+        graph_service = GraphService()
         
         results = {}
         
@@ -815,12 +770,20 @@ def find_duplicate_objects(
                 # Find all duplicate address objects
                 all_duplicates = xml_config.find_duplicate_object_values(object_type)
                 
-                # Filter duplicates by IP pattern
+                # Get all address objects matching the IP pattern
+                matching_names = set(graph_service.find_address_objects_containing_ip(
+                    xml_config.tree, 
+                    ip_contains
+                ))
+                
+                # Filter duplicates by IP pattern using the matching names
                 filtered_duplicates = {}
                 for value_key, locations in all_duplicates.items():
-                    # Check if the value contains the specified IP
-                    if ip_contains in value_key:
-                        filtered_duplicates[value_key] = locations
+                    # Keep only location objects whose names are in the matching_names set
+                    matching_locations = [loc for loc in locations if loc.object_name in matching_names]
+                    # Only include if we have multiple matching locations (duplicates)
+                    if len(matching_locations) > 1:
+                        filtered_duplicates[value_key] = matching_locations
                         
                 logger.info(f"Found {len(filtered_duplicates)} values with duplicates matching IP filter")
                 
@@ -831,12 +794,20 @@ def find_duplicate_objects(
                 # Find all duplicate service objects
                 all_duplicates = xml_config.find_duplicate_object_values(object_type)
                 
-                # Filter duplicates by port
+                # Get all service objects matching the port
+                matching_names = set(graph_service.find_service_objects_with_port(
+                    xml_config.tree, 
+                    port_equals
+                ))
+                
+                # Filter duplicates by port using the matching names
                 filtered_duplicates = {}
                 for value_key, locations in all_duplicates.items():
-                    # Check if the value contains the specified port
-                    if f"port:{port_equals}" in value_key:
-                        filtered_duplicates[value_key] = locations
+                    # Keep only location objects whose names are in the matching_names set
+                    matching_locations = [loc for loc in locations if loc.object_name in matching_names]
+                    # Only include if we have multiple matching locations (duplicates)
+                    if len(matching_locations) > 1:
+                        filtered_duplicates[value_key] = matching_locations
                         
                 logger.info(f"Found {len(filtered_duplicates)} values with duplicates matching port filter")
                 
@@ -844,20 +815,25 @@ def find_duplicate_objects(
                 logger.info(f"Filtering by value containing '{value}'...")
                 filtering_applied = True
                 
-                # Convert wildcards to regex pattern
-                import re
-                pattern_str = value.replace(".", "\\.").replace("*", ".*")
-                pattern = re.compile(pattern_str)
-                
                 # Find all duplicate objects
                 all_duplicates = xml_config.find_duplicate_object_values(object_type)
                 
-                # Filter duplicates by value pattern
+                # Get all objects matching the value pattern
+                matching_names = set(graph_service.find_objects_by_value_pattern(
+                    xml_config.tree, 
+                    object_type, 
+                    value,
+                    wildcard_support=True
+                ))
+                
+                # Filter duplicates by value pattern using the matching names
                 filtered_duplicates = {}
                 for value_key, locations in all_duplicates.items():
-                    # Check if the value matches the pattern
-                    if pattern.search(value_key):
-                        filtered_duplicates[value_key] = locations
+                    # Keep only location objects whose names are in the matching_names set
+                    matching_locations = [loc for loc in locations if loc.object_name in matching_names]
+                    # Only include if we have multiple matching locations (duplicates)
+                    if len(matching_locations) > 1:
+                        filtered_duplicates[value_key] = matching_locations
                         
                 logger.info(f"Found {len(filtered_duplicates)} values with duplicates matching value filter")
                 
@@ -872,28 +848,19 @@ def find_duplicate_objects(
                 else:
                     all_duplicates = filtered_duplicates
                 
-                # Build a graph from the configuration
-                graph = ConfigGraph()
-                graph.build_from_xml(xml_config.tree)
-                
-                # Prepare a query that returns object names
-                if "RETURN" not in query_filter.upper():
-                    query_text = f"{query_filter} RETURN a.name"
-                else:
-                    query_text = query_filter
-                    
-                # Execute the query
-                query = Query(query_text)
-                executor = QueryExecutor(graph)
-                query_results = executor.execute(query)
+                # Execute the query to get matching object names
+                query_results = graph_service.execute_custom_query(
+                    xml_config.tree,
+                    query_filter if "RETURN" in query_filter.upper() else f"{query_filter} RETURN a.name"
+                )
                 
                 # Extract object names from the query results
-                matching_names = []
+                matching_names = set()
                 for row in query_results:
                     if 'a.name' in row:
-                        matching_names.append(row['a.name'])
-                    elif len(row) == 1:  # If there's only one column, use its value
-                        matching_names.append(list(row.values())[0])
+                        matching_names.add(row['a.name'])
+                    elif len(row) == 1:  # If there's only one column, assume it's the name
+                        matching_names.add(list(row.values())[0])
                 
                 # Filter duplicates by names matching the query
                 filtered_duplicates = {}
