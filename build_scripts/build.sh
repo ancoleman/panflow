@@ -58,7 +58,7 @@ python3 -m PyInstaller --name="$OUTPUT_NAME" --onefile --clean --noupx \
     --hidden-import=lxml.etree \
     --hidden-import=yaml \
     --hidden-import=networkx \
-    panflow_cli.py
+    cli.py
 
 # Check if build was successful
 if [[ -f "dist/$OUTPUT_NAME" ]]; then

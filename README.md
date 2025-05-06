@@ -173,41 +173,41 @@ config.save("updated-firewall.xml")
 
 ## Command-line Usage
 
-The library includes a comprehensive CLI that can be accessed through `panflow_cli.py`:
+The library includes a comprehensive CLI that can be accessed through the command line:
 
 ```bash
 # List all address objects
-python panflow_cli.py object list --config firewall.xml --type address --context vsys --vsys vsys1
+python cli.py object list --config firewall.xml --type address --context vsys --vsys vsys1
 
 # Add a new address object
-python panflow_cli.py object add --config firewall.xml --type address --name web-server --properties web-server.json --output updated.xml
+python cli.py object add --config firewall.xml --type address --name web-server --properties web-server.json --output updated.xml
 
 # Generate a report of unused objects
-python panflow_cli.py report unused-objects --config firewall.xml --output unused.json
+python cli.py report unused-objects --config firewall.xml --output unused.json
 
 # Bulk update security policies matching criteria
-python panflow_cli.py policy bulk-update --config firewall.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
+python cli.py policy bulk-update --config firewall.xml --type security_rules --criteria criteria.json --operations operations.json --output updated.xml
 
 # Find and merge duplicate objects
-python panflow_cli.py deduplicate --config firewall.xml --type address --output deduped.xml
+python cli.py deduplicate --config firewall.xml --type address --output deduped.xml
 
 # Query the configuration with the graph query language
-python panflow_cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
+python cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
 
 # Filter objects using a graph query
-python panflow_cli.py object list --config config.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))"
+python cli.py object list --config config.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))"
 
 # Filter policies using a graph query
-python panflow_cli.py policy filter --config config.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.port = '80'"
+python cli.py policy filter --config config.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.port = '80'"
 
 # Merge a policy from one config to another
-python panflow_cli.py merge policy --source-config source.xml --target-config target.xml --type security_pre_rules --name "Allow Web" --output merged.xml
+python cli.py merge policy --source-config source.xml --target-config target.xml --type security_pre_rules --name "Allow Web" --output merged.xml
 
 # Run commands with auto-detected device type
-python panflow_cli.py object list --config config.xml --type address  # Device type will be auto-detected
+python cli.py object list --config config.xml --type address  # Device type will be auto-detected
 ```
 
-> **Note**: All CLI commands can be used with either `panflow_cli.py` (recommended) or `cli.py` (legacy). See the [CLI Migration Guide](docs/cli_migration.md) for details.
+> **Note**: When installed as a package, you can also run commands using simply `panflow` followed by the command.
 
 For a complete reference of all CLI commands and options, see the [CLI Usage Guide](CLI_USAGE.md).
 
@@ -332,8 +332,7 @@ The library is organized into logical modules:
 ├── docs/                       # Documentation
 ├── pyproject.toml              # Project metadata
 ├── pytest.ini                  # Test configuration
-├── panflow_cli.py              # Main command-line interface (recommended)
-├── cli.py                      # Legacy command-line interface (deprecated)
+├── cli.py                      # Main command-line interface
 ├── tests/                      # Test suite
 │   ├── fixtures/               # Test fixtures
 │   ├── integration/            # Integration tests

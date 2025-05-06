@@ -20,7 +20,7 @@ docker run --rm -v "$(pwd):/app" -w /app python:3.10-slim bash -c "
     --hidden-import=lxml.etree \
     --hidden-import=yaml \
     --hidden-import=networkx \
-    panflow_cli.py
+    cli.py
 "
 
 # Rename the Linux binary
@@ -42,7 +42,7 @@ echo "   --hidden-import=rich ^"
 echo "   --hidden-import=lxml.etree ^"
 echo "   --hidden-import=yaml ^"
 echo "   --hidden-import=networkx ^"
-echo "   panflow_cli.py"
+echo "   cli.py"
 echo ""
 echo "macOS:"
 echo "1. On a macOS machine, install Python 3.7+ and required packages:"
@@ -55,7 +55,7 @@ echo "   --hidden-import=rich \\"
 echo "   --hidden-import=lxml.etree \\"
 echo "   --hidden-import=yaml \\"
 echo "   --hidden-import=networkx \\"
-echo "   panflow_cli.py"
+echo "   cli.py"
 echo ""
 echo "=== Option for cross-platform builds ==="
 echo "For a more automated cross-platform build process, consider using:"

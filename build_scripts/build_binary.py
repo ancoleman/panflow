@@ -22,7 +22,7 @@ def build_binary():
     spec_file = os.path.join(ROOT_DIR, "panflow.spec")
     
     # Main script to use as entry point
-    entry_point = os.path.join(ROOT_DIR, "panflow_cli.py")
+    entry_point = os.path.join(ROOT_DIR, "cli.py")
     
     # Define PyInstaller command
     cmd = [
