@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.1.2] - 2025-05-06
+
+### Fixed
+- Corrected inconsistent object type names in object_finder.py
+- Removed non-existent object types from default search list
+- Eliminated warning messages during object search operations
+
 ## [0.1.1] - 2025-05-06
 
 ### Added
@@ -45,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.1...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.2...HEAD
+[0.1.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.1...v0.1.2
 [0.1.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.0...v0.1.1
 [0.1.0]: https://code.pan.run/gcs-automation/panflow/releases/tag/v0.1.0
