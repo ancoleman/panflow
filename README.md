@@ -25,7 +25,6 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 |----------|-------------|------|
 | **Getting Started** | Quick start guide | [Getting Started](docs/getting_started.md) |
 | **CLI Usage** | Comprehensive CLI reference | [CLI Usage Guide](CLI_USAGE.md) |
-| **CLI Migration** | Guide for transitioning from legacy to package-based CLI | [CLI Migration Guide](docs/cli_migration.md) |
 | **Graph Query Language** | Reference for the graph-based query language | [Graph Query Language](docs/graph_query_language.md) |
 | **Query Examples** | Example queries for common tasks | [Query Examples](docs/query_examples.md) |
 | **Object Merging** | Documentation on merging objects | [Object Merger](docs/object_merger.md) |
