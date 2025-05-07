@@ -29,6 +29,8 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 | **Query Examples** | Example queries for common tasks | [Query Examples](docs/query_examples.md) |
 | **Object Merging** | Documentation on merging objects | [Object Merger](docs/object_merger.md) |
 | **Deduplication** | Guide for deduplicating objects | [Deduplication](docs/deduplication.md) |
+| **Cleanup Detection** | How unused objects and disabled policies are detected | [Cleanup Detection](docs/cleanup_detection.md) |
+| **Cleanup Examples** | Examples of cleanup commands | [Cleanup Examples](examples/cleanup_examples.md) |
 | **Error Handling** | Error handling and troubleshooting | [Error Handling](docs/error_handling.md) |
 | **XPath Handling** | Dynamic XPath resolver documentation | [Dynamic XPath](docs/dynamic_xpath.md) |
 | **XML Utilities** | XML manipulation utilities | [XML Utils](docs/xml_utils.md) |
@@ -189,6 +191,12 @@ python cli.py policy bulk-update --config firewall.xml --type security_rules --c
 
 # Find and merge duplicate objects
 python cli.py deduplicate --config firewall.xml --type address --output deduped.xml
+
+# Find and clean up unused objects
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --dry-run
+
+# Find and remove disabled policies
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml --report-file report.json
 
 # Query the configuration with the graph query language
 python cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
