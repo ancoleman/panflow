@@ -738,7 +738,7 @@ class PolicyMerger:
             "service": "/service/entry[@name='{0}']",
             "service_group": "/service-group/entry[@name='{0}']",
             "application_group": "/application-group/entry[@name='{0}']",
-            "security_profile_group": "/profile-group/entry[@name='{0}']",
+            "security_profile_group": "/profile-group/entry[@name='{0}']",  # Using XML path 'profile-group' for backwards compatibility
             "virus": "/profiles/virus/entry[@name='{0}']",
             "spyware": "/profiles/spyware/entry[@name='{0}']",
             "vulnerability": "/profiles/vulnerability/entry[@name='{0}']",

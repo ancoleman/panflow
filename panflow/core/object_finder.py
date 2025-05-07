@@ -436,7 +436,7 @@ def find_all_locations(
     default_object_types = [
         "address", "address-group", "service", "service-group", 
         "tag", "application-filter", "application-group",
-        "security-profile-group", "schedule", "region",
+        "security_profile_group", "schedule", "region",
         # Using correct naming from YAML object definition keys:
         "dynamic_user_group"  # Changed from "dynamic-user-group" to match YAML
         # Note: In the YAML, the key is "dynamic_user_group" (with underscores)

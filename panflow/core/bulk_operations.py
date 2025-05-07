@@ -48,6 +48,100 @@ class ConfigQuery:
         logger.debug(f"Initialized ConfigQuery: device_type={device_type}, context_type={context_type}, "
                     f"version={version}, context_kwargs={kwargs}")
         
+    def get_policies(self, policy_type):
+        """
+        Get policies of the specified type.
+        
+        Args:
+            policy_type: Type of policy to get (security_pre_rules, nat_rules, etc.)
+                
+        Returns:
+            List of policy dictionaries with all relevant attributes
+        """
+        logger.info(f"Getting {policy_type} policies")
+        
+        try:
+            # Get all policy elements of this type
+            policies = self.select_policies(policy_type)
+            
+            if not policies:
+                logger.info(f"No {policy_type} policies found")
+                return []
+            
+            # Convert XML elements to dictionaries
+            policy_dicts = []
+            for policy in policies:
+                policy_dict = self._policy_to_dict(policy)
+                policy_dicts.append(policy_dict)
+            
+            logger.info(f"Found {len(policy_dicts)} {policy_type} policies")
+            return policy_dicts
+        
+        except Exception as e:
+            logger.error(f"Error getting policies: {str(e)}", exc_info=True)
+            return []
+    
+    def _policy_to_dict(self, policy_element):
+        """
+        Convert a policy XML element to a dictionary.
+        
+        Args:
+            policy_element: The policy XML element
+            
+        Returns:
+            Dictionary containing the policy attributes
+        """
+        try:
+            # Base policy attributes
+            policy_dict = {
+                'name': policy_element.get('name', 'unnamed'),
+                'xml_element': policy_element  # Keep reference to original element
+            }
+            
+            # Extract description if present
+            description_elem = policy_element.find('./description')
+            if description_elem is not None and description_elem.text:
+                policy_dict['description'] = description_elem.text
+            
+            # Extract common policy attributes
+            for simple_attr in ['action', 'log-start', 'log-end', 'disabled']:
+                attr_elem = policy_element.find(f'./{simple_attr}')
+                if attr_elem is not None and attr_elem.text:
+                    # Convert dashed attribute names to underscore format
+                    attr_name = simple_attr.replace('-', '_')
+                    policy_dict[attr_name] = attr_elem.text
+            
+            # Extract list-type attributes (source, destination, service, application)
+            for list_attr in ['from', 'to', 'source', 'destination', 'service', 'application']:
+                members = policy_element.findall(f'./{list_attr}/member')
+                if members:
+                    # Convert 'from' and 'to' to source_zone and destination_zone
+                    if list_attr == 'from':
+                        attr_name = 'source_zone'
+                    elif list_attr == 'to':
+                        attr_name = 'destination_zone'
+                    else:
+                        attr_name = list_attr
+                    
+                    policy_dict[attr_name] = [m.text for m in members if m.text]
+            
+            # Extract tags
+            tags = policy_element.findall('./tag/member')
+            if tags:
+                policy_dict['tags'] = [t.text for t in tags if t.text]
+            
+            # Extract profile settings
+            profile_group = policy_element.findall('./profile-setting/group/member')
+            if profile_group:
+                policy_dict['profile_group'] = [p.text for p in profile_group if p.text]
+            
+            return policy_dict
+            
+        except Exception as e:
+            logger.error(f"Error converting policy element to dict: {str(e)}", exc_info=True)
+            # Return minimal dict with name to avoid breaking code that expects a dict
+            return {'name': policy_element.get('name', 'unknown'), 'error': str(e)}
+    
     def select_policies(self, policy_type, criteria=None):
         """
         Select policies matching the criteria with enhanced filtering capabilities.
@@ -611,6 +705,10 @@ class ConfigUpdater:
                     # Update IP address for address objects
                     modified |= self._update_ip_address(element, params)
                 
+                elif operation == 'rename':
+                    # Rename the policy or object
+                    modified |= self._rename_element(element, params)
+                
                 else:
                     logger.warning(f"Unknown operation: {operation}")
             
@@ -1141,6 +1239,81 @@ class ConfigUpdater:
                 
         except Exception as e:
             logger.error(f"Error updating IP address of object '{element_name}': {str(e)}", exc_info=True)
+            return False
+    
+    def _rename_element(self, element, params):
+        """
+        Rename a policy or object.
+        
+        Args:
+            element: XML element to update
+            params: Parameters for the operation including:
+                - name: New name to set (direct replacement)
+                - mode: Optional mode - 'replace' (default), 'prefix', 'suffix', 'regex'
+                - pattern: For regex mode, the pattern to search for
+                - replacement: For regex mode, the replacement string
+                - prefix: For prefix mode, the prefix to add
+                - suffix: For suffix mode, the suffix to add
+            
+        Returns:
+            bool: True if modifications were made, False otherwise
+        """
+        old_name = element.get('name', 'unknown')
+        mode = params.get('mode', 'replace')
+        
+        try:
+            new_name = None
+            
+            if mode == 'replace':
+                # Direct name replacement
+                new_name = params.get('name')
+                if not new_name:
+                    logger.warning(f"Missing 'name' in rename operation for element '{old_name}'")
+                    return False
+            
+            elif mode == 'prefix':
+                # Add a prefix to the name
+                prefix = params.get('prefix')
+                if not prefix:
+                    logger.warning(f"Missing 'prefix' in rename operation for element '{old_name}'")
+                    return False
+                new_name = f"{prefix}{old_name}"
+            
+            elif mode == 'suffix':
+                # Add a suffix to the name
+                suffix = params.get('suffix')
+                if not suffix:
+                    logger.warning(f"Missing 'suffix' in rename operation for element '{old_name}'")
+                    return False
+                new_name = f"{old_name}{suffix}"
+            
+            elif mode == 'regex':
+                # Use regex pattern replacement
+                pattern = params.get('pattern')
+                replacement = params.get('replacement')
+                if not pattern or replacement is None:  # Allow empty string replacement
+                    logger.warning(f"Missing 'pattern' or 'replacement' in rename operation for element '{old_name}'")
+                    return False
+                
+                import re
+                new_name = re.sub(pattern, replacement, old_name)
+            
+            else:
+                logger.warning(f"Unsupported rename mode: {mode}")
+                return False
+            
+            # Check if the new name is different from the old name
+            if new_name == old_name:
+                logger.debug(f"New name same as old name, no change needed for '{old_name}'")
+                return False
+            
+            # Update the name attribute
+            element.set('name', new_name)
+            logger.info(f"Renamed element from '{old_name}' to '{new_name}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error renaming element '{old_name}': {str(e)}", exc_info=True)
             return False
             
     def bulk_merge_objects(

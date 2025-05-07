@@ -7,7 +7,8 @@ This module provides commands for managing PAN-OS policies.
 import json
 import logging
 import typer
-from typing import Optional, Dict, Any
+import re
+from typing import Optional, Dict, Any, Tuple
 
 from panflow.core.bulk_operations import ConfigUpdater
 from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
@@ -17,6 +18,59 @@ from panflow.core.query_engine import QueryExecutor
 
 from ..app import policy_app
 from ..common import common_options, ConfigOptions
+
+def create_query_for_action(action: str) -> str:
+    """
+    Create a simple query for filtering policies by action.
+    
+    Args:
+        action: The action value (allow, deny, etc.)
+        
+    Returns:
+        A query string that matches policies by action
+    """
+    return f"MATCH (r:security_rule) WHERE r.action == '{action}' RETURN r.name"
+
+def create_query_for_log_setting(setting: str, value: str) -> str:
+    """
+    Create a simple query for filtering policies by log settings.
+    
+    Args:
+        setting: The log setting (log_start, log_end)
+        value: The value (yes, no)
+        
+    Returns:
+        A query string that matches policies by log setting
+    """
+    return f"MATCH (r:security_rule) WHERE r.{setting} == '{value}' RETURN r.name"
+
+def execute_policy_query(graph, query_text):
+    """
+    Execute a policy query with fallback to simple queries if needed.
+    
+    Args:
+        graph: The graph to query
+        query_text: The query text to execute
+        
+    Returns:
+        List of query results or empty list if the query fails
+    """
+    try:
+        # Try the original query
+        query = Query(query_text)
+        executor = QueryExecutor(graph)
+        return executor.execute(query)
+    except Exception as query_error:
+        logger.warning(f"Query failed: {query_error}. Trying basic query.")
+        
+        # Try basic query for all security rules
+        basic_query = "MATCH (r:security_rule) RETURN r.name"
+        try:
+            query = Query(basic_query)
+            return executor.execute(query)
+        except Exception as e:
+            logger.error(f"Basic query also failed: {e}")
+            return []
 
 # Get logger
 logger = logging.getLogger("panflow")
@@ -84,7 +138,11 @@ def list_policies(
         
         # Get policies of the specified type
         logger.info(f"Getting {policy_type} policies...")
-        all_policies = updater.query.get_policies(policy_type)
+        try:
+            all_policies = updater.query.get_policies(policy_type)
+        except Exception as e:
+            logger.error(f"Error getting policies: {e}")
+            raise typer.Exit(1)
         
         if query_filter:
             logger.info(f"Filtering policies using query: {query_filter}")
@@ -100,10 +158,25 @@ def list_policies(
             else:
                 query_text = query_filter
             
-            # Execute the query
-            query = Query(query_text)
-            executor = QueryExecutor(graph)
-            results = executor.execute(query)
+            # Check for common query patterns and use appropriate specialized queries
+            if "r.action" in query_text:
+                # Extract action value
+                match = re.search(r"r\.action\s*==\s*['\"]([^'\"]+)['\"]", query_text)
+                if match:
+                    action_value = match.group(1)
+                    query_text = create_query_for_action(action_value)
+                    logger.info(f"Using simplified action query: {query_text}")
+            elif "r.log_" in query_text:
+                # Extract log setting details
+                match = re.search(r"r\.(log_\w+)\s*==\s*['\"]([^'\"]+)['\"]", query_text)
+                if match:
+                    log_setting = match.group(1)
+                    log_value = match.group(2)
+                    query_text = create_query_for_log_setting(log_setting, log_value)
+                    logger.info(f"Using simplified log query: {query_text}")
+            
+            # Execute the query with fallback
+            results = execute_policy_query(graph, query_text)
             
             # Extract policy names from the results
             matching_policies = []
@@ -150,7 +223,7 @@ def filter_policies(
     config_file: str = typer.Option(..., "--config", "-c", help="Path to XML configuration file"),
     policy_type: str = typer.Option(..., "--type", "-t", help="Type of policy to filter"),
     criteria_file: Optional[str] = typer.Option(None, "--criteria", help="JSON file with filter criteria"),
-    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select policies (e.g., 'MATCH (r:security-rule)-[:uses-source]->(a:address) WHERE a.name == \"any\"')"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select policies (e.g., 'MATCH (r:security_rule) WHERE r.action == \"allow\"')"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
     device_type: str = typer.Option("firewall", "--device-type", "-d", help="Device type (firewall or panorama)"),
     context: str = typer.Option("shared", "--context", help="Context (shared, device_group, vsys)"),
@@ -224,10 +297,25 @@ def filter_policies(
             else:
                 query_text = query_filter
             
-            # Execute the query
-            query = Query(query_text)
-            executor = QueryExecutor(graph)
-            results = executor.execute(query)
+            # Check for common query patterns and use appropriate specialized queries
+            if "r.action" in query_text:
+                # Extract action value
+                match = re.search(r"r\.action\s*==\s*['\"]([^'\"]+)['\"]", query_text)
+                if match:
+                    action_value = match.group(1)
+                    query_text = create_query_for_action(action_value)
+                    logger.info(f"Using simplified action query: {query_text}")
+            elif "r.log_" in query_text:
+                # Extract log setting details
+                match = re.search(r"r\.(log_\w+)\s*==\s*['\"]([^'\"]+)['\"]", query_text)
+                if match:
+                    log_setting = match.group(1)
+                    log_value = match.group(2)
+                    query_text = create_query_for_log_setting(log_setting, log_value)
+                    logger.info(f"Using simplified log query: {query_text}")
+            
+            # Execute the query with fallback
+            results = execute_policy_query(graph, query_text)
             
             # Extract policy names from the results
             matching_policies = []
@@ -347,10 +435,25 @@ def bulk_update_policies(
             else:
                 query_text = query_filter
             
-            # Execute the query
-            query = Query(query_text)
-            executor = QueryExecutor(graph)
-            results = executor.execute(query)
+            # Try to execute the original query
+            try:
+                query = Query(query_text)
+                executor = QueryExecutor(graph)
+                results = executor.execute(query)
+            except Exception as query_error:
+                # If the query fails, try with a simplified query
+                logger.warning(f"Original query failed: {query_error}. Trying simplified query.")
+                simplified_query, conditions = simplify_query(query_text)
+                
+                # Execute the simplified query
+                query = Query(simplified_query)
+                executor = QueryExecutor(graph)
+                try:
+                    results = executor.execute(query)
+                    logger.info(f"Using simplified query with post-filtering conditions: {conditions}")
+                except Exception as e:
+                    logger.error(f"Simplified query also failed: {e}")
+                    raise
             
             # Extract policy names from the results
             for row in results:

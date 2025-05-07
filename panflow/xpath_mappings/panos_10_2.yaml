@@ -25,6 +25,7 @@ objects:
   application-group: "{base_path}/application-group/entry[@name='{name}']"
   application-filter: "{base_path}/application-filter/entry[@name='{name}']"
   security-profile-group: "{base_path}/profile-group/entry[@name='{name}']"
+  security_profile_group: "{base_path}/profile-group/entry[@name='{name}']"
   av-profile: "{base_path}/profiles/virus/entry[@name='{name}']"
   as-profile: "{base_path}/profiles/spyware/entry[@name='{name}']"
   vp-profile: "{base_path}/profiles/vulnerability/entry[@name='{name}']"

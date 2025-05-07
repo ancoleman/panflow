@@ -75,7 +75,7 @@ class ObjectMerger:
             "tag": {"10.2": False, "11.2": False},
         },
         # Security Profile Types
-        "security-profile-group": {
+        "security_profile_group": {
             "description": {"10.1": False, "10.2": False, "11.2": False},
             "virus": {"10.1": False, "10.2": False, "11.2": False},
             "spyware": {"10.1": False, "10.2": False, "11.2": False},
@@ -520,7 +520,7 @@ class ObjectMerger:
                 logger.warning(f"Error handling service group '{object_name}': {e}", exc_info=True)
                 
         # Special handling for security profile groups
-        if copy_references and object_type in ["security-profile-group", "profile-group"]:
+        if copy_references and object_type in ["security_profile_group", "security-profile-group", "profile-group"]:
             try:
                 logger.debug(f"Processing security profile group '{object_name}'")
                 self._handle_security_profile_group(
@@ -1765,7 +1765,7 @@ class ObjectMerger:
             # Copy the profile group and all profiles it references
             try:
                 self.copy_object(
-                    "security-profile-group",
+                    "security_profile_group",
                     group_name,
                     source_context_type,
                     target_context_type,
@@ -2442,7 +2442,7 @@ class ObjectMerger:
         elif object_type in ["schedule"]:
             self._validate_schedule(object_element, object_name, validation_errors)
         # Security profile validation
-        elif object_type in ["security-profile-group", "profile-group"]:
+        elif object_type in ["security_profile_group", "security-profile-group", "profile-group"]:
             self._validate_security_profile_group(object_element, object_name, validation_errors)
         elif object_type in ["virus", "antivirus", "virus-profile"]:
             self._validate_antivirus_profile(object_element, object_name, validation_errors)
@@ -3192,7 +3192,7 @@ class ObjectMerger:
             self._analyze_service_group_dependencies(object_element, object_name, result)
         elif object_type in ["application_group", "application-group"]:
             self._analyze_application_group_dependencies(object_element, object_name, result)
-        elif object_type in ["profile_group", "profile-group", "security-profile-group"]:
+        elif object_type in ["security_profile_group", "profile_group", "profile-group", "security-profile-group"]:
             self._analyze_profile_group_dependencies(object_element, object_name, result)
             
         # Find objects that reference this object
@@ -3535,7 +3535,7 @@ class ObjectMerger:
             "application": ["./application/member"],
             "application-group": ["./application/member"],
             "tag": ["./tag/member"],
-            "security-profile-group": ["./profile-setting/group/member"],
+            "security_profile_group": ["./profile-setting/group/member"],
             "schedule": ["./schedule"],
             "url-category": ["./category/member"]
         }

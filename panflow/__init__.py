@@ -4,6 +4,11 @@ PANFlow for PAN-OS XML
 A comprehensive set of utilities for working with PAN-OS XML configurations.
 """
 
+# Define object type aliases for CLI usage
+OBJECT_TYPE_ALIASES = {
+    "profile-group": "security_profile_group"
+}
+
 import os
 import logging
 from typing import Dict, Any, Optional, List, Tuple, Union

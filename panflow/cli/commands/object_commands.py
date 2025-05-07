@@ -9,7 +9,7 @@ import typer
 import logging
 from typing import Optional, Dict, Any, List
 
-from panflow import PANFlowConfig
+from panflow import PANFlowConfig, OBJECT_TYPE_ALIASES
 from panflow.core.graph_utils import ConfigGraph
 from panflow.core.query_language import Query
 from panflow.core.query_engine import QueryExecutor
@@ -45,10 +45,13 @@ def list_objects(
         # Get context kwargs
         context_kwargs = ContextOptions.get_context_kwargs(context, device_group, vsys, template)
         
+        # Check if object_type is an alias and convert it
+        actual_object_type = OBJECT_TYPE_ALIASES.get(object_type, object_type)
+        
         logger.info(f"Listing {object_type} objects in {context} context...")
         
         # Get the raw objects from the API
-        objects = xml_config.get_objects(object_type, context, **context_kwargs)
+        objects = xml_config.get_objects(actual_object_type, context, **context_kwargs)
         
         # Filter objects using graph query if specified
         if query_filter:
@@ -257,6 +260,7 @@ def filter_objects(
     config: str = ConfigOptions.config_file(),
     object_type: str = ObjectOptions.object_type(),
     criteria_file: Optional[str] = typer.Option(None, "--criteria", help="JSON file with filter criteria"),
+    value: Optional[str] = typer.Option(None, "--value", "-v", help="Simple value to filter objects by (supports wildcards with *)"),
     query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects (e.g., 'MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))')"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
     device_type: str = ConfigOptions.device_type(),
@@ -271,9 +275,12 @@ def filter_objects(
         # Initialize the configuration
         xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         
+        # Check if object_type is an alias and convert it
+        actual_object_type = OBJECT_TYPE_ALIASES.get(object_type, object_type)
+        
         # Ensure at least one filter method is specified
-        if not criteria_file and not query_filter:
-            logger.error("You must specify either --criteria or --query-filter")
+        if not criteria_file and not query_filter and not value:
+            logger.error("You must specify either --criteria, --value, or --query-filter")
             raise typer.Exit(1)
         
         # Read criteria from file if specified
@@ -287,14 +294,26 @@ def filter_objects(
         context_kwargs = ContextOptions.get_context_kwargs(context, device_group, vsys, template)
         
         # Get all objects first
-        objects = xml_config.get_objects(object_type, context, **context_kwargs)
+        objects = xml_config.get_objects(actual_object_type, context, **context_kwargs)
         
         # Use criteria to filter objects if specified
         if criteria:
-            filtered_objects = xml_config.filter_objects(object_type, criteria, context, **context_kwargs)
+            filtered_objects = xml_config.filter_objects(actual_object_type, criteria, context, **context_kwargs)
             logger.info(f"Found {len(filtered_objects)} {object_type} objects matching criteria")
+        elif value:
+            # Filter by simple value pattern
+            logger.info(f"Filtering {object_type} objects with value containing '{value}'...")
+            graph_service = GraphService()
+            matching_names = graph_service.find_objects_by_value_pattern(
+                xml_config.tree,
+                actual_object_type,
+                value,
+                wildcard_support=True
+            )
+            filtered_objects = [name for name in matching_names if name in objects]
+            logger.info(f"Found {len(filtered_objects)} {object_type} objects with value containing '{value}'")
         else:
-            # If no criteria, start with all objects
+            # If no criteria or value filter, start with all objects
             filtered_objects = list(objects.keys())
         
         # Further filter using graph query if specified
@@ -327,8 +346,8 @@ def filter_objects(
             
             logger.info(f"Query matched {len(matching_objects)} objects")
             
-            # Combine with criteria results if both were used
-            if criteria:
+            # Combine with criteria or value results if either was used
+            if criteria or value:
                 # Keep only objects that match both filters
                 filtered_objects = [name for name in filtered_objects if name in matching_objects]
                 logger.info(f"Combined filters matched {len(filtered_objects)} objects")
@@ -552,19 +571,22 @@ def find_objects(
         xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         graph_service = GraphService()
         
+        # Check if object_type is an alias and convert it
+        actual_object_type = OBJECT_TYPE_ALIASES.get(object_type, object_type)
+        
         results = []
         
         # Find objects by name, pattern, or criteria
         if name:
             # Find by exact name
             logger.info(f"Finding {object_type} objects named '{name}' throughout the configuration...")
-            locations = xml_config.find_objects_by_name(object_type, name, use_regex=False)
+            locations = xml_config.find_objects_by_name(actual_object_type, name, use_regex=False)
             results = locations
             
         elif pattern:
             # Find by regex pattern
             logger.info(f"Finding {object_type} objects with names matching pattern '{pattern}' throughout the configuration...")
-            locations = xml_config.find_objects_by_name(object_type, pattern, use_regex=True)
+            locations = xml_config.find_objects_by_name(actual_object_type, pattern, use_regex=True)
             results = locations
             
         elif criteria_file:
@@ -573,7 +595,7 @@ def find_objects(
                 value_criteria = json.load(f)
                 
             logger.info(f"Finding {object_type} objects matching criteria {value_criteria} throughout the configuration...")
-            locations = xml_config.find_objects_by_value(object_type, value_criteria)
+            locations = xml_config.find_objects_by_value(actual_object_type, value_criteria)
             results = locations
             
         else:
@@ -583,7 +605,7 @@ def find_objects(
                 raise typer.Exit(1)
             
             # If no name search was specified, search for all objects of the specified type
-            if object_type == "address" and ip_contains:
+            if actual_object_type == "address" and ip_contains:
                 logger.info(f"Finding address objects containing IP '{ip_contains}' throughout the configuration...")
                 
                 # Use the graph service to find address objects containing the IP
@@ -594,10 +616,10 @@ def find_objects(
                 
                 # Find the full object information across all contexts
                 for obj_name in matching_names:
-                    locations = xml_config.find_objects_by_name(object_type, obj_name, use_regex=False)
+                    locations = xml_config.find_objects_by_name(actual_object_type, obj_name, use_regex=False)
                     results.extend(locations)
                 
-            elif object_type == "service" and port_equals:
+            elif actual_object_type == "service" and port_equals:
                 logger.info(f"Finding service objects with port '{port_equals}' throughout the configuration...")
                 
                 # Use the graph service to find service objects with the port
@@ -608,7 +630,7 @@ def find_objects(
                 
                 # Find the full object information across all contexts
                 for obj_name in matching_names:
-                    locations = xml_config.find_objects_by_name(object_type, obj_name, use_regex=False)
+                    locations = xml_config.find_objects_by_name(actual_object_type, obj_name, use_regex=False)
                     results.extend(locations)
                 
             elif value:
@@ -617,14 +639,14 @@ def find_objects(
                 # Use the graph service to find objects with values matching the pattern
                 matching_names = graph_service.find_objects_by_value_pattern(
                     xml_config.tree, 
-                    object_type, 
+                    actual_object_type, 
                     value,
                     wildcard_support=True
                 )
                 
                 # Find the full object information across all contexts
                 for obj_name in matching_names:
-                    locations = xml_config.find_objects_by_name(object_type, obj_name, use_regex=False)
+                    locations = xml_config.find_objects_by_name(actual_object_type, obj_name, use_regex=False)
                     results.extend(locations)
             
             if not results:
@@ -634,7 +656,7 @@ def find_objects(
                 # Use the graph service to execute a simple query for all objects of this type
                 query_results = graph_service.execute_custom_query(
                     xml_config.tree,
-                    f"MATCH (a:{object_type}) RETURN a.name"
+                    f"MATCH (a:{actual_object_type}) RETURN a.name"
                 )
                 
                 # Extract names from the results
@@ -642,7 +664,7 @@ def find_objects(
                 
                 # Find the full object information across all contexts
                 for obj_name in all_obj_names:
-                    locations = xml_config.find_objects_by_name(object_type, obj_name, use_regex=False)
+                    locations = xml_config.find_objects_by_name(actual_object_type, obj_name, use_regex=False)
                     results.extend(locations)
             
         # Apply graph query filter if specified
@@ -722,6 +744,9 @@ def find_duplicate_objects(
         # Initialize the configuration and graph service
         xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
         graph_service = GraphService()
+        
+        # Check if object_type is an alias and convert it
+        actual_object_type = OBJECT_TYPE_ALIASES.get(object_type, object_type) if object_type else None
         
         results = {}
         

@@ -283,6 +283,95 @@ python cli.py object find-duplicates --config panorama.xml --by-value --type add
 
 Commands for managing security rules, NAT rules, and other PAN-OS policies.
 
+### NAT Rule Operations
+
+PanFlow provides specialized commands for working with NAT rules, particularly handling bidirectional NAT rules that are common in migrations from other vendors.
+
+#### Split Bidirectional NAT Rule
+
+Split a bidirectional NAT rule into two unidirectional rules:
+
+```bash
+python cli.py policy nat split-bidirectional --config CONFIG_FILE --rule-name RULE_NAME [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--rule-name`, `-r`: Name of the bidirectional NAT rule to split (**required**)
+- `--policy-type`, `-t`: Type of NAT policy (nat_rules, nat_pre_rules, nat_post_rules)
+- `--reverse-suffix`, `-s`: Suffix to add to the name of the reverse rule
+- `--zone-swap/--no-zone-swap`: Whether to swap source and destination zones in the reverse rule
+- `--address-swap/--no-address-swap`: Whether to swap source and destination addresses in the reverse rule
+- `--disable-bidirectional/--keep-bidirectional`: Whether to disable bidirectional flag on the original rule
+- `--any-any-return/--no-any-any-return`: Whether to use 'any' for source zone and address in the return rule
+- `--device-type`, `-d`: Device type (firewall or panorama)
+- `--context`, `-x`: Context (shared, device_group, vsys)
+- `--device-group`, `--dg`: Device group name (for Panorama device_group context)
+- `--vsys`, `-v`: VSYS name (for firewall vsys context)
+- `--version`: PAN-OS version
+- `--dry-run`: Preview changes without modifying the configuration
+
+Examples:
+```bash
+# Split a bidirectional NAT rule with default settings
+python cli.py policy nat split-bidirectional --config config.xml --rule-name "Bidir-NAT-Rule"
+
+# Split a rule but keep the bidirectional flag on the original rule
+python cli.py policy nat split-bidirectional --config config.xml --rule-name "Bidir-NAT-Rule" --keep-bidirectional
+
+# Split a rule and use "any" for source in return rule
+python cli.py policy nat split-bidirectional --config config.xml --rule-name "Bidir-NAT-Rule" --any-any-return
+
+# Perform a dry run to see what would happen without making changes
+python cli.py policy nat split-bidirectional --config config.xml --rule-name "Bidir-NAT-Rule" --dry-run
+```
+
+#### Split All Bidirectional NAT Rules
+
+Find and split all bidirectional NAT rules in the configuration:
+
+```bash
+python cli.py policy nat split-all-bidirectional --config CONFIG_FILE [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--policy-type`, `-t`: Type of NAT policy (nat_rules, nat_pre_rules, nat_post_rules)
+- `--reverse-suffix`, `-s`: Suffix to add to the name of the reverse rule
+- `--zone-swap/--no-zone-swap`: Whether to swap source and destination zones in the reverse rule
+- `--address-swap/--no-address-swap`: Whether to swap source and destination addresses in the reverse rule
+- `--disable-bidirectional/--keep-bidirectional`: Whether to disable bidirectional flag on the original rule
+- `--any-any-return/--no-any-any-return`: Whether to use 'any' for source zone and address in the return rule
+- `--name-filter`, `-f`: Only process rules containing this string in their name
+- `--report`, `-r`: Save a detailed report of the operation (JSON format)
+- `--device-type`, `-d`: Device type (firewall or panorama)
+- `--context`, `-x`: Context (shared, device_group, vsys)
+- `--device-group`, `--dg`: Device group name (for Panorama device_group context)
+- `--vsys`, `-v`: VSYS name (for firewall vsys context)
+- `--version`: PAN-OS version
+- `--dry-run`: Preview changes without modifying the configuration
+
+Examples:
+```bash
+# Split all bidirectional NAT rules with default settings
+python cli.py policy nat split-all-bidirectional --config config.xml
+
+# Split only rules containing "BIDIR" in their name
+python cli.py policy nat split-all-bidirectional --config config.xml --name-filter "BIDIR"
+
+# Split all rules but keep the bidirectional flag on original rules
+python cli.py policy nat split-all-bidirectional --config config.xml --keep-bidirectional
+
+# Split all rules and create return rules with "any" source
+python cli.py policy nat split-all-bidirectional --config config.xml --any-any-return
+
+# Generate a detailed report of the operation
+python cli.py policy nat split-all-bidirectional --config config.xml --report split_report.json
+
+# Perform a dry run to see what would happen without making changes
+python cli.py policy nat split-all-bidirectional --config config.xml --dry-run
+```
+
 ### List Policies
 
 List policies of a specific type:

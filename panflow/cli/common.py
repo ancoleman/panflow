@@ -168,15 +168,34 @@ class MergeOptions:
         if not value:
             return None
             
+        # If value is already a ConflictStrategy enum, just return it
+        if isinstance(value, ConflictStrategy):
+            return value
+            
+        # Handle case where the input is a ConflictStrategy enum string
+        if isinstance(value, str) and value.startswith('ConflictStrategy.'):
+            try:
+                # Extract the enum name (e.g., 'SKIP' from 'ConflictStrategy.SKIP')
+                enum_name = value.split('.')[1]
+                # Convert to lowercase to match the enum values
+                value = enum_name.lower()
+            except Exception:
+                pass
+            
         valid_strategies = [s.value for s in ConflictStrategy]
         
-        if value not in valid_strategies:
-            strategies_str = ", ".join(valid_strategies)
-            raise typer.BadParameter(
-                f"Invalid conflict strategy: '{value}'. Valid options are: {strategies_str}"
-            )
-        
-        return ConflictStrategy(value)
+        # Try case-insensitive match first
+        if isinstance(value, str):
+            value_lower = value.lower()
+            for strategy in valid_strategies:
+                if strategy.lower() == value_lower:
+                    return ConflictStrategy(strategy)
+                
+        # If no match found, raise error
+        strategies_str = ", ".join(valid_strategies)
+        raise typer.BadParameter(
+            f"Invalid conflict strategy: '{value}'. Valid options are: {strategies_str}"
+        )
     
     @staticmethod
     def conflict_strategy():
