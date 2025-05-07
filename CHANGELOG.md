@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.1.3] - 2025-05-06
+
+### Added
+- Hierarchical deduplication commands for Panorama device groups
+  - New `deduplicate hierarchical find` command to identify duplicates across the device group hierarchy
+  - New `deduplicate hierarchical merge` command to merge duplicates with prioritization for parent contexts
+  - Support for prioritizing objects in higher-level contexts (shared or parent device groups)
+  - Impact reporting and dry-run capabilities for safe operation
+
+### Fixed
+- Resolved object type naming inconsistencies in deduplication engine (address-group vs address_group)
+- Fixed reference tracking in deduplication to correctly identify object usage across the configuration
+
 ## [0.1.2] - 2025-05-06
 
 ### Fixed
@@ -52,7 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.2...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.3...HEAD
+[0.1.3]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.2...v0.1.3
 [0.1.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.1...v0.1.2
 [0.1.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.0...v0.1.1
 [0.1.0]: https://code.pan.run/gcs-automation/panflow/releases/tag/v0.1.0

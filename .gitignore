@@ -2,6 +2,7 @@
 old/
 test_files/
 __pycache__/
+test_results/
 
 # Development
 .coverage

@@ -42,6 +42,605 @@ def object_type_callback(value: str) -> str:
         raise typer.BadParameter(f"Object type '{value}' not supported. Supported types: {supported_str}")
     return value
 
+# Create hierarchical deduplication command group
+hierarchical_app = typer.Typer(help="Commands for hierarchical deduplication across device groups")
+deduplicate_app.add_typer(hierarchical_app, name="hierarchical")
+
+@hierarchical_app.command("find")
+def find_hierarchical_duplicates(
+    config: str = ConfigOptions.config_file(),
+    object_type: str = typer.Option(
+        ..., "--type", "-t", 
+        help="Type of object to deduplicate (address, service, tag)",
+        callback=object_type_callback
+    ),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file for results (JSON format)"),
+    device_type: str = ConfigOptions.device_type(),
+    context: str = ContextOptions.context_type(),
+    device_group: Optional[str] = ContextOptions.device_group(),
+    allow_merging_with_upper_level: bool = typer.Option(
+        True, "--allow-merging-with-upper-level", "-u",
+        help="Allow merging objects with objects in parent device groups and shared context"
+    ),
+    pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Pattern to filter objects (e.g. '10.0.0' for addresses)"),
+    include_file: Optional[str] = typer.Option(None, "--include-file", help="JSON file with list of object names to include in results"),
+    exclude_file: Optional[str] = typer.Option(None, "--exclude-file", help="JSON file with list of object names to exclude from results"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects"),
+    min_group_size: int = typer.Option(2, "--min-group-size", "-g", help="Minimum number of objects in a duplicate group to include in results"),
+    version: Optional[str] = ConfigOptions.version(),
+):
+    """Find duplicate objects across the device group hierarchy in Panorama
+    
+    This command identifies objects with identical values across different device
+    groups and the shared context. It's useful for object consolidation and helps
+    reduce redundancy in hierarchical configurations.
+    """
+    try:
+        # Verify device type is Panorama
+        if device_type.lower() != "panorama":
+            logger.error("Hierarchical deduplication is only available for Panorama configurations")
+            raise typer.Exit(1)
+            
+        # Initialize the configuration
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
+        
+        # Prepare context parameters
+        context_kwargs = ContextOptions.get_context_kwargs(context, device_group, vsys=None, template=None)
+        
+        # Create deduplication engine
+        engine = DeduplicationEngine(
+            xml_config.tree, 
+            device_type, 
+            context, 
+            xml_config.version, 
+            **context_kwargs
+        )
+        
+        # Find hierarchical duplicates and references
+        duplicates, references, contexts = engine.find_hierarchical_duplicates(
+            object_type, 
+            allow_merging_with_upper_level=allow_merging_with_upper_level
+        )
+            
+        if not duplicates:
+            logger.info(f"No duplicate {object_type} objects found across device groups")
+            return
+        
+        # Load include/exclude lists
+        include_list = []
+        exclude_list = []
+        
+        # Process query filter if provided
+        if query_filter:
+            logger.info(f"Processing graph query filter: {query_filter}")
+            # Build graph from the configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Create a query executor
+            executor = QueryExecutor(graph)
+            
+            # Parse the query and ensure it has a RETURN clause
+            query = Query(query_filter)
+            if not query.has_return_clause():
+                # Add a return clause based on object type
+                node_type = object_type.rstrip('s')  # Strip trailing 's' if present
+                query.add_return(f"a.name as name")
+                logger.info(f"Added return clause to query: {query.query}")
+            
+            # Execute the query
+            results = executor.execute(query.query)
+            
+            # Extract object names from results
+            query_objects = []
+            for result in results:
+                if 'name' in result:
+                    query_objects.append(result['name'])
+                elif len(result) == 1:
+                    # If there's only one field, use it
+                    query_objects.append(list(result.values())[0])
+            
+            if query_objects:
+                # Add query results to include list
+                include_list = query_objects
+                logger.info(f"Using query results for include list: {len(include_list)} objects")
+            else:
+                logger.info("Query returned no results")
+        
+        if include_file:
+            try:
+                with open(include_file, 'r') as f:
+                    include_data = json.load(f)
+                    file_include_list = []
+                    if isinstance(include_data, list):
+                        file_include_list = include_data
+                    else:
+                        file_include_list = include_data.get('objects', [])
+                
+                # Combine with existing include_list if it exists from query_filter
+                if include_list and query_filter:
+                    # Find the intersection (only objects that are in both lists)
+                    include_list = [obj for obj in include_list if obj in file_include_list]
+                    logger.info(f"Combined query results with include file: {len(include_list)} objects remain after intersection")
+                else:
+                    # Otherwise, use file list directly
+                    include_list = file_include_list
+                    logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
+            except Exception as e:
+                logger.error(f"Error loading include file {include_file}: {e}")
+                raise typer.Exit(1)
+                
+        if exclude_file:
+            try:
+                with open(exclude_file, 'r') as f:
+                    exclude_data = json.load(f)
+                    if isinstance(exclude_data, list):
+                        exclude_list = exclude_data
+                    else:
+                        exclude_list = exclude_data.get('objects', [])
+                logger.info(f"Loaded {len(exclude_list)} objects to exclude from {exclude_file}")
+            except Exception as e:
+                logger.error(f"Error loading exclude file {exclude_file}: {e}")
+                raise typer.Exit(1)
+        
+        # Filter duplicates based on pattern, include, and exclude lists
+        filtered_duplicates = {}
+        for value_key, objects in duplicates.items():
+            # Filter objects based on the pattern
+            if pattern:
+                # Check if any object in this group matches the pattern
+                matches_pattern = False
+                for name, _ in objects:
+                    if pattern.lower() in name.lower() or pattern.lower() in value_key.lower():
+                        matches_pattern = True
+                        break
+                        
+                # Skip if no matches
+                if not matches_pattern:
+                    continue
+            
+            # Filter objects based on include/exclude lists
+            if include_list:
+                # Only keep objects explicitly included in the list
+                filtered_objects = [(name, obj) for name, obj in objects if name in include_list]
+                objects = filtered_objects
+            
+            if exclude_list:
+                # Remove objects in the exclude list
+                filtered_objects = [(name, obj) for name, obj in objects if name not in exclude_list]
+                objects = filtered_objects
+            
+            # Apply minimum group size filter
+            if len(objects) >= min_group_size:
+                filtered_duplicates[value_key] = objects
+        
+        # Update duplicates with filtered list
+        duplicates = filtered_duplicates
+        
+        if not duplicates:
+            logger.info(f"No duplicate {object_type} objects found after applying filters")
+            return
+        
+        # Log duplicate counts
+        duplicate_sets = len(duplicates)
+        duplicate_count = sum(len(objects) - 1 for objects in duplicates.values())
+        logger.info(f"Found {duplicate_count} duplicate {object_type} objects across {duplicate_sets} unique values after filtering")
+        
+        # Create a result object for output
+        result = {
+            "summary": {
+                "object_type": object_type,
+                "duplicate_sets": duplicate_sets,
+                "duplicate_count": duplicate_count,
+                "allow_merging_with_upper_level": allow_merging_with_upper_level,
+                "filters": {
+                    "pattern": pattern,
+                    "min_group_size": min_group_size,
+                    "include_count": len(include_list) if include_list else 0,
+                    "exclude_count": len(exclude_list) if exclude_list else 0
+                }
+            },
+            "duplicate_sets": {},
+            "context_info": {}
+        }
+        
+        # Format context info for output
+        for name, context_info in contexts.items():
+            # Only include objects in the duplicate sets
+            if any(name in [obj_name for obj_name, _ in objects] for objects in duplicates.values()):
+                context_type = context_info.get('type', 'unknown')
+                device_group = context_info.get('device_group', 'shared') if context_type == 'device_group' else 'shared'
+                level = context_info.get('level', 0) if context_type == 'device_group' else 0
+                
+                result["context_info"][name] = {
+                    "context_type": context_type,
+                    "device_group": device_group,
+                    "level": level
+                }
+        
+        # Log the duplicates found
+        for value_key, objects in duplicates.items():
+            # Format objects with context info
+            object_details = []
+            for name, _ in objects:
+                context_info = contexts.get(name, {})
+                context_type = context_info.get('type', 'unknown')
+                device_group = context_info.get('device_group', 'shared') if context_type == 'device_group' else 'shared'
+                object_details.append({
+                    "name": name,
+                    "context": context_type,
+                    "device_group": device_group
+                })
+            
+            # Add to result
+            result["duplicate_sets"][value_key] = object_details
+            
+            # Log details
+            formatted_objects = [f"{obj['name']} ({obj['device_group']})" for obj in object_details]
+            logger.info(f"Found duplicates with value {value_key}: {', '.join(formatted_objects)}")
+        
+        # Save to output file if provided
+        if output:
+            with open(output, 'w') as f:
+                json.dump(result, f, indent=2)
+            logger.info(f"Hierarchical duplicate analysis saved to {output}")
+            
+    except Exception as e:
+        logger.error(f"Error finding hierarchical duplicates: {e}", exc_info=True)
+        raise typer.Exit(1)
+        
+@hierarchical_app.command("merge")
+def merge_hierarchical_duplicates(
+    config: str = ConfigOptions.config_file(),
+    object_type: str = typer.Option(
+        ..., "--type", "-t", 
+        help="Type of object to deduplicate (address, service, tag)",
+        callback=object_type_callback
+    ),
+    output: str = ConfigOptions.output_file(),
+    device_type: str = ConfigOptions.device_type(),
+    context: str = ContextOptions.context_type(),
+    device_group: Optional[str] = ContextOptions.device_group(),
+    strategy: str = typer.Option(
+        "highest_level", "--strategy", "-s", 
+        help="Strategy for choosing primary object (highest_level, first, shortest, longest, alphabetical, pattern)"
+    ),
+    allow_merging_with_upper_level: bool = typer.Option(
+        True, "--allow-merging-with-upper-level", "-u",
+        help="Allow merging objects with objects in parent device groups and shared context"
+    ),
+    pattern: Optional[str] = typer.Option(None, "--pattern", "-p", help="Pattern to filter objects (e.g. '10.0.0' for addresses)"),
+    pattern_strategy: Optional[str] = typer.Option(None, "--pattern-strategy", help="Pattern to use for primary object selection when strategy is 'pattern'"),
+    include_file: Optional[str] = typer.Option(None, "--include-file", help="JSON file with list of object names to include in deduplication"),
+    exclude_file: Optional[str] = typer.Option(None, "--exclude-file", help="JSON file with list of object names to exclude from deduplication"),
+    query_filter: Optional[str] = typer.Option(None, "--query-filter", "-q", help="Graph query filter to select objects"),
+    dry_run: bool = ConfigOptions.dry_run(),
+    impact_report: Optional[str] = typer.Option(None, "--impact-report", "-i", help="Generate a detailed impact report and save to this file"),
+    version: Optional[str] = ConfigOptions.version(),
+):
+    """Find and merge duplicate objects across device group hierarchy in Panorama
+    
+    This command identifies and merges objects with identical values across different device
+    groups and the shared context. By default, objects in parent contexts (shared or parent 
+    device groups) are prioritized when selecting the primary object to keep.
+    
+    When merging, references to duplicate objects are updated to point to the primary object,
+    and the duplicate objects are removed from the configuration.
+    """
+    try:
+        # Verify device type is Panorama
+        if device_type.lower() != "panorama":
+            logger.error("Hierarchical deduplication is only available for Panorama configurations")
+            raise typer.Exit(1)
+            
+        # Initialize the configuration
+        xml_config = PANFlowConfig(config_file=config, device_type=device_type, version=version)
+        
+        # Prepare context parameters
+        context_kwargs = ContextOptions.get_context_kwargs(context, device_group, vsys=None, template=None)
+        
+        # Create deduplication engine
+        engine = DeduplicationEngine(
+            xml_config.tree, 
+            device_type, 
+            context, 
+            xml_config.version, 
+            **context_kwargs
+        )
+        
+        # Find hierarchical duplicates and references
+        duplicates, references, contexts = engine.find_hierarchical_duplicates(
+            object_type, 
+            allow_merging_with_upper_level=allow_merging_with_upper_level
+        )
+            
+        if not duplicates:
+            logger.info(f"No duplicate {object_type} objects found across device groups")
+            return
+        
+        # Load include/exclude lists
+        include_list = []
+        exclude_list = []
+        
+        # Process query filter if provided
+        if query_filter:
+            logger.info(f"Processing graph query filter: {query_filter}")
+            # Build graph from the configuration
+            graph = ConfigGraph()
+            graph.build_from_xml(xml_config.tree)
+            
+            # Create a query executor
+            executor = QueryExecutor(graph)
+            
+            # Parse the query and ensure it has a RETURN clause
+            query = Query(query_filter)
+            if not query.has_return_clause():
+                # Add a return clause based on object type
+                node_type = object_type.rstrip('s')  # Strip trailing 's' if present
+                query.add_return(f"a.name as name")
+                logger.info(f"Added return clause to query: {query.query}")
+            
+            # Execute the query
+            results = executor.execute(query.query)
+            
+            # Extract object names from results
+            query_objects = []
+            for result in results:
+                if 'name' in result:
+                    query_objects.append(result['name'])
+                elif len(result) == 1:
+                    # If there's only one field, use it
+                    query_objects.append(list(result.values())[0])
+            
+            if query_objects:
+                # Add query results to include list
+                include_list = query_objects
+                logger.info(f"Using query results for include list: {len(include_list)} objects")
+            else:
+                logger.info("Query returned no results")
+        
+        if include_file:
+            try:
+                with open(include_file, 'r') as f:
+                    include_data = json.load(f)
+                    file_include_list = []
+                    if isinstance(include_data, list):
+                        file_include_list = include_data
+                    else:
+                        file_include_list = include_data.get('objects', [])
+                
+                # Combine with existing include_list if it exists from query_filter
+                if include_list and query_filter:
+                    # Find the intersection (only objects that are in both lists)
+                    include_list = [obj for obj in include_list if obj in file_include_list]
+                    logger.info(f"Combined query results with include file: {len(include_list)} objects remain after intersection")
+                else:
+                    # Otherwise, use file list directly
+                    include_list = file_include_list
+                    logger.info(f"Loaded {len(include_list)} objects to include from {include_file}")
+            except Exception as e:
+                logger.error(f"Error loading include file {include_file}: {e}")
+                raise typer.Exit(1)
+                
+        if exclude_file:
+            try:
+                with open(exclude_file, 'r') as f:
+                    exclude_data = json.load(f)
+                    if isinstance(exclude_data, list):
+                        exclude_list = exclude_data
+                    else:
+                        exclude_list = exclude_data.get('objects', [])
+                logger.info(f"Loaded {len(exclude_list)} objects to exclude from {exclude_file}")
+            except Exception as e:
+                logger.error(f"Error loading exclude file {exclude_file}: {e}")
+                raise typer.Exit(1)
+        
+        # Filter duplicates based on pattern, include, and exclude lists
+        filtered_duplicates = {}
+        for value_key, objects in duplicates.items():
+            # Filter objects based on the pattern
+            if pattern:
+                # Check if any object in this group matches the pattern
+                matches_pattern = False
+                for name, _ in objects:
+                    if pattern.lower() in name.lower() or pattern.lower() in value_key.lower():
+                        matches_pattern = True
+                        break
+                        
+                # Skip if no matches
+                if not matches_pattern:
+                    continue
+            
+            # Filter objects based on include/exclude lists
+            if include_list:
+                # Only keep objects explicitly included in the list
+                filtered_objects = [(name, obj) for name, obj in objects if name in include_list]
+                # If we don't have at least 2 objects after filtering, skip this group
+                if len(filtered_objects) < 2:
+                    continue
+                objects = filtered_objects
+            
+            if exclude_list:
+                # Remove objects in the exclude list
+                filtered_objects = [(name, obj) for name, obj in objects if name not in exclude_list]
+                # If we don't have at least 2 objects after filtering, skip this group
+                if len(filtered_objects) < 2:
+                    continue
+                objects = filtered_objects
+            
+            # Add to filtered duplicates if we have at least 2 objects
+            if len(objects) >= 2:
+                filtered_duplicates[value_key] = objects
+        
+        # Update duplicates with filtered list
+        duplicates = filtered_duplicates
+        
+        if not duplicates:
+            logger.info(f"No duplicate {object_type} objects found after applying filters")
+            return
+        
+        # Log the duplicates found
+        duplicate_sets = len(duplicates)
+        duplicate_count = sum(len(objects) - 1 for objects in duplicates.values())
+        logger.info(f"Found {duplicate_count} duplicate {object_type} objects across {duplicate_sets} unique values after filtering")
+        
+        # Create a simulation report if requested or for dry run
+        if impact_report or dry_run:
+            # Prepare impact analysis report
+            impact_data = {
+                "summary": {
+                    "object_type": object_type,
+                    "duplicate_sets": duplicate_sets,
+                    "duplicate_count": duplicate_count,
+                    "strategy": strategy,
+                    "allow_merging_with_upper_level": allow_merging_with_upper_level,
+                    "pattern_strategy": pattern_strategy,
+                    "filters": {
+                        "pattern": pattern,
+                        "include_count": len(include_list) if include_list else 0,
+                        "exclude_count": len(exclude_list) if exclude_list else 0
+                    }
+                },
+                "duplicate_sets": {},
+                "context_info": {},
+                "to_be_kept": [],
+                "to_be_deleted": [],
+                "reference_changes": []
+            }
+            
+            # Create entries for each duplicate set
+            for value_key, objects in duplicates.items():
+                # Format objects with context
+                object_details = []
+                for name, _ in objects:
+                    if name in contexts:
+                        context_info = contexts[name]
+                        context_type = context_info.get('type', 'unknown')
+                        device_group = context_info.get('device_group', 'shared') if context_type == 'device_group' else 'shared'
+                        level = context_info.get('level', 0) if context_type == 'device_group' else 0
+                        
+                        object_details.append({
+                            "name": name,
+                            "context_type": context_type,
+                            "device_group": device_group,
+                            "level": level
+                        })
+                        
+                        # Add to context_info section
+                        impact_data["context_info"][name] = {
+                            "context_type": context_type,
+                            "device_group": device_group,
+                            "level": level
+                        }
+                    else:
+                        object_details.append({
+                            "name": name,
+                            "context_type": "unknown",
+                            "device_group": "unknown",
+                            "level": 999
+                        })
+                
+                impact_data["duplicate_sets"][value_key] = object_details
+                
+                # Determine primary object for reporting
+                primary = engine._select_hierarchical_primary_object(
+                    objects, contexts, strategy, pattern_strategy
+                )
+                primary_name, _ = primary
+                
+                primary_context = contexts.get(primary_name, {})
+                primary_context_type = primary_context.get('type', 'unknown')
+                primary_device_group = primary_context.get('device_group', 'shared') if primary_context_type == 'device_group' else 'shared'
+                
+                # Add to kept list
+                impact_data["to_be_kept"].append({
+                    "name": primary_name,
+                    "value": value_key,
+                    "context_type": primary_context_type,
+                    "device_group": primary_device_group
+                })
+                
+                # Add others to deleted list
+                for name, _ in objects:
+                    if name != primary_name:
+                        deleted_context = contexts.get(name, {})
+                        deleted_context_type = deleted_context.get('type', 'unknown')
+                        deleted_device_group = deleted_context.get('device_group', 'shared') if deleted_context_type == 'device_group' else 'shared'
+                        
+                        impact_data["to_be_deleted"].append({
+                            "name": name,
+                            "value": value_key,
+                            "replaced_by": primary_name,
+                            "context_type": deleted_context_type, 
+                            "device_group": deleted_device_group
+                        })
+                        
+                        # Add reference changes
+                        if name in references:
+                            for ref_path, _ in references[name]:
+                                impact_data["reference_changes"].append({
+                                    "path": ref_path,
+                                    "old_value": name,
+                                    "new_value": primary_name
+                                })
+            
+            # Save impact report if requested
+            if impact_report:
+                with open(impact_report, 'w') as f:
+                    json.dump(impact_data, f, indent=2)
+                logger.info(f"Impact analysis report saved to {impact_report}")
+            
+            # If dry run, stop here
+            if dry_run:
+                logger.info("Dry run - no changes made")
+                # Print summary
+                kept_count = len(impact_data["to_be_kept"])
+                deleted_count = len(impact_data["to_be_deleted"])
+                ref_count = len(impact_data["reference_changes"])
+                logger.info(f"Hierarchical deduplication would result in:")
+                logger.info(f"  - {kept_count} objects kept")
+                logger.info(f"  - {deleted_count} objects deleted")
+                logger.info(f"  - {ref_count} references updated")
+                return
+        
+        # Perform the actual merge
+        logger.info(f"Merging hierarchical duplicates using strategy: {strategy}")
+        if pattern_strategy and strategy == 'pattern':
+            logger.info(f"Using pattern filter for primary selection: {pattern_strategy}")
+            
+        changes = engine.merge_hierarchical_duplicates(
+            duplicates, references, contexts, 
+            primary_name_strategy=strategy,
+            pattern_filter=pattern_strategy
+        )
+        
+        # Log merged objects
+        total_merged = sum(len(info["merged"]) for info in changes.values())
+        total_refs = sum(len(info["references_updated"]) for info in changes.values())
+        logger.info(f"Merged {total_merged} duplicate objects and updated {total_refs} references")
+        
+        for value_key, change_info in changes.items():
+            primary = change_info["primary"]
+            merged = change_info["merged"]
+            primary_context = contexts.get(primary, {})
+            primary_device_group = primary_context.get('device_group', 'shared') if primary_context.get('type') == 'device_group' else 'shared'
+            
+            logger.info(f"For value {value_key}:")
+            logger.info(f"  - Kept {primary} (in {primary_device_group})")
+            logger.info(f"  - Merged {', '.join(merged)}")
+        
+        # Save the updated configuration
+        if xml_config.save(output):
+            logger.info(f"Configuration saved to {output}")
+        else:
+            logger.error(f"Failed to save configuration to {output}")
+            raise typer.Exit(1)
+            
+    except Exception as e:
+        logger.error(f"Error in hierarchical deduplication: {e}", exc_info=True)
+        raise typer.Exit(1)
+
+
 @deduplicate_app.command("find")
 def find_duplicates(
     config: str = ConfigOptions.config_file(),

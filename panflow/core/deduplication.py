@@ -46,8 +46,53 @@ class DeduplicationEngine:
         self.version = version
         self.context_kwargs = kwargs
         
+        # Store the device group hierarchy (for Panorama configurations)
+        self.device_group_hierarchy = {}
+        if device_type.lower() == 'panorama':
+            self._build_device_group_hierarchy()
+        
         logger.debug(f"Configuration parameters: device_type={device_type}, context_type={context_type}, version={version}")
         logger.debug(f"Context parameters: {kwargs}")
+    
+    def _build_device_group_hierarchy(self):
+        """
+        Build a dictionary representing the device group hierarchy in Panorama.
+        
+        For each device group, records its parent device group (if any).
+        The 'shared' context is considered the implicit parent of top-level device groups.
+        """
+        try:
+            # Find all device groups
+            device_groups = xpath_search(self.tree, '/config/devices/entry/device-group/entry')
+            
+            # Initialize with default parent (shared) for all device groups
+            for dg in device_groups:
+                dg_name = dg.get('name', '')
+                if dg_name:
+                    self.device_group_hierarchy[dg_name] = {'parent': 'shared', 'level': 1}
+            
+            # Process parent-child relationships
+            for dg in device_groups:
+                dg_name = dg.get('name', '')
+                if not dg_name:
+                    continue
+                    
+                # Check if this device group has parent device groups defined
+                parent_dgs = xpath_search(dg, './parent-dg')
+                if parent_dgs and parent_dgs[0].text:
+                    parent_name = parent_dgs[0].text
+                    if parent_name in self.device_group_hierarchy:
+                        # Update this device group's parent
+                        self.device_group_hierarchy[dg_name]['parent'] = parent_name
+                        # Calculate level (1 + parent's level)
+                        parent_level = self.device_group_hierarchy[parent_name]['level']
+                        self.device_group_hierarchy[dg_name]['level'] = parent_level + 1
+            
+            logger.debug(f"Device group hierarchy: {self.device_group_hierarchy}")
+        except Exception as e:
+            logger.error(f"Error building device group hierarchy: {e}", exc_info=True)
+            # Initialize with empty hierarchy on error
+            self.device_group_hierarchy = {}
         
     def find_duplicates(self, object_type, reference_tracking=True):
         """
@@ -408,7 +453,7 @@ class DeduplicationEngine:
             # Search for references in address groups
             try:
                 logger.debug("Searching for references in address groups")
-                group_xpath = get_object_xpath('address_group', self.device_type, self.context_type, 
+                group_xpath = get_object_xpath('address-group', self.device_type, self.context_type, 
                                              self.version, **self.context_kwargs)
                 
                 address_groups = xpath_search(self.tree, group_xpath)
@@ -525,7 +570,7 @@ class DeduplicationEngine:
             # Search for references in service groups
             try:
                 logger.debug("Searching for references in service groups")
-                group_xpath = get_object_xpath('service_group', self.device_type, self.context_type, 
+                group_xpath = get_object_xpath('service-group', self.device_type, self.context_type, 
                                              self.version, **self.context_kwargs)
                 
                 service_groups = xpath_search(self.tree, group_xpath)
@@ -631,9 +676,9 @@ class DeduplicationEngine:
             # Find references to tags in various objects
             object_types = [
                 ('address', 'address'),
-                ('address_group', 'address group'),
+                ('address-group', 'address group'),
                 ('service', 'service'),
-                ('service_group', 'service group')
+                ('service-group', 'service group')
             ]
             
             for obj_type, obj_desc in object_types:
@@ -813,6 +858,413 @@ class DeduplicationEngine:
         
         return changes
     
+    def find_hierarchical_duplicates(self, object_type, allow_merging_with_upper_level=True, reference_tracking=True):
+        """
+        Find duplicate objects of the specified type across Panorama device groups and the shared context.
+        
+        This method is specifically for Panorama configurations and considers the device group hierarchy
+        when identifying duplicates. It's useful for object consolidation across hierarchical contexts.
+        
+        Args:
+            object_type: Type of object to find duplicates for (address, service, tag)
+            allow_merging_with_upper_level: Whether to prioritize objects in parent contexts
+            reference_tracking: Whether to track references to objects (default: True)
+            
+        Returns:
+            Tuple of (duplicates, references, contexts):
+                - duplicates: Dictionary mapping values to lists of (name, element) tuples
+                - references: Dictionary mapping object names to lists of references
+                - contexts: Dictionary mapping object names to their context info
+        """
+        if self.device_type.lower() != 'panorama':
+            logger.warning("Hierarchical deduplication is only applicable to Panorama configurations")
+            return {}, {}, {}
+        
+        logger.info(f"Finding hierarchical duplicate {object_type} objects")
+        
+        # Initialize results
+        by_value = {}  # Group objects by value
+        contexts = {}  # Track which context each object belongs to
+        
+        # First check shared objects
+        self._find_objects_in_context(object_type, 'shared', by_value, contexts)
+        
+        # Then check device groups in order of hierarchy (starting from top)
+        # Sort device groups by level in the hierarchy
+        if self.device_group_hierarchy:
+            device_groups_by_level = {}
+            for dg_name, dg_info in self.device_group_hierarchy.items():
+                level = dg_info.get('level', 999)  # Use high number for unknown level
+                if level not in device_groups_by_level:
+                    device_groups_by_level[level] = []
+                device_groups_by_level[level].append(dg_name)
+            
+            # Process each level, starting from the top (lowest level number)
+            for level in sorted(device_groups_by_level.keys()):
+                for dg_name in device_groups_by_level[level]:
+                    logger.debug(f"Checking objects in device group '{dg_name}' (level {level})")
+                    self._find_objects_in_context(object_type, 'device_group', by_value, contexts, device_group=dg_name)
+        
+        # Find duplicates (groups with more than one object)
+        duplicates = {k: v for k, v in by_value.items() if len(v) > 1}
+        
+        duplicate_count = sum(len(v) - 1 for v in duplicates.values())
+        unique_values_count = len(duplicates)
+        
+        if duplicates:
+            logger.info(f"Found {duplicate_count} duplicate objects across {unique_values_count} unique values")
+            for value, objects in duplicates.items():
+                names = [name for name, _ in objects]
+                logger.debug(f"Duplicates with value '{value}': {', '.join(names)}")
+        else:
+            logger.info("No duplicate objects found")
+        
+        # If reference tracking is enabled, find all references
+        references = {}
+        if reference_tracking and duplicates:
+            logger.info("Reference tracking enabled, looking for references to duplicate objects")
+            try:
+                references = self._find_references(object_type)
+                reference_count = sum(len(refs) for refs in references.values())
+                logger.info(f"Found {reference_count} references to objects")
+            except Exception as e:
+                logger.error(f"Error finding references: {e}", exc_info=True)
+        
+        return duplicates, references, contexts
+    
+    def _find_objects_in_context(self, object_type, context_type, by_value, contexts, **kwargs):
+        """
+        Find objects of a specific type in a given context and add them to the by_value dictionary.
+        
+        Args:
+            object_type: Type of object to find (address, service, etc.)
+            context_type: Type of context (shared, device_group, vsys)
+            by_value: Dictionary mapping values to lists of (name, element) tuples (modified in place)
+            contexts: Dictionary mapping object names to context info (modified in place)
+            **kwargs: Additional context parameters (device_group, vsys, etc.)
+        """
+        try:
+            # Build the XPath for this context
+            context_xpath = get_object_xpath(object_type, self.device_type, context_type, self.version, **kwargs)
+            
+            logger.debug(f"Searching for {object_type} objects in {context_type} using XPath: {context_xpath}")
+            objects = xpath_search(self.tree, context_xpath)
+            
+            # Extract key context info (for reporting and decision making)
+            context_info = {'type': context_type}
+            if 'device_group' in kwargs:
+                context_info['device_group'] = kwargs['device_group']
+                # If this is a device group, also record its level in the hierarchy
+                if kwargs['device_group'] in self.device_group_hierarchy:
+                    context_info['level'] = self.device_group_hierarchy[kwargs['device_group']].get('level', 999)
+            if 'vsys' in kwargs:
+                context_info['vsys'] = kwargs['vsys']
+            
+            # Add objects to by_value dictionary
+            for obj in objects:
+                try:
+                    name = obj.get('name', '')
+                    if not name:
+                        continue
+                    
+                    # Store context information for this object
+                    contexts[name] = context_info
+                    
+                    # Determine the key for grouping based on object type
+                    value_key = self._get_object_value_key(obj, object_type)
+                    if value_key:
+                        if value_key not in by_value:
+                            by_value[value_key] = []
+                        by_value[value_key].append((name, obj))
+                        logger.debug(f"Object '{name}' in {context_type} has value: {value_key}")
+                except Exception as e:
+                    logger.error(f"Error processing object in {context_type}: {e}", exc_info=True)
+        
+        except Exception as e:
+            logger.error(f"Error finding objects in {context_type}: {e}", exc_info=True)
+    
+    def _get_object_value_key(self, obj, object_type):
+        """
+        Get a value key for an object based on its type, suitable for determining duplicates.
+        
+        Args:
+            obj: The XML element representing the object
+            object_type: The type of object
+            
+        Returns:
+            str: A key representing the object's value, or None if not applicable
+        """
+        name = obj.get('name', '')
+        
+        if object_type.lower() in ['address', 'addresses']:
+            # Check for each address type
+            ip_netmask = obj.find('./ip-netmask')
+            if ip_netmask is not None and ip_netmask.text:
+                return f"ip-netmask:{ip_netmask.text}"
+            
+            fqdn = obj.find('./fqdn')
+            if fqdn is not None and fqdn.text:
+                return f"fqdn:{fqdn.text}"
+            
+            ip_range = obj.find('./ip-range')
+            if ip_range is not None and ip_range.text:
+                return f"ip-range:{ip_range.text}"
+            
+            return None
+            
+        elif object_type.lower() in ['service', 'services']:
+            # Build a key from protocol, port, and source port
+            protocol = obj.find('./protocol')
+            if protocol is None:
+                return None
+                
+            protocol_type = None
+            port = None
+            source_port = None
+            
+            # Check TCP
+            tcp = protocol.find('./tcp')
+            if tcp is not None:
+                protocol_type = 'tcp'
+                port_elem = tcp.find('./port')
+                if port_elem is not None and port_elem.text:
+                    port = port_elem.text
+                source_port_elem = tcp.find('./source-port')
+                if source_port_elem is not None and source_port_elem.text:
+                    source_port = source_port_elem.text
+            
+            # Check UDP
+            udp = protocol.find('./udp')
+            if udp is not None:
+                protocol_type = 'udp'
+                port_elem = udp.find('./port')
+                if port_elem is not None and port_elem.text:
+                    port = port_elem.text
+                source_port_elem = udp.find('./source-port')
+                if source_port_elem is not None and source_port_elem.text:
+                    source_port = source_port_elem.text
+            
+            # Check other protocols
+            if protocol_type is None:
+                for proto_type in ['icmp', 'sctp', 'icmp6']:
+                    proto_elem = protocol.find(f'./{proto_type}')
+                    if proto_elem is not None:
+                        protocol_type = proto_type
+                        # Handle protocol-specific attributes
+                        if proto_type in ['icmp', 'icmp6']:
+                            type_elem = proto_elem.find('./type')
+                            code_elem = proto_elem.find('./code')
+                            if type_elem is not None and type_elem.text:
+                                port = f"type:{type_elem.text}"
+                            if code_elem is not None and code_elem.text:
+                                source_port = f"code:{code_elem.text}"
+                        break
+            
+            if protocol_type:
+                value_parts = [f"protocol:{protocol_type}"]
+                if port:
+                    value_parts.append(f"port:{port}")
+                if source_port:
+                    value_parts.append(f"source-port:{source_port}")
+                
+                return ";".join(value_parts)
+            
+            return None
+            
+        elif object_type.lower() in ['tag', 'tags']:
+            # Build a key from color and comments
+            color = obj.find('./color')
+            color_value = color.text if color is not None and color.text else 'none'
+            
+            comments = obj.find('./comments')
+            comments_value = comments.text if comments is not None and comments.text else ''
+            
+            return f"color:{color_value};comments:{comments_value}"
+            
+        # Add more object types as needed
+        return None
+    
+    def merge_hierarchical_duplicates(
+        self,
+        duplicates,
+        references,
+        contexts,
+        primary_name_strategy='highest_level',
+        pattern_filter=None,
+        **kwargs
+    ):
+        """
+        Merge duplicate objects prioritizing objects in parent contexts.
+        
+        Args:
+            duplicates: Dictionary of duplicate objects (from find_hierarchical_duplicates)
+            references: Dictionary of references (from find_hierarchical_duplicates)
+            contexts: Dictionary of object context info (from find_hierarchical_duplicates)
+            primary_name_strategy: Strategy for choosing primary object 
+                                ('highest_level', 'first', 'shortest', 'longest', 'alphabetical', 'pattern')
+            pattern_filter: Regular expression pattern to select preferred object names (for 'pattern' strategy)
+            **kwargs: Additional parameters
+            
+        Returns:
+            Dictionary of changes made (operation, name, element)
+        """
+        logger.info(f"Merging hierarchical duplicate objects using strategy: {primary_name_strategy}")
+        changes = {}
+        
+        # Validate inputs
+        if not duplicates:
+            logger.warning("No duplicates provided, nothing to merge")
+            return changes
+        
+        duplicate_sets = len(duplicates)
+        duplicate_count = sum(len(objects) - 1 for objects in duplicates.values())
+        logger.info(f"Processing {duplicate_count} duplicates across {duplicate_sets} unique values")
+        
+        # Process each set of duplicates
+        for value_key, objects in duplicates.items():
+            logger.debug(f"Processing duplicates with value: {value_key}")
+            
+            # Skip if there's only one object
+            if len(objects) <= 1:
+                logger.warning(f"Skipping value {value_key} with only {len(objects)} object")
+                continue
+            
+            # Determine which object to keep
+            try:
+                primary = self._select_hierarchical_primary_object(
+                    objects, contexts, primary_name_strategy, pattern_filter
+                )
+                primary_name, primary_elem = primary
+                
+                logger.info(f"Selected primary object '{primary_name}' for value {value_key}")
+                
+                # Create an entry for this value in the changes dictionary
+                changes[value_key] = {
+                    "primary": primary_name,
+                    "merged": [],
+                    "references_updated": []
+                }
+                
+                # Process each duplicate
+                for name, obj in objects:
+                    # Skip the primary object
+                    if name == primary_name:
+                        continue
+                    
+                    logger.debug(f"Processing duplicate: {name}")
+                    
+                    # Update references to this object
+                    if name in references:
+                        ref_count = len(references[name])
+                        logger.info(f"Updating {ref_count} references to '{name}'")
+                        
+                        for ref_path, ref_elem in references[name]:
+                            try:
+                                # Update the reference to point to primary_name
+                                old_text = ref_elem.text
+                                ref_elem.text = primary_name
+                                changes[value_key]["references_updated"].append(
+                                    f"{ref_path}: {old_text} -> {primary_name}"
+                                )
+                                logger.debug(f"Updated reference in {ref_path}: {old_text} -> {primary_name}")
+                            except Exception as e:
+                                logger.error(f"Error updating reference to '{name}' in {ref_path}: {str(e)}")
+                    else:
+                        logger.debug(f"No references found for '{name}'")
+                    
+                    # Queue this object for deletion
+                    logger.debug(f"Queueing object '{name}' for deletion")
+                    
+                    # Add to the merged list
+                    changes[value_key]["merged"].append(name)
+                    
+                    # Get parent element and remove the object
+                    parent = obj.getparent()
+                    if parent is not None:
+                        parent.remove(obj)
+                        logger.info(f"Deleted duplicate object '{name}'")
+                    else:
+                        logger.warning(f"Could not delete object '{name}': parent element not found")
+                
+            except Exception as e:
+                logger.error(f"Error processing duplicates for value {value_key}: {str(e)}", exc_info=True)
+                continue
+        
+        # Log changes summary
+        total_merged = sum(len(info["merged"]) for info in changes.values())
+        total_refs = sum(len(info["references_updated"]) for info in changes.values())
+        
+        logger.info(f"Hierarchical deduplication complete: merged {total_merged} objects and updated {total_refs} references")
+        
+        return changes
+    
+    def _select_hierarchical_primary_object(self, objects, contexts, strategy, pattern_filter=None):
+        """
+        Select the primary object to keep based on the specified hierarchical strategy.
+        
+        Args:
+            objects: List of (name, element) tuples
+            contexts: Dictionary mapping object names to context info
+            strategy: Selection strategy ('highest_level', 'first', 'shortest', etc.)
+            pattern_filter: Regular expression pattern to prioritize object names
+            
+        Returns:
+            Tuple of (name, element) for the selected primary object
+        """
+        logger.debug(f"Selecting primary object using hierarchical strategy: {strategy}")
+        
+        if not objects:
+            logger.error("No objects provided for primary selection")
+            raise ValueError("No objects provided")
+        
+        # If using pattern-based selection and a pattern is provided
+        if strategy == 'pattern' and pattern_filter:
+            try:
+                import re
+                pattern = re.compile(pattern_filter)
+                
+                # Try to find objects matching the pattern
+                matching_objects = [(name, elem) for name, elem in objects if pattern.search(name)]
+                
+                if matching_objects:
+                    logger.debug(f"Found {len(matching_objects)} objects matching pattern '{pattern_filter}'")
+                    # Default to first matching object
+                    return matching_objects[0]
+            except Exception as e:
+                logger.error(f"Error applying pattern filter: {e}", exc_info=True)
+                # Fall back to highest_level if pattern matching fails
+                logger.warning(f"Pattern filter failed, falling back to 'highest_level' strategy")
+                strategy = 'highest_level'
+        
+        if strategy == 'highest_level':
+            logger.debug("Using 'highest_level' strategy - prioritizing objects in shared or parent device groups")
+            
+            # First look for objects in 'shared' context
+            shared_objects = [(name, elem) for name, elem in objects 
+                             if name in contexts and contexts[name].get('type') == 'shared']
+            
+            if shared_objects:
+                # If there are multiple objects in shared, select the first one
+                logger.debug(f"Selected object '{shared_objects[0][0]}' from shared context")
+                return shared_objects[0]
+            
+            # If no shared objects, select the object from the highest-level device group
+            dg_objects = [(name, elem) for name, elem in objects 
+                         if name in contexts and contexts[name].get('type') == 'device_group']
+            
+            if dg_objects:
+                # Sort by level (lowest number = highest in hierarchy)
+                sorted_dg_objects = sorted(
+                    dg_objects,
+                    key=lambda x: contexts[x[0]].get('level', 999)
+                )
+                
+                logger.debug(f"Selected object '{sorted_dg_objects[0][0]}' from highest level device group")
+                return sorted_dg_objects[0]
+        
+        # Fall back to standard strategies if not using hierarchy or no hierarchical objects found
+        return self._select_primary_object(objects, strategy if strategy != 'highest_level' else 'first')
+        
     def _select_primary_object(self, objects, strategy):
         """
         Select the primary object to keep based on the specified strategy.
