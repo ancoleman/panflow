@@ -46,12 +46,20 @@ def get_policies(
     elements = xpath_search(tree, xpath)
     # Process the results
     results = {}
-    for element in elements:
-        name = element.get("name")
-        if name:
-            # Extract all data from the element
-            data = extract_element_data(element)
-            results[name] = data
+    
+    # Check if we got results
+    if elements:
+        # The XPath returns the container element (e.g., <rules>)
+        # We need to process its children which are the actual rule entries
+        container = elements[0]
+        
+        # Process each rule entry in the container
+        for rule_entry in container:
+            name = rule_entry.get("name")
+            if name:
+                # Extract all data from the rule entry
+                data = extract_element_data(rule_entry)
+                results[name] = data
     
     # Log details about found policies
     if results:

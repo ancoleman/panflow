@@ -1163,12 +1163,44 @@ Here are some common workflow examples:
 ### Find and Remove Unused Objects
 
 ```bash
+# Manual approach (two-step):
 # Generate report of unused objects
 python cli.py report unused-objects --config firewall.xml --output unused.json
 
 # Review the report, then delete the unused objects
 python cli.py object delete --config firewall.xml --type address --name unused-object1 --output updated.xml
+
+# Automated approach (using cleanup command):
+# Preview which objects would be removed (dry run)
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --dry-run
+
+# Clean up all unused address objects in one step
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml
+
+# Generate a report alongside cleanup
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --report-file cleanup-report.json
+
+# Clean up unused objects of multiple types
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --type address --type service
 ```
+
+### Find and Remove Disabled Policies
+
+```bash
+# Preview which disabled policies would be removed (dry run)
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml --dry-run
+
+# Clean up all disabled security policies in one step
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml
+
+# Clean up disabled policies and generate a report
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml --report-file disabled-report.json
+
+# Exclude specific policies from cleanup
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml --exclude-file protected.json
+```
+
+For more detailed examples, see the [Cleanup Examples](examples/cleanup_examples.md) document.
 
 ### Find and Merge Duplicate Objects
 
@@ -1335,6 +1367,109 @@ python cli.py policy bulk-update --config config.xml --type security_rules --cri
 
 These integration workflows demonstrate how the graph query language can be a powerful tool for identifying specific objects or policies to be processed by other commands, creating an efficient and precise way to manage your PAN-OS configurations.
 
+## Cleanup Commands
+
+Commands for cleaning up unused objects and policies in PAN-OS configurations. For detailed information on how PANFlow determines which objects and policies to clean up, see the [Cleanup Detection Documentation](docs/cleanup_detection.md).
+
+### Cleanup Unused Objects
+
+Find and remove unused objects from the configuration:
+
+```bash
+python cli.py cleanup unused-objects --config CONFIG_FILE --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--type`, `-t`: Types of objects to clean up (can specify multiple types like `address`, `service`, `tag` - default is "address")
+- `--context`: Context (shared, device_group, vsys)
+- `--device-group`: Device group name (for Panorama device_group context)
+- `--vsys`: VSYS name (for firewall vsys context)
+- `--template`: Template name (for Panorama template context)
+- `--exclude-file`: JSON file with list of object names to exclude from cleanup
+- `--dry-run`: Preview changes without modifying the configuration
+- `--report-file`, `-r`: JSON file to save the report of cleaned-up objects
+- `--device-type`: Device type (firewall or panorama)
+- `--version`: PAN-OS version
+
+Examples:
+
+```bash
+# Find and report on unused address objects without making changes (dry run)
+python cli.py cleanup unused-objects --config firewall.xml --dry-run
+
+# Clean up unused address objects and save the updated configuration
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml
+
+# Clean up unused service objects specifically
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --type service
+
+# Clean up multiple object types (address and service) with a report
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --type address --type service --report-file cleanup-report.json
+
+# Clean up all supported object types (address, service, address-group, service-group, tag)
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --type address --type service --type address-group --type service-group --type tag
+
+# Exclude specific objects from cleanup
+python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --exclude-file protected-objects.json
+```
+
+How It Works:
+- PANFlow determines if an object is unused by checking for references across all policy types (security, NAT, decryption, QoS, etc.) and all appropriate groups.
+- For shared objects in Panorama configurations, it checks for usage across all device groups.
+- The detection process considers all relevant policy fields including complex structures like:
+  - Address objects: Checked in source/destination fields and translation fields
+  - Service objects: Checked in service fields, service-translation fields, and protocol-specific fields in NAT rules
+  - All object types: Checked in the appropriate groups (address groups for address objects, service groups for service objects)
+- See [Cleanup Detection Documentation](docs/cleanup_detection.md) for full technical details.
+
+### Cleanup Disabled Policies
+
+Find and remove disabled policies from the configuration:
+
+```bash
+python cli.py cleanup disabled-policies --config CONFIG_FILE --output OUTPUT_FILE [options]
+```
+
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--type`, `-t`: Types of policies to clean up (can specify multiple, default is "security_rules")
+- `--context`: Context (shared, device_group, vsys)
+- `--device-group`: Device group name (for Panorama device_group context)
+- `--vsys`: VSYS name (for firewall vsys context)
+- `--template`: Template name (for Panorama template context)
+- `--exclude-file`: JSON file with list of policy names to exclude from cleanup
+- `--dry-run`: Preview changes without modifying the configuration
+- `--report-file`, `-r`: JSON file to save the report of cleaned-up policies
+- `--device-type`: Device type (firewall or panorama)
+- `--version`: PAN-OS version
+
+Examples:
+
+```bash
+# Find and report on disabled security rules without making changes (dry run)
+python cli.py cleanup disabled-policies --config firewall.xml --dry-run
+
+# Clean up disabled policies and save the updated configuration
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml
+
+# Clean up multiple policy types with a report
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml --type security_pre_rules --type security_post_rules --report-file cleanup-report.json
+
+# Exclude specific policies from cleanup
+python cli.py cleanup disabled-policies --config firewall.xml --output cleaned.xml --exclude-file protected-policies.json
+```
+
+How It Works:
+- A policy is considered disabled if it contains the `<disabled>yes</disabled>` element in its XML structure.
+- For Panorama configurations, PANFlow checks both pre-rulebase and post-rulebase policies in the specified device group.
+- Direct XPath queries identify disabled policies regardless of their position in the configuration hierarchy.
+- See [Cleanup Detection Documentation](docs/cleanup_detection.md) for more details.
+
+For more cleanup command examples and advanced usage patterns, see [Cleanup Examples](examples/cleanup_examples.md).
+
 ## Tips and Best Practices
 
 1. **Always validate your configuration** after making changes with the `config validate` command.
@@ -1343,7 +1478,7 @@ These integration workflows demonstrate how the graph query language can be a po
 
 3. **Create backup configurations** before making significant changes.
 
-4. **Use `--dry-run`** for deduplication operations to preview changes before applying them.
+4. **Use `--dry-run`** for deduplication and cleanup operations to preview changes before applying them.
 
 5. **Leverage filter commands** to identify specific objects or policies before making bulk changes.
 

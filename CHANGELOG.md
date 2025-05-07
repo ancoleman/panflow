@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.1.4] - 2025-05-07
+
+### Added
+- Cleanup commands for configuration maintenance
+  - New `cleanup unused-objects` command to identify and remove unused objects
+  - New `cleanup disabled-policies` command to identify and remove disabled policies
+  - Support for dry-run mode to preview changes before applying them
+  - Report generation for cleanup operations
+  - Exclusion list functionality via JSON files
+  - Enhanced documentation explaining cleanup detection algorithms
+  - Examples for various cleanup workflows
+- Enhanced service object support
+  - Improved detection of service object usage in policies
+  - Added support for service-translation fields in NAT rules
+  - Added protocol-specific field checking for service objects
+  - Added QoS policy checking for service object references
+
+### Fixed
+- Fixed handling of object type naming inconsistencies for address-groups and service-groups
+- Enhanced NAT rule parsing to correctly identify service object usage
+- Improved policy detection for Panorama pre-rules and post-rules
+- Fixed field processing for complex nested fields in policies
+
 ## [0.1.3] - 2025-05-06
 
 ### Added
@@ -74,7 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.3...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.4...HEAD
+[0.1.4]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.3...v0.1.4
 [0.1.3]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.2...v0.1.3
 [0.1.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.1...v0.1.2
 [0.1.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.0...v0.1.1

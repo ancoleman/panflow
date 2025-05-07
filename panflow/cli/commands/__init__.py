@@ -13,6 +13,7 @@ from . import deduplicate_commands
 from . import query_commands
 from . import policy_commands
 from . import nat_commands
+from . import cleanup_commands
 
 # Optional modules - these may not exist yet
 # Will be imported by the parent package as needed
@@ -22,6 +23,7 @@ __all__ = [
     "deduplicate_commands",
     "policy_commands",
     "nat_commands",
+    "cleanup_commands",
     "group_commands",
     "report_commands",
     "config_commands",
