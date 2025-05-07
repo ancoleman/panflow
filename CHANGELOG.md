@@ -18,10 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `deduplicate hierarchical merge` command to merge duplicates with prioritization for parent contexts
   - Support for prioritizing objects in higher-level contexts (shared or parent device groups)
   - Impact reporting and dry-run capabilities for safe operation
+- NAT splitting functionality
+  - Added support for splitting NAT rules with multiple source/destination addresses
+  - New `nat split` command to convert complex NAT rules into simpler individual rules
+  - Preservation of rule metadata and attributes during splitting
+- Policy bulk operations
+  - Enhanced batch processing capabilities for security and NAT policies
+  - Documentation of bulk policy operations and capabilities
+  - Examples for policy rename and other bulk operations
 
 ### Fixed
 - Resolved object type naming inconsistencies in deduplication engine (address-group vs address_group)
 - Fixed reference tracking in deduplication to correctly identify object usage across the configuration
+- Enhanced XPath mappings for better object resolution across PAN-OS versions
 
 ## [0.1.2] - 2025-05-06
 
