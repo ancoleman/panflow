@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Auto-completion for common parameters (file paths, object types, policy types)
   - Dynamic completion for context-aware parameters
   - Updated documentation with installation and usage instructions
+  - **Docs:** [CLI_USAGE.md#shell-completion](CLI_USAGE.md#shell-completion)
 
 ## [0.2.0] - 2025-05-09
 
@@ -29,17 +30,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Intent parsing to identify user's intentions from natural language
   - Command mapping to translate natural language to CLI commands
   - Optional AI integration for enhanced understanding of complex queries
-  - Comprehensive documentation in `docs/nlq.md`
   - Unit tests for NLQ components
+  - **Docs:** [docs/nlq.md](docs/nlq.md)
+  - **CLI Reference:** [CLI_USAGE.md#nlq-commands](CLI_USAGE.md#nlq-commands)
 
 - XML functionality consolidation into `panflow.core.xml` package
   - New organized package structure with better separation of concerns
   - Dedicated modules: `base.py`, `builder.py`, `cache.py`, `query.py`, and `diff.py`
   - Backward compatibility through re-export pattern
   - Deprecation warnings for old module imports
-  - Comprehensive documentation in `docs/xml_package.md`
   - Migration guide with clear examples
   - Unit tests for the consolidated package structure
+  - **Docs:** [docs/xml_package.md](docs/xml_package.md)
+  - **Migration Guide:** [docs/package_consolidation_guide.md](docs/package_consolidation_guide.md)
 
 - Reporting functionality consolidation into `panflow.reporting` package
   - New package structure with clear separation between generation and formatting
@@ -49,21 +52,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Consistent parameter handling with improved validation
   - Backward compatibility through re-export pattern
   - Deprecation warnings for old module imports
-  - Comprehensive documentation in `docs/reporting_consolidation.md`
+  - **Docs:** [docs/reporting_consolidation.md](docs/reporting_consolidation.md)
+  - **Migration Guide:** [docs/package_consolidation_guide.md](docs/package_consolidation_guide.md)
 
 ### Changed
 - Updated project structure for better modularity and maintainability
-  - Revised directory structure in `docs/directory_structure.md`
   - Reorganized CLI commands for better categorization
   - Enhanced documentation organization
+  - **Docs:** [docs/directory_structure.md](docs/directory_structure.md)
 - Improved parameter handling in reporting functions
   - Explicit keyword arguments instead of positional arguments
   - Proper validation of parameters like object_type
   - Consistent forwarding of context parameters
-- Added consolidated package migration guide in `docs/package_consolidation_guide.md`
+  - **Docs:** [docs/reporting_consolidation.md#parameter-handling](docs/reporting_consolidation.md#parameter-handling)
+- Added consolidated package migration guide
+  - **Docs:** [docs/package_consolidation_guide.md](docs/package_consolidation_guide.md)
 - All XML utility imports should now use `panflow.core.xml.*` instead of individual `panflow.core.xml_*` modules
+  - **Docs:** [docs/xml_package.md#migration-guide](docs/xml_package.md#migration-guide)
 - All reporting functionality imports should now use `panflow.reporting.*` instead of `panflow.modules.reports` or `panflow.core.reporting`
-- Updated graph query language documentation in `docs/graph_query_language.md` and `docs/graph_query_reference.md`
+  - **Docs:** [docs/reporting_consolidation.md#backward-compatibility](docs/reporting_consolidation.md#backward-compatibility)
+- Updated graph query language documentation
+  - **Docs:** [docs/graph_query_language.md](docs/graph_query_language.md), [docs/graph_query_reference.md](docs/graph_query_reference.md)
 
 ### Fixed
 - Fixed parameter handling in ReportingEngine to correctly process object_type
@@ -83,11 +92,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Exclusion list functionality via JSON files
   - Enhanced documentation explaining cleanup detection algorithms
   - Examples for various cleanup workflows
+  - **Docs:** [docs/cleanup_detection.md](docs/cleanup_detection.md)
+  - **Examples:** [examples/cleanup_examples.md](examples/cleanup_examples.md)
+  - **CLI Reference:** [CLI_USAGE.md#cleanup-commands](CLI_USAGE.md#cleanup-commands)
 - Enhanced service object support
   - Improved detection of service object usage in policies
   - Added support for service-translation fields in NAT rules
   - Added protocol-specific field checking for service objects
   - Added QoS policy checking for service object references
+  - **CLI Reference:** [CLI_USAGE.md#object-commands](CLI_USAGE.md#object-commands)
 
 ### Fixed
 - Fixed handling of object type naming inconsistencies for address-groups and service-groups
@@ -103,14 +116,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `deduplicate hierarchical merge` command to merge duplicates with prioritization for parent contexts
   - Support for prioritizing objects in higher-level contexts (shared or parent device groups)
   - Impact reporting and dry-run capabilities for safe operation
+  - **Docs:** [docs/deduplication.md](docs/deduplication.md)
+  - **CLI Reference:** [CLI_USAGE.md#deduplication](CLI_USAGE.md#deduplication)
 - NAT splitting functionality
   - Added support for splitting NAT rules with multiple source/destination addresses
   - New `nat split` command to convert complex NAT rules into simpler individual rules
   - Preservation of rule metadata and attributes during splitting
+  - **CLI Reference:** [CLI_USAGE.md#nat-splitting](CLI_USAGE.md#nat-splitting)
 - Policy bulk operations
   - Enhanced batch processing capabilities for security and NAT policies
   - Documentation of bulk policy operations and capabilities
   - Examples for policy rename and other bulk operations
+  - **Docs:** [docs/policy_bulk_update_capabilities.md](docs/policy_bulk_update_capabilities.md)
+  - **Examples:** [examples/policy_rename_examples.md](examples/policy_rename_examples.md)
+  - **CLI Reference:** [CLI_USAGE.md#bulk-operations](CLI_USAGE.md#bulk-operations)
 
 ### Fixed
 - Resolved object type naming inconsistencies in deduplication engine (address-group vs address_group)
@@ -152,6 +171,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation including README, CLI usage guide, and API docs
 - Build system for creating standalone binaries for all platforms
 - Poetry-based package management
+- **Overview:** [README.md](README.md)
+- **CLI Usage:** [CLI_USAGE.md](CLI_USAGE.md)
+- **Getting Started:** [docs/getting_started.md](docs/getting_started.md)
+- **API Docs:** [docs/api/index.md](docs/api/index.md)
 
 ### Changed
 - N/A (Initial release)
