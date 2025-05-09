@@ -14,8 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Standardized output formatting with support for JSON, Table, CSV, YAML, and more
   - Improved error handling with consistent error messages
   - Parameter injection with clear type annotations
-  - **Docs:** [docs/cli_command_pattern.md](docs/cli_command_pattern.md)
+  - Comprehensive test suite for command pattern functionality
+  - Automated migration tool for existing CLI commands
+  - Detailed migration guide for manual conversions
+  - **Docs:** [docs/cli_command_pattern.md](docs/cli_command_pattern.md), [docs/cli_command_migration.md](docs/cli_command_migration.md)
   - **Example:** [panflow/cli/commands/object_commands_refactored.py](panflow/cli/commands/object_commands_refactored.py)
+  - **Tests:** [tests/unit/cli/test_command_pattern.py](tests/unit/cli/test_command_pattern.py), [tests/unit/cli/test_command_migration.py](tests/unit/cli/test_command_migration.py)
+  - **Tool:** [tools/cli_command_migrator.py](tools/cli_command_migrator.py)
 - Ongoing development and improvements
 
 ## [0.2.1] - 2025-05-09
