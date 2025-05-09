@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- CLI Command Pattern Abstraction
+  - New CommandBase class for standardizing command implementation
+  - Decorator functions for common patterns (error handling, config loading, etc.)
+  - Standardized output formatting with support for JSON, Table, CSV, YAML, and more
+  - Improved error handling with consistent error messages
+  - Parameter injection with clear type annotations
+  - **Docs:** [docs/cli_command_pattern.md](docs/cli_command_pattern.md)
+  - **Example:** [panflow/cli/commands/object_commands_refactored.py](panflow/cli/commands/object_commands_refactored.py)
 - Ongoing development and improvements
 
 ## [0.2.1] - 2025-05-09

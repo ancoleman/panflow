@@ -39,6 +39,7 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 | **XML Utilities** | XML manipulation utilities | [XML Utils](docs/xml_utils.md) |
 | **XML Package** | Consolidated XML package documentation | [XML Package](docs/xml_package.md) |
 | **Reporting Package** | Consolidated reporting package documentation | [Reporting Consolidation](docs/reporting_consolidation.md) |
+| **CLI Command Pattern** | Command pattern abstraction for CLI | [CLI Command Pattern](docs/cli_command_pattern.md) |
 
 ## Installation
 
@@ -296,6 +297,7 @@ The library is organized into logical modules:
 │   │   ├── __init__.py
 │   │   ├── app.py              # CLI app definition
 │   │   ├── common.py           # Shared CLI options
+│   │   ├── command_base.py     # Command pattern abstraction
 │   │   └── commands/           # CLI command modules
 │   │       ├── __init__.py
 │   │       ├── cleanup_commands.py
@@ -304,6 +306,7 @@ The library is organized into logical modules:
 │   │       ├── nat_commands.py
 │   │       ├── nlq_commands.py   # Natural language query commands
 │   │       ├── object_commands.py
+│   │       ├── object_commands_refactored.py # New command pattern example
 │   │       ├── policy_commands.py
 │   │       └── query_commands.py
 │   ├── constants/
