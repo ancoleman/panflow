@@ -8,13 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Ongoing development and improvements
+
+## [0.2.1] - 2025-05-09
+
+### Added
 - Shell completion support for CLI commands
   - Added `completion` command for displaying and installing shell completions
   - Support for Bash, Zsh, and Fish shells
   - Auto-completion for common parameters (file paths, object types, policy types)
   - Dynamic completion for context-aware parameters
   - Updated documentation with installation and usage instructions
-- Ongoing development and improvements
 
 ## [0.2.0] - 2025-05-09
 
@@ -155,7 +159,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.0...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.1...HEAD
+[0.2.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.0...v0.2.1
 [0.2.0]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.4...v0.2.0
 [0.1.4]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.3...v0.1.4
 [0.1.3]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.2...v0.1.3
