@@ -7,22 +7,97 @@ This module provides the main Typer application and command group registration.
 import sys
 import platform
 import logging
+import os
+from pathlib import Path
 from lxml import etree
 import typer
+from typing import List, Optional
 
 from panflow.core.logging_utils import configure_logging
 from .common import CommonOptions
 
-# Create main Typer app
-app = typer.Typer(help="PANFlow CLI")
+# Create main Typer app with auto-completion support
+app = typer.Typer(
+    help="PANFlow CLI",
+    add_completion=True,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
 
-# Create command groups
-object_app = typer.Typer(help="Object management commands")
-policy_app = typer.Typer(help="Policy management commands")
-group_app = typer.Typer(help="Group management commands")
-report_app = typer.Typer(help="Report generation commands")
-config_app = typer.Typer(help="Configuration management commands")
-merge_app = typer.Typer(help="Policy and Object merge commands")
+# Create command groups with auto-completion
+object_app = typer.Typer(
+    help="Object management commands",
+    add_completion=True,
+    no_args_is_help=True,
+)
+policy_app = typer.Typer(
+    help="Policy management commands",
+    add_completion=True,
+    no_args_is_help=True,
+)
+group_app = typer.Typer(
+    help="Group management commands",
+    add_completion=True,
+    no_args_is_help=True,
+)
+report_app = typer.Typer(
+    help="Report generation commands",
+    add_completion=True,
+    no_args_is_help=True,
+)
+config_app = typer.Typer(
+    help="Configuration management commands",
+    add_completion=True,
+    no_args_is_help=True,
+)
+merge_app = typer.Typer(
+    help="Policy and Object merge commands",
+    add_completion=True,
+    no_args_is_help=True,
+)
+
+# Autocompletion functions for common parameters
+def complete_config_files() -> List[Path]:
+    """
+    Auto-complete configuration file paths.
+    Returns XML files in the current directory.
+    """
+    return [
+        Path(f) for f in os.listdir(".")
+        if f.endswith((".xml", ".XML")) and os.path.isfile(f)
+    ]
+
+def complete_object_types() -> List[str]:
+    """
+    Auto-complete object types.
+    """
+    return [
+        "address", "service", "address-group", "service-group",
+        "tag", "application", "application-group", "profile-group"
+    ]
+
+def complete_policy_types() -> List[str]:
+    """
+    Auto-complete policy types.
+    """
+    return [
+        "security_rules", "nat_rules", "security_pre_rules", "security_post_rules",
+        "nat_pre_rules", "nat_post_rules", "qos_rules", "decryption_rules",
+        "authentication_rules", "dos_rules", "tunnel_inspection_rules",
+        "application_override_rules"
+    ]
+
+def complete_context_types() -> List[str]:
+    """
+    Auto-complete context types.
+    """
+    return ["shared", "vsys", "device_group", "template"]
+
+def complete_output_formats() -> List[str]:
+    """
+    Auto-complete output formats.
+    """
+    return ["json", "yaml", "xml", "html", "csv", "text"]
 
 # Import the query commands app directly
 from panflow.cli.commands.query_commands import app as query_app

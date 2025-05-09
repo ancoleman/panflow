@@ -12,6 +12,7 @@ This guide provides a comprehensive overview of the command-line interface (CLI)
 
 - [Installation](#installation)
 - [Global Options](#global-options)
+- [Shell Completion](#shell-completion)
 - [Object Commands](#object-commands)
 - [Policy Commands](#policy-commands)
 - [Group Commands](#group-commands)
@@ -51,6 +52,53 @@ These options can be used with any command:
 | `--vsys TEXT` | | VSYS name (for firewall vsys context) |
 | `--template TEXT` | | Template name (for Panorama template context) |
 | `--version TEXT` | | PAN-OS version (auto-detected if not specified) |
+
+## Shell Completion
+
+PANFlow CLI supports shell completion for bash, zsh, and fish shells, making it easier to work with commands and options.
+
+### Setting Up Completion
+
+To set up shell completion:
+
+```bash
+# Show completion script for your current shell
+python cli.py completion --show
+
+# Install completion for your current shell
+python cli.py completion --install
+
+# Install completion for a specific shell
+python cli.py completion --install --shell bash
+```
+
+After installation, reload your shell or run the appropriate command to enable completion:
+
+**Bash**:
+```bash
+source ~/.bashrc  # or ~/.bash_profile on macOS
+```
+
+**Zsh**:
+```bash
+source ~/.zshrc
+```
+
+**Fish**:
+```
+# Completion is automatically loaded in fish
+```
+
+### Supported Completions
+
+Shell completion provides automatic suggestions for:
+- Commands and subcommands
+- Configuration files (`.xml`)
+- Object types (`address`, `service`, etc.)
+- Policy types (`security_rules`, `nat_rules`, etc.)
+- Context types (`shared`, `vsys`, etc.)
+- Output formats (`json`, `yaml`, etc.)
+- Common options and arguments
 
 ## Object Commands
 

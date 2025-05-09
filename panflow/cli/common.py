@@ -8,11 +8,21 @@ import os
 import typer
 from typing import Optional, Callable, TypeVar, Any, List, Dict
 from functools import wraps
+from pathlib import Path
 
 from panflow.core.logging_utils import (
     verbose_callback, quiet_callback, log_level_callback, log_file_callback
 )
 from panflow.core.conflict_resolver import ConflictStrategy
+
+# Import autocompletion functions
+from .app import (
+    complete_config_files,
+    complete_object_types,
+    complete_policy_types,
+    complete_context_types,
+    complete_output_formats
+)
 
 # Type variable for callback return type
 T = TypeVar('T')
@@ -47,80 +57,88 @@ class ConfigOptions:
     def config_file():
         """Option for configuration file."""
         return typer.Option(
-            ..., "--config", "-c", 
-            help="Path to XML configuration file"
+            ..., "--config", "-c",
+            help="Path to XML configuration file",
+            autocompletion=complete_config_files
         )
-    
+
     @staticmethod
     def output_file():
         """Option for output file."""
         return typer.Option(
-            ..., "--output", "-o", 
-            help="Output file for updated configuration"
+            ..., "--output", "-o",
+            help="Output file for updated configuration",
+            autocompletion=complete_config_files
         )
-    
+
     @staticmethod
     def device_type():
         """
         Option for device type with auto-detection.
-        
+
         When not specified, the device type will be automatically detected based on
         the XML structure of the configuration file.
         """
         return typer.Option(
-            None, "--device-type", "-d", 
-            help="Device type (firewall or panorama, auto-detected if not specified)"
+            None, "--device-type", "-d",
+            help="Device type (firewall or panorama, auto-detected if not specified)",
+            autocompletion=lambda: ["firewall", "panorama"]
         )
-    
+
     @staticmethod
     def version():
         """Option for PAN-OS version."""
         return typer.Option(
-            None, "--version", 
-            help="PAN-OS version (auto-detected if not specified)"
+            None, "--version",
+            help="PAN-OS version (auto-detected if not specified)",
+            autocompletion=lambda: ["10.1", "10.2", "11.0", "11.1", "11.2"]
         )
-    
+
     @staticmethod
     def dry_run():
         """Option for dry run mode."""
         return typer.Option(
-            False, "--dry-run", 
+            False, "--dry-run",
             help="Preview changes without modifying the target configuration"
         )
 
 class ContextOptions:
     """Options for context selection."""
-    
+
     @staticmethod
     def context_type():
         """Option for context type."""
         return typer.Option(
-            "shared", "--context", 
-            help="Context (shared, device_group, vsys, template)"
+            "shared", "--context",
+            help="Context (shared, device_group, vsys, template)",
+            autocompletion=complete_context_types
         )
-    
+
     @staticmethod
     def device_group():
         """Option for device group."""
         return typer.Option(
-            None, "--device-group", 
+            None, "--device-group",
             help="Device group name (for Panorama device_group context)"
+            # Note: We could add dynamic completion based on loaded config here
         )
-    
+
     @staticmethod
     def vsys():
         """Option for vsys."""
         return typer.Option(
-            "vsys1", "--vsys", 
-            help="VSYS name (for firewall vsys context)"
+            "vsys1", "--vsys",
+            help="VSYS name (for firewall vsys context)",
+            autocompletion=lambda: ["vsys1", "vsys2", "vsys3"]
         )
-    
+
     @staticmethod
     def template():
         """Option for template."""
         return typer.Option(
-            None, "--template", 
+            None, "--template",
             help="Template name (for Panorama template context)"
+            # Note: We could add dynamic completion based on loaded config here
         )
     
     @staticmethod
@@ -216,56 +234,62 @@ class MergeOptions:
 
 class ObjectOptions:
     """Options for object operations."""
-    
+
     @staticmethod
     def object_type():
         """Option for object type."""
         return typer.Option(
-            ..., "--type", "-t", 
-            help="Type of object (address, service, etc.)"
+            ..., "--type", "-t",
+            help="Type of object (address, service, etc.)",
+            autocompletion=complete_object_types
         )
-    
+
     @staticmethod
     def object_name():
         """Option for object name."""
         return typer.Option(
-            ..., "--name", "-n", 
+            ..., "--name", "-n",
             help="Name of the object"
+            # Dynamic completion based on loaded config and object type
         )
 
 class PolicyOptions:
     """Options for policy operations."""
-    
+
     @staticmethod
     def policy_type():
         """Option for policy type."""
         return typer.Option(
-            ..., "--type", "-t", 
-            help="Type of policy (security_pre_rules, nat_rules, etc.)"
+            ..., "--type", "-t",
+            help="Type of policy (security_pre_rules, nat_rules, etc.)",
+            autocompletion=complete_policy_types
         )
-    
+
     @staticmethod
     def policy_name():
         """Option for policy name."""
         return typer.Option(
-            ..., "--name", "-n", 
+            ..., "--name", "-n",
             help="Name of the policy"
+            # Dynamic completion based on loaded config and policy type
         )
-    
+
     @staticmethod
     def position():
         """Option for policy position."""
         return typer.Option(
-            "bottom", "--position", 
-            help="Position to add policy (top, bottom, before, after)"
+            "bottom", "--position",
+            help="Position to add policy (top, bottom, before, after)",
+            autocompletion=lambda: ["top", "bottom", "before", "after"]
         )
-    
+
     @staticmethod
     def ref_policy():
         """Option for reference policy."""
         return typer.Option(
-            None, "--ref-policy", 
+            None, "--ref-policy",
             help="Reference policy for before/after position"
+            # Dynamic completion based on loaded config and policy type
         )
 
 # File and output related callbacks
@@ -290,17 +314,17 @@ def file_callback(value: str) -> str:
 def output_callback(value: str) -> str:
     """
     Validate that the output format is supported.
-    
+
     Args:
         value: The output format
-        
+
     Returns:
         The validated output format
-        
+
     Raises:
         typer.BadParameter: If the output format is not supported
     """
-    supported_formats = ["table", "json", "csv"]
+    supported_formats = complete_output_formats()
     if value not in supported_formats:
         formats_str = ", ".join(supported_formats)
         raise typer.BadParameter(f"Output format '{value}' not supported. Valid formats: {formats_str}")

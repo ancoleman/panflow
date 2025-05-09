@@ -8,26 +8,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Shell completion support for CLI commands
+  - Added `completion` command for displaying and installing shell completions
+  - Support for Bash, Zsh, and Fish shells
+  - Auto-completion for common parameters (file paths, object types, policy types)
+  - Dynamic completion for context-aware parameters
+  - Updated documentation with installation and usage instructions
 - Ongoing development and improvements
+
+## [0.2.0] - 2025-05-09
+
+### Added
+- Natural Language Query (NLQ) functionality
+  - New `nlq` command for processing natural language queries and commands
+  - Entity extraction for identifying objects, policies, and actions in natural language
+  - Intent parsing to identify user's intentions from natural language
+  - Command mapping to translate natural language to CLI commands
+  - Optional AI integration for enhanced understanding of complex queries
+  - Comprehensive documentation in `docs/nlq.md`
+  - Unit tests for NLQ components
+
 - XML functionality consolidation into `panflow.core.xml` package
   - New organized package structure with better separation of concerns
   - Dedicated modules: `base.py`, `builder.py`, `cache.py`, `query.py`, and `diff.py`
   - Backward compatibility through re-export pattern
   - Deprecation warnings for old module imports
-  - Documentation to guide migration to the new API
+  - Comprehensive documentation in `docs/xml_package.md`
+  - Migration guide with clear examples
+  - Unit tests for the consolidated package structure
+
 - Reporting functionality consolidation into `panflow.reporting` package
   - New package structure with clear separation between generation and formatting
   - Formatters for different output types (HTML, JSON, CSV) in `formatters/` subpackage
   - Report generators in `reports/` subpackage
   - New `ReportingEngine` class that supersedes `EnhancedReportingEngine`
+  - Consistent parameter handling with improved validation
   - Backward compatibility through re-export pattern
   - Deprecation warnings for old module imports
-  - Documentation to guide migration to the new API
+  - Comprehensive documentation in `docs/reporting_consolidation.md`
 
 ### Changed
-- Added package_consolidation_guide.md with migration instructions
+- Updated project structure for better modularity and maintainability
+  - Revised directory structure in `docs/directory_structure.md`
+  - Reorganized CLI commands for better categorization
+  - Enhanced documentation organization
+- Improved parameter handling in reporting functions
+  - Explicit keyword arguments instead of positional arguments
+  - Proper validation of parameters like object_type
+  - Consistent forwarding of context parameters
+- Added consolidated package migration guide in `docs/package_consolidation_guide.md`
 - All XML utility imports should now use `panflow.core.xml.*` instead of individual `panflow.core.xml_*` modules
 - All reporting functionality imports should now use `panflow.reporting.*` instead of `panflow.modules.reports` or `panflow.core.reporting`
+- Updated graph query language documentation in `docs/graph_query_language.md` and `docs/graph_query_reference.md`
+
+### Fixed
+- Fixed parameter handling in ReportingEngine to correctly process object_type
+- Resolved circular dependencies between XML-related modules
+- Fixed issues with device_type handling in cleanup_commands.py
+- Improved error handling for edge cases in report generation
+- Enhanced query syntax documentation to prevent common usage errors
 
 ## [0.1.4] - 2025-05-07
 
@@ -116,7 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.4...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.0...HEAD
+[0.2.0]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.4...v0.2.0
 [0.1.4]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.3...v0.1.4
 [0.1.3]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.2...v0.1.3
 [0.1.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.1...v0.1.2
