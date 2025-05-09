@@ -14,7 +14,7 @@ from functools import wraps
 from lxml import etree
 
 # Import custom exceptions
-from .exceptions import PANFlowError, CacheError
+from ..exceptions import PANFlowError, CacheError
 
 # Initialize logger
 logger = logging.getLogger("panflow")
@@ -126,9 +126,9 @@ class LRUCache:
 _xpath_result_cache = LRUCache(capacity=10000, ttl=300)  # 5-minute TTL
 _element_cache = weakref.WeakValueDictionary()  # Cache elements referenced by their path
 
-def cache_xpath_result(xpath: str, root_id: int, namespaces: Optional[Dict[str, str]] = None) -> Callable:
+def cache_xpath_result(xpath: str, root_id: int, namespaces: Optional[Dict[str, str]] = None) -> Any:
     """
-    Decorator for caching XPath query results.
+    Get cached XPath query result.
     
     Args:
         xpath: XPath expression
@@ -196,7 +196,7 @@ def invalidate_element_cache(element_path: Optional[str] = None) -> None:
     else:
         _element_cache.clear()
     
-def cached_xpath(func):
+def cached_xpath(func: Callable) -> Callable:
     """
     Decorator for caching XPath query results.
     

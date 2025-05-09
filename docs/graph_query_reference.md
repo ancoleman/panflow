@@ -151,12 +151,23 @@ RETURN r.name, a.name
 
 ### Working with Relationships
 
-To check if a relationship exists:
+To check if a relationship exists, you need to work with the `edges_out` and `edges_in` properties:
 
 ```
 MATCH (r:security-rule)
 MATCH (a:address)
-WHERE r.edges_out CONTAINS {target: a.id, type: "uses-destination"}
+WHERE r.edges_out CONTAINS {target: a.id, relation: "uses-destination"}
+RETURN r.name, a.name
+```
+
+Note: Direct relationship patterns like `(a)-[:contains]->(b)` are not supported in the current version. Always use the edge properties.
+
+Alternative approach for finding relationships:
+
+```
+MATCH (r:security-rule)
+MATCH (a:address)
+WHERE r.id IN a.edges_in.source
 RETURN r.name, a.name
 ```
 
@@ -179,6 +190,20 @@ MATCH (a:address)
 RETURN a.addr_type, COUNT(*)
 ```
 
+## Limitations and Known Issues
+
+The current implementation of the graph query language has some limitations to be aware of:
+
+1. **Relationship Pattern Syntax**: Direct relationship patterns like `(a)-[:contains]->(b)` are not supported in the current version. Use `edges_out` and `edges_in` properties instead.
+
+2. **Limited String Operations**: The `CONTAINS` and `STARTS WITH` keywords are not supported. Use regular expressions with `=~` instead:
+   - Instead of `a.name CONTAINS "web"`, use `a.name =~ ".*web.*"`
+   - Instead of `a.name STARTS WITH "web"`, use `a.name =~ "^web.*"`
+
+3. **Strict Equality Operator**: Only use `==` for equality comparison, not `=`. Using `=` will result in syntax errors.
+
+4. **Limited Aggregation**: Only basic aggregation functions like `COUNT` are supported.
+
 ## Best Practices
 
 1. **Be specific**: Use node types and properties to narrow down results
@@ -188,3 +213,5 @@ RETURN a.addr_type, COUNT(*)
 5. **Use regular expressions**: For flexible pattern matching
 6. **Check relationships directly**: Use edges_out and edges_in to examine relationships
 7. **Use the verification tool**: Validate your queries before execution
+8. **Escape special characters**: When using regular expressions, remember to escape special characters (e.g., `10\\.1\\..*` for IP patterns)
+9. **Check syntax first**: Run your query with `query verify` before executing to catch syntax issues

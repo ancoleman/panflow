@@ -12,6 +12,8 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 - **Bulk operations**: Powerful tools for modifying multiple configuration elements at once
 - **Deduplication engine**: Find and merge duplicate objects while updating all references
 - **Graph-based querying**: Query the configuration using a Cypher-like query language
+- **Natural language processing**: Interact with PANFlow using plain English queries and commands
+- **AI integration**: Optional AI-powered natural language understanding for complex queries
 - **Command-line interface**: Feature-rich CLI for configuration management
 - **Device type auto-detection**: Automatically detects if a configuration is from a Panorama or firewall
 - **Query-based filtering**: Select objects and policies using graph queries
@@ -25,6 +27,7 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 |----------|-------------|------|
 | **Getting Started** | Quick start guide | [Getting Started](docs/getting_started.md) |
 | **CLI Usage** | Comprehensive CLI reference | [CLI Usage Guide](CLI_USAGE.md) |
+| **Natural Language Query** | Using natural language with PANFlow | [Natural Language Query](docs/nlq.md) |
 | **Graph Query Language** | Reference for the graph-based query language | [Graph Query Language](docs/graph_query_language.md) |
 | **Query Examples** | Example queries for common tasks | [Query Examples](docs/query_examples.md) |
 | **Object Merging** | Documentation on merging objects | [Object Merger](docs/object_merger.md) |
@@ -34,6 +37,8 @@ A comprehensive Python library for working with Palo Alto Networks PAN-OS XML co
 | **Error Handling** | Error handling and troubleshooting | [Error Handling](docs/error_handling.md) |
 | **XPath Handling** | Dynamic XPath resolver documentation | [Dynamic XPath](docs/dynamic_xpath.md) |
 | **XML Utilities** | XML manipulation utilities | [XML Utils](docs/xml_utils.md) |
+| **XML Package** | Consolidated XML package documentation | [XML Package](docs/xml_package.md) |
+| **Reporting Package** | Consolidated reporting package documentation | [Reporting Consolidation](docs/reporting_consolidation.md) |
 
 ## Installation
 
@@ -207,6 +212,13 @@ python cli.py object list --config config.xml --type address --query-filter "MAT
 # Filter policies using a graph query
 python cli.py policy filter --config config.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.port = '80'"
 
+# Use natural language to clean up unused objects
+python cli.py nlq query "show me all unused address objects"
+python cli.py nlq query "cleanup unused service objects but don't make any changes"
+
+# Use an interactive natural language session
+python cli.py nlq interactive
+
 # Merge a policy from one config to another
 python cli.py merge policy --source-config source.xml --target-config target.xml --type security_pre_rules --name "Allow Web" --output merged.xml
 
@@ -286,8 +298,11 @@ The library is organized into logical modules:
 │   │   ├── common.py           # Shared CLI options
 │   │   └── commands/           # CLI command modules
 │   │       ├── __init__.py
+│   │       ├── cleanup_commands.py
 │   │       ├── deduplicate_commands.py
 │   │       ├── merge_commands.py
+│   │       ├── nat_commands.py
+│   │       ├── nlq_commands.py   # Natural language query commands
 │   │       ├── object_commands.py
 │   │       ├── policy_commands.py
 │   │       └── query_commands.py
@@ -302,20 +317,24 @@ The library is organized into logical modules:
 │   │   ├── conflict_resolver.py # Conflict resolution strategies
 │   │   ├── deduplication.py    # Duplicate object handling
 │   │   ├── exceptions.py       # Custom exceptions
+│   │   ├── graph_service.py    # Graph service
 │   │   ├── graph_utils.py      # Configuration graph builder
 │   │   ├── logging_utils.py    # Logging and error tracking
+│   │   ├── nat_splitter.py     # NAT rule splitting
+│   │   ├── object_finder.py    # Object finding
 │   │   ├── object_merger.py    # Object merging handling
 │   │   ├── object_validator.py # Object validation
 │   │   ├── policy_merger.py    # Policy merging handling
 │   │   ├── query_engine.py     # Graph query execution engine
 │   │   ├── query_language.py   # Graph query language parser
-│   │   ├── reporting.py        # Report generation framework
 │   │   ├── template_loader.py  # HTML template loader
-│   │   ├── xml_builder.py      # XML construction utilities
-│   │   ├── xml_cache.py        # XML caching for performance
-│   │   ├── xml_diff.py         # XML difference utilities
-│   │   ├── xml_query.py        # XML querying utilities
-│   │   ├── xml_utils.py        # XML manipulation utilities
+│   │   ├── xml/                # Consolidated XML Package
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py        # Core XML utilities
+│   │   │   ├── builder.py     # XML construction classes
+│   │   │   ├── cache.py       # XML caching functionality
+│   │   │   ├── diff.py        # XML comparison utilities
+│   │   │   └── query.py       # XML query functionality
 │   │   └── xpath_resolver.py   # Version-aware XPath handling
 │   ├── modules/                # Functional modules
 │   │   ├── __init__.py
@@ -323,6 +342,21 @@ The library is organized into logical modules:
 │   │   ├── objects.py          # Object management
 │   │   ├── policies.py         # Policy management
 │   │   └── reports.py          # Report generation
+│   ├── nlq/                    # Natural Language Query Module
+│   │   ├── __init__.py
+│   │   ├── ai_processor.py     # AI-powered processing
+│   │   ├── command_mapper.py   # Maps intents to commands
+│   │   ├── entity_extractor.py # Extracts entities from queries
+│   │   ├── intent_parser.py    # Parses intents from queries
+│   │   └── processor.py        # Main NLQ processor
+│   ├── reporting/              # Consolidated Reporting Package
+│   │   ├── __init__.py
+│   │   ├── engine.py           # Reporting engine
+│   │   └── reports/            # Report implementation modules
+│   │       ├── __init__.py
+│   │       ├── duplicate_objects.py
+│   │       ├── policy_analysis.py
+│   │       └── unused_objects.py
 │   ├── templates/              # HTML report templates
 │   │   └── reports/
 │   │       ├── base.html
@@ -335,6 +369,8 @@ The library is organized into logical modules:
 │   └── xpath_mappings/         # XPath definitions by version
 │       ├── panos_10_1.yaml
 │       ├── panos_10_2.yaml
+│       ├── panos_11_0.yaml
+│       ├── panos_11_1.yaml
 │       └── panos_11_2.yaml
 ├── docs/                       # Documentation
 ├── pyproject.toml              # Project metadata

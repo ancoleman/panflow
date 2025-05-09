@@ -1,7 +1,7 @@
 """
 XML builder utility for PANFlow.
 
-This module provides a higher-level abstractions for XML operations,
+This module provides higher-level abstractions for XML operations,
 making it easier to create, modify, and query XML elements.
 """
 
@@ -9,9 +9,9 @@ import logging
 from typing import Dict, Any, Optional, List, Tuple, Union, Iterator, Set, Callable
 from lxml import etree
 
-from .exceptions import PANFlowError, XPathError, ValidationError
-from .xml_utils import parse_xml, find_element, find_elements, element_exists
-from .xml_cache import cached_xpath, clear_xpath_cache
+from ..exceptions import PANFlowError, XPathError, ValidationError
+from .base import parse_xml, find_element, find_elements, element_exists
+from .cache import cached_xpath, clear_xpath_cache
 
 # Initialize logger
 logger = logging.getLogger("panflow")

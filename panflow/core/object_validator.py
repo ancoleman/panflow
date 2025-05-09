@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import List, Tuple, Dict, Any, Optional
 from lxml import etree
 
-from .xml_utils import find_element, find_elements
+from .xml.base import find_element, find_elements
 
 # Initialize logger
 logger = logging.getLogger("panflow")

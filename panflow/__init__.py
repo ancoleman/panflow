@@ -33,6 +33,16 @@ from .core.xpath_resolver import (
     get_all_versions, determine_version_from_config
 )
 
+# Use consolidated XML package
+from .core.xml.base import (
+    create_element, delete_element, get_element_text, set_element_text,
+    element_exists, clone_element
+)
+from .core.xml.builder import XmlBuilder
+from .core.xml.cache import cached_xpath, clear_xpath_cache
+from .core.xml.query import XmlQuery
+from .core.xml.diff import XmlDiff
+
 from .core.policy_merger import PolicyMerger
 from .core.object_merger import ObjectMerger
 from .core.deduplication import DeduplicationEngine
@@ -56,9 +66,12 @@ from .modules.policies import (
     get_policies, get_policy, add_policy, update_policy,
     delete_policy, filter_policies
 )
-from .modules.reports import (
+
+# Import consolidated reporting functionality
+from .reporting import (
     generate_unused_objects_report, generate_duplicate_objects_report,
-    generate_security_rule_coverage_report, generate_reference_check_report
+    generate_security_rule_coverage_report, generate_reference_check_report,
+    generate_rule_hit_count_report, ReportingEngine
 )
 
 # Set up logging

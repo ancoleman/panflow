@@ -3,22 +3,31 @@ Core package for PANFlow for PAN-OS XML utilities.
 
 This package provides the core functionality for working with PANFlow for PAN-OS XML configurations,
 including XML parsing, manipulation, saving, and enhanced XML abstractions.
+
+XML Utility Consolidation (2023):
+The XML utilities have been consolidated into a dedicated package structure:
+- panflow.core.xml: Main package with all XML functionality
+- panflow.core.xml.base: Core XML utilities (parsing, manipulation, etc.)
+- panflow.core.xml.cache: Caching functionality for XML operations
+- panflow.core.xml.builder: High-level XML building abstractions
+- panflow.core.xml.diff: XML difference utilities
+- panflow.core.xml.query: Advanced XML querying capabilities
+
+Legacy modules (panflow.core.xml_utils, xml_builder, etc.) are maintained for
+backward compatibility but will emit deprecation warnings. New code should
+import directly from panflow.core.xml.
 """
 
-# Import enhanced XML utilities
-from .xml_builder import XmlNode, XmlBuilder, XPathBuilder
-from .xml_query import XmlQuery
-from .xml_diff import XmlDiff, DiffItem, DiffType
+# Import the xml package
+from . import xml
 
-# Import from exceptions.py
-from .exceptions import (
-    PANFlowError, ParseError, XPathError, MergeError, ValidationError, CacheError
-)
-
-# Import from xml_utils.py
-from .xml_utils import (
+# Import XML utilities for backward compatibility but using the new package
+from .xml import (
+    # Classes
+    XmlNode, XmlBuilder, XPathBuilder, XmlQuery, XmlDiff, DiffItem, DiffType,
+    
     # XML parsing
-    parse_xml,
+    parse_xml, parse_xml_string,
     
     # XPath operations
     find_elements, find_element, element_exists,
@@ -34,9 +43,20 @@ from .xml_utils import (
     # Validation
     validate_xml,
     
-    # Helper functions
-    get_xpath_functions, get_element_manipulation_functions,
-    get_conversion_functions
+    # Caching
+    cached_xpath, clear_xpath_cache, invalidate_element_cache,
+    
+    # Utility functions
+    load_xml_file, get_xpath_element_value,
+    
+    # Constants
+    HAVE_LXML
+)
+
+# Import from exceptions.py
+from .exceptions import (
+    PANFlowError, ParseError, XPathError, MergeError, ValidationError, CacheError, DiffError, QueryError,
+    FileOperationError, SecurityError
 )
 
 # Import from config_saver.py
@@ -66,11 +86,14 @@ from .object_merger import (
 
 # Define the public API
 __all__ = [
+    # XML package
+    'xml',
+    
     # Enhanced XML abstractions
     'XmlNode', 'XmlBuilder', 'XPathBuilder', 'XmlQuery', 'XmlDiff', 'DiffItem', 'DiffType',
     
     # XML parsing
-    'parse_xml',
+    'parse_xml', 'parse_xml_string',
     
     # XPath operations
     'find_elements', 'find_element', 'element_exists',
@@ -86,9 +109,11 @@ __all__ = [
     # Validation
     'validate_xml',
     
-    # Helper functions
-    'get_xpath_functions', 'get_element_manipulation_functions',
-    'get_conversion_functions',
+    # Caching
+    'cached_xpath', 'clear_xpath_cache', 'invalidate_element_cache',
+    
+    # Utility functions
+    'load_xml_file', 'get_xpath_element_value', 'HAVE_LXML',
     
     # Configuration saving
     'ConfigSaver',
@@ -103,7 +128,7 @@ __all__ = [
     
     # Exceptions
     'PANFlowError', 'ParseError', 'XPathError', 'MergeError', 'ValidationError', 'CacheError',
-    'ConfigSaverError',
+    'ConfigSaverError', 'DiffError', 'QueryError', 'FileOperationError', 'SecurityError',
 
     # Merger classes
     'PolicyMerger',

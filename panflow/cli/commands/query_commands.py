@@ -18,7 +18,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.syntax import Syntax
 
-from panflow.core.xml_utils import load_xml_file
+from panflow.core.xml.base import load_xml_file
 from panflow.core.graph_utils import ConfigGraph
 from panflow.core.query_language import Query, Lexer
 from panflow.core.query_engine import QueryExecutor

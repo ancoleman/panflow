@@ -14,8 +14,8 @@ from ..common import ConfigOptions, ContextOptions, ObjectOptions
 
 # Import core modules
 from panflow import PANFlowConfig
-from panflow.modules.reports import (
-    generate_unused_objects_report, 
+from panflow.reporting import (
+    generate_unused_objects_report,
     generate_security_rule_coverage_report
 )
 from panflow.core.graph_service import GraphService
@@ -104,8 +104,8 @@ def cleanup_unused_objects(
         for obj_type in object_types:
             # Generate unused objects report
             report_data = generate_unused_objects_report(
-                xml_config.tree, 
-                device_type,
+                xml_config.tree,
+                xml_config.device_type,  # Use detected device_type from PANFlowConfig
                 context,
                 xml_config.version,
                 object_type=obj_type,  # Pass the object type
@@ -247,7 +247,7 @@ def cleanup_disabled_policies(
             disabled_rules = []
             
             # For panorama device type, we need to check both pre and post rulebases
-            if device_type.lower() == "panorama":
+            if xml_config.device_type.lower() == "panorama":
                 # Check pre-rules first
                 if device_group:
                     # Directly query the rules and check for disabled attribute
@@ -296,7 +296,7 @@ def cleanup_disabled_policies(
                 for rule_name in filtered_disabled:
                     try:
                         # For Panorama, determine if this is a pre or post rule
-                        if device_type.lower() == "panorama":
+                        if xml_config.device_type.lower() == "panorama":
                             # Check pre-rules
                             pre_xpath = f"/config/devices/entry[@name='localhost.localdomain']/device-group/entry[@name='{device_group}']/pre-rulebase/security/rules/entry[@name='{rule_name}']"
                             pre_rule = xml_config.tree.xpath(pre_xpath)

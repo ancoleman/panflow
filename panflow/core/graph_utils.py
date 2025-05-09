@@ -10,7 +10,7 @@ import logging
 from typing import Dict, List, Any, Optional, Set, Tuple, Union
 import networkx as nx
 from lxml import etree
-from panflow.core.xml_utils import get_xpath_element_value
+from panflow.core.xml.base import get_xpath_element_value
 
 
 # Set up logging

@@ -79,7 +79,7 @@ python cli.py object list --config firewall.xml --type address --context vsys --
 python cli.py object list --config firewall.xml --type address --query-filter "MATCH (a:address) WHERE a.value CONTAINS '10.0.0'"
 
 # List address objects that are not used in any rule
-python cli.py object list --config firewall.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a))"
+python cli.py object list --config firewall.xml --type address --query-filter "MATCH (a:address) MATCH (r:security-rule) WHERE NOT EXISTS(r.edges_out[*] ? (@.target == a.id AND (@.relation == 'uses-source' OR @.relation == 'uses-destination')))"
 ```
 
 ### Add Object
@@ -421,10 +421,10 @@ Examples:
 python cli.py policy filter --config panorama.xml --type security_pre_rules --criteria rule-criteria.json --output filtered-rules.json
 
 # Filter policies using graph query
-python cli.py policy filter --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-destination]->(a:address) WHERE a.value CONTAINS '192.168.1'" --output internal_rules.json
+python cli.py policy filter --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule) MATCH (a:address) WHERE a.value =~ '.*192\\.168\\.1.*' AND r.edges_out CONTAINS {target: a.id, relation: 'uses-destination'}" --output internal_rules.json
 
 # Combine criteria with graph query
-python cli.py policy filter --config firewall.xml --type security_rules --criteria allow_rules.json --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.name == 'http'"
+python cli.py policy filter --config firewall.xml --type security_rules --criteria allow_rules.json --query-filter "MATCH (r:security-rule) MATCH (s:service) WHERE s.name == 'http' AND r.edges_out CONTAINS {target: s.id, relation: 'uses-service'}"
 ```
 
 ### Add Policy
@@ -529,10 +529,10 @@ Examples:
 python cli.py policy bulk-update --config panorama.xml --type security_pre_rules --criteria criteria.json --operations operations.json --output updated.xml
 
 # Update policies matching graph query
-python cli.py policy bulk-update --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.dst_port == '3389'" --operations rdp_protection.json --output updated.xml
+python cli.py policy bulk-update --config firewall.xml --type security_rules --query-filter "MATCH (r:security-rule) MATCH (s:service) WHERE s.dst_port == '3389' AND r.edges_out CONTAINS {target: s.id, relation: 'uses-service'}" --operations rdp_protection.json --output updated.xml
 
 # Update policies matching both criteria and query
-python cli.py policy bulk-update --config firewall.xml --type security_rules --criteria allow_rules.json --query-filter "MATCH (r:security-rule)-[:uses-source]->(a:address) WHERE a.name == 'any'" --operations add_logging.json --output updated.xml
+python cli.py policy bulk-update --config firewall.xml --type security_rules --criteria allow_rules.json --query-filter "MATCH (r:security-rule) MATCH (a:address) WHERE a.name == 'any' AND r.edges_out CONTAINS {target: a.id, relation: 'uses-source'}" --operations add_logging.json --output updated.xml
 ```
 
 Example criteria file (criteria.json):
@@ -948,7 +948,9 @@ Example session:
 | web-server-2 | 10.0.1.11      |
 ```
 
-See the [Graph Query Language Reference](docs/graph_query_reference.md) for detailed information on query syntax and capabilities.
+See the [Graph Query Language Reference](docs/graph_query_reference.md) for detailed information on query syntax, capabilities, and current limitations.
+
+> **Important Note**: The current implementation of the graph query language has some syntax limitations. Direct relationship patterns like `(a)-[:contains]->(b)` are not supported. Use multiple MATCH clauses with WHERE conditions on `edges_out` and `edges_in` instead. String operations like CONTAINS and STARTS WITH are not supported - use regex with the `=~` operator. For equality comparison, always use the double equals (`==`) operator. See the [Graph Query Reference](docs/graph_query_reference.md) for more details on these limitations and workarounds.
 
 ## Bulk Operations
 
@@ -1090,7 +1092,7 @@ python cli.py deduplicate --config panorama.xml --type service --output deduped.
 
 Using graph query to select objects for deduplication:
 ```bash
-python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination]->(a)) AND a.value CONTAINS '10.0.0'"
+python cli.py deduplicate --config firewall.xml --type address --output deduped.xml --query-filter "MATCH (a:address) MATCH (r:security-rule) WHERE NOT EXISTS(r.edges_out[*] ? (@.target == a.id AND (@.relation == 'uses-source' OR @.relation == 'uses-destination'))) AND a.value =~ '.*10\\.0\\.0.*'"
 ```
 
 Combining query filter with include file to refine selection:
@@ -1268,7 +1270,7 @@ Find duplicate IP addresses with different names and deduplicate them:
 ```bash
 # Old approach (multi-step):
 # Step 1: Identify address objects with identical IP values
-python cli.py query execute -c config.xml -q "MATCH (a1:address), (a2:address) WHERE a1.value == a2.value AND a1.name <> a2.name RETURN a1.name, a1.value, COLLECT(a2.name) as duplicates" --format json --output duplicates.json
+python cli.py query execute -c config.xml -q "MATCH (a1:address) MATCH (a2:address) WHERE a1.value == a2.value AND a1.name != a2.name RETURN a1.name, a1.value, COLLECT(a2.name) as duplicates" --format json --output duplicates.json
 
 # Step 2: Review the results before deduplication
 cat duplicates.json
@@ -1278,10 +1280,10 @@ python cli.py deduplicate --config config.xml --type address --output deduped.xm
 
 # New approach (direct integration):
 # Directly deduplicate only objects with a specific subnet using query filter
-python cli.py deduplicate --config config.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE a.value CONTAINS '10.1.0'" --dry-run
+python cli.py deduplicate --config config.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE a.value =~ '.*10\\.1\\.0.*'" --dry-run
 
 # Then perform the actual deduplication after reviewing
-python cli.py deduplicate --config config.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE a.value CONTAINS '10.1.0'"
+python cli.py deduplicate --config config.xml --type address --output deduped.xml --query-filter "MATCH (a:address) WHERE a.value =~ '.*10\\.1\\.0.*'"
 ```
 
 ### Query-Driven Bulk Operations

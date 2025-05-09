@@ -1,7 +1,7 @@
 """
-XML utilities for PAN-OS XML configurations.
+Core XML utilities for PAN-OS XML configurations.
 
-This module provides utility functions for working with XML in PAN-OS configurations,
+This module provides fundamental utilities for working with XML in PAN-OS configurations,
 including parsing, navigation, and manipulation.
 
 Performance optimizations:
@@ -12,7 +12,6 @@ Performance optimizations:
 """
 
 from pathlib import Path
-
 import os
 import sys
 from typing import Dict, Any, Optional, List, Tuple, Union, Iterator, Set
@@ -32,24 +31,30 @@ except ImportError:
 
 logger = logging.getLogger("panflow")
 
-# Import caching utilities
-try:
-    from .xml_cache import cached_xpath, clear_xpath_cache, invalidate_element_cache
-    HAVE_CACHE = True
-except ImportError:
-    # Fallback if the cache module is not available
-    HAVE_CACHE = False
-    def cached_xpath(f):
-        return f
-    def clear_xpath_cache():
-        pass
-    def invalidate_element_cache(path=None):
-        pass
-
 # Import custom exceptions
-from .exceptions import (
-    PANFlowError, ParseError, XPathError, MergeError, SecurityError, ValidationError
+from ..exceptions import (
+    PANFlowError, ParseError, XPathError, MergeError, SecurityError, ValidationError,
+    FileOperationError
 )
+
+# Import caching utilities - deferred import to avoid circular references
+def get_cache_decorators():
+    """Get cache decorators from the cache module."""
+    try:
+        from .cache import cached_xpath, clear_xpath_cache, invalidate_element_cache
+        return cached_xpath, clear_xpath_cache, invalidate_element_cache
+    except ImportError:
+        # Fallback if the cache module is not available
+        def cached_xpath(f):
+            return f
+        def clear_xpath_cache():
+            pass
+        def invalidate_element_cache(path=None):
+            pass
+        return cached_xpath, clear_xpath_cache, invalidate_element_cache
+
+# Get caching decorators
+cached_xpath, clear_xpath_cache, invalidate_element_cache = get_cache_decorators()
 
 def parse_xml_string(
     xml_string: Union[str, bytes],
@@ -140,8 +145,6 @@ def parse_xml(
         SecurityError: If XXE attack is attempted or file size exceeds limit
         FileOperationError: If file operations fail
     """
-    from .exceptions import FileOperationError
-    
     try:
         # Handle different source types
         if isinstance(source, (bytes, str)) and '<' in str(source):
@@ -657,10 +660,80 @@ def validate_xml(
         logger.error(error_msg)
         raise ValidationError(error_msg)
     except Exception as e:
-        from .exceptions import FileOperationError
         error_msg = f"Error validating XML: {e}"
         logger.error(error_msg)
         raise FileOperationError(error_msg)
+
+# Compatibility functions for older code
+def compat_element_to_dict(element: etree._Element) -> Dict[str, Any]:
+    """
+    Convert an XML element to a dictionary (compatibility version).
+    
+    This version maintains backward compatibility with existing code that expects
+    the old format of element_to_dict.
+    
+    Args:
+        element: XML element to convert
+        
+    Returns:
+        Dictionary representation of the element
+    """
+    data = {}
+    
+    # Add attributes directly (no @ prefix)
+    data.update(element.attrib)
+    
+    # Add child elements
+    for child in element:
+        # Check if the child element has multiple "member" children
+        members = child.xpath("./member") if HAVE_LXML else child.findall("./member")
+        if members:
+            # This is a list element
+            member_values = [member.text for member in members if member.text]
+            data[child.tag] = member_values
+        else:
+            # Not a list, just a single value or nested element
+            if len(child) == 0:
+                # Simple element with text
+                data[child.tag] = child.text
+            else:
+                # Nested element, recursively extract data
+                data[child.tag] = compat_element_to_dict(child)
+    
+    return data
+
+def load_xml_file(file_path: Union[str, Path]) -> etree._Element:
+    """
+    Load an XML file and return the root element.
+    
+    Args:
+        file_path: Path to the XML file
+        
+    Returns:
+        Root element of the XML file
+        
+    Raises:
+        ParseError: If XML parsing fails
+    """
+    logger.info(f"Loading XML file: {file_path}")
+    _, root = parse_xml(str(file_path))
+    return root
+
+def get_xpath_element_value(element: etree._Element, xpath: str) -> Optional[str]:
+    """
+    Get the text value of an element at the given XPath.
+    
+    Args:
+        element: Element to search from
+        xpath: XPath to search for
+        
+    Returns:
+        Text value if found, None otherwise
+    """
+    result = find_element(element, xpath)
+    if result is not None and result.text:
+        return result.text.strip()
+    return None
 
 # Utility functions for getting specific functionality groups
 def get_xpath_functions():
@@ -690,76 +763,3 @@ def get_conversion_functions():
         'dict_to_element': dict_to_element,
         'prettify_xml': prettify_xml
     }
-
-# Compatibility functions for older code
-def compat_element_to_dict(element: etree._Element) -> Dict[str, Any]:
-    """
-    Convert an XML element to a dictionary (compatibility version).
-    
-    This version maintains backward compatibility with existing code that expects
-    the old format of element_to_dict.
-    
-    Args:
-        element: XML element to convert
-        
-    Returns:
-        Dictionary representation of the element
-    """
-    data = {}
-    
-    # Add attributes directly (no @ prefix)
-    data.update(element.attrib)
-    
-    # Add child elements
-    for child in element:
-        # Check if the child element has multiple "member" children
-        members = child.xpath("./member")
-        if members:
-            # This is a list element
-            member_values = [member.text for member in members if member.text]
-            data[child.tag] = member_values
-        else:
-            # Not a list, just a single value or nested element
-            if len(child) == 0:
-                # Simple element with text
-                data[child.tag] = child.text
-            else:
-                # Nested element, recursively extract data
-                data[child.tag] = compat_element_to_dict(child)
-    
-    return data
-
-
-def load_xml_file(file_path: Union[str, Path]) -> etree._Element:
-    """
-    Load an XML file and return the root element.
-    
-    Args:
-        file_path: Path to the XML file
-        
-    Returns:
-        Root element of the XML file
-        
-    Raises:
-        ParseError: If XML parsing fails
-    """
-    logger.info(f"Loading XML file: {file_path}")
-    _, root = parse_xml(str(file_path))
-    return root
-
-
-def get_xpath_element_value(element: etree._Element, xpath: str) -> Optional[str]:
-    """
-    Get the text value of an element at the given XPath.
-    
-    Args:
-        element: Element to search from
-        xpath: XPath to search for
-        
-    Returns:
-        Text value if found, None otherwise
-    """
-    result = find_element(element, xpath)
-    if result is not None and result.text:
-        return result.text.strip()
-    return None

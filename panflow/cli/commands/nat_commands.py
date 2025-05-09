@@ -11,7 +11,7 @@ import typer
 from typing import Optional, Dict, Any, List
 
 from panflow.core.config_loader import load_config_from_file, save_config, detect_device_type
-from panflow.modules.nat_splitter import split_bidirectional_nat_rule, split_all_bidirectional_nat_rules
+from panflow.core.nat_splitter import split_bidirectional_nat_rule, split_all_bidirectional_nat_rules
 
 from ..app import policy_app
 from ..common import common_options, ConfigOptions

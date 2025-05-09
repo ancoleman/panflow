@@ -22,7 +22,7 @@ from .groups import (
     create_group, get_group_members, get_group_filter
 )
 
-from .reports import (
+from ..reporting import (
     generate_unused_objects_report, generate_duplicate_objects_report,
     generate_security_rule_coverage_report, generate_reference_check_report,
     generate_rule_hit_count_report

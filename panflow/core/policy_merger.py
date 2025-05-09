@@ -12,7 +12,7 @@ import copy
 
 from .xpath_resolver import get_policy_xpath
 from .config_loader import xpath_search
-from .xml_utils import clone_element, merge_elements
+from .xml.base import clone_element, merge_elements
 from .conflict_resolver import ConflictResolver, ConflictStrategy
 
 # Initialize logger

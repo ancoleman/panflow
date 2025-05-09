@@ -95,3 +95,11 @@ class SecurityError(PANFlowError):
 class CacheError(PANFlowError):
     """Exception raised when caching operations fail."""
     pass
+
+class DiffError(PANFlowError):
+    """Exception raised when diff operations fail."""
+    pass
+
+class QueryError(PANFlowError):
+    """Exception raised when query operations fail."""
+    pass

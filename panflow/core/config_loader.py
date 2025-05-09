@@ -195,8 +195,8 @@ def extract_element_data(element: etree._Element) -> Dict[str, Any]:
     element_name = element.get('name', 'unknown')
     logger.debug(f"Extracting data from element: {element_tag}[name='{element_name}']")
     
-    # Use the compatibility function from xml_utils
-    from .xml_utils import compat_element_to_dict
+    # Use the compatibility function from xml.base
+    from .xml.base import compat_element_to_dict
     
     try:
         data = compat_element_to_dict(element)

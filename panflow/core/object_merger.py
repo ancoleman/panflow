@@ -13,7 +13,7 @@ import re
 
 from .xpath_resolver import get_object_xpath, get_context_xpath
 from .config_loader import xpath_search
-from .xml_utils import clone_element, merge_elements, find_elements, find_element, element_exists
+from .xml.base import clone_element, merge_elements, find_elements, find_element, element_exists
 from .object_validator import ObjectValidator
 from .conflict_resolver import ConflictResolver, ConflictStrategy
 

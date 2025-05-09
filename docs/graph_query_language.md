@@ -11,7 +11,17 @@ The current implementation supports a subset of the full PQL syntax:
 3. Filtering with `WHERE` clauses
 4. Returning node properties with `RETURN`
 
-Direct relationship traversal in the query syntax (like `MATCH (a)-[:rel]->(b)`) is not yet fully supported in the parser. Instead, use multiple MATCH clauses and filter with WHERE clauses, or query the relationship information directly with `node.edges_out` and `node.edges_in`.
+There are several important limitations to be aware of:
+
+1. **Relationship Patterns**: Direct relationship traversal in the query syntax (like `MATCH (a)-[:rel]->(b)`) is not supported in the current implementation. Instead, use multiple MATCH clauses and filter with WHERE clauses, or query the relationship information directly with `node.edges_out` and `node.edges_in`.
+
+2. **String Operations**: String operations like `CONTAINS` and `STARTS WITH` are not supported. Use regular expressions with the `=~` operator instead:
+   - Instead of `a.name CONTAINS "web"`, use `a.name =~ ".*web.*"`
+   - Instead of `a.name STARTS WITH "web"`, use `a.name =~ "^web.*"`
+
+3. **Equality Operator**: Only use the double equals (`==`) for equality comparison. Using a single equals (`=`) will result in syntax errors.
+
+4. **Special Characters in Regex**: When using regular expressions with the `=~` operator, you must escape special characters like periods with a double backslash: `a.value =~ ".*10\\.10\\..*"`
 
 ## Overview
 
@@ -51,8 +61,9 @@ A typical PQL query consists of the following clauses:
 Example:
 
 ```
-MATCH (r:security-rule)-[:uses-source]->(a:address)
-WHERE a.name == "web-server"
+MATCH (r:security-rule)
+MATCH (a:address)
+WHERE a.name == "web-server" AND r.edges_out CONTAINS {target: a.id, relation: "uses-source"}
 RETURN r.name
 ```
 
@@ -170,15 +181,20 @@ RETURN a.name, a.value, a.addr_type
 ### Find all address groups and their members
 
 ```
-MATCH (g:address-group)-[:contains]->(a:address)
+MATCH (g:address-group)
+MATCH (a:address)
+WHERE g.edges_out CONTAINS {target: a.id, relation: "contains"}
 RETURN g.name, a.name
 ```
 
 ### Find all security rules using a specific address
 
 ```
-MATCH (r:security-rule)-[:uses-source|uses-destination]->(a:address)
-WHERE a.name == "web-server"
+MATCH (r:security-rule)
+MATCH (a:address)
+WHERE a.name == "web-server" AND
+      (r.edges_out CONTAINS {target: a.id, relation: "uses-source"} OR
+       r.edges_out CONTAINS {target: a.id, relation: "uses-destination"})
 RETURN r.name
 ```
 
@@ -186,16 +202,20 @@ RETURN r.name
 
 ```
 MATCH (a:address)
-WHERE NOT ((:security-rule)-[:uses-source|uses-destination]->(a))
-  AND NOT ((:address-group)-[:contains]->(a))
+MATCH (r:security-rule)
+MATCH (g:address-group)
+WHERE NOT EXISTS(r.edges_out[*] ? (@.target == a.id AND (@.relation == "uses-source" OR @.relation == "uses-destination")))
+  AND NOT EXISTS(g.edges_out[*] ? (@.target == a.id AND @.relation == "contains"))
 RETURN a.name
 ```
 
 ### Find rules allowing specific services
 
 ```
-MATCH (r:security-rule)-[:uses-service]->(s:service)
-WHERE s.name == "http" OR s.name == "https"
+MATCH (r:security-rule)
+MATCH (s:service)
+WHERE (s.name == "http" OR s.name == "https") AND
+      r.edges_out CONTAINS {target: s.id, relation: "uses-service"}
 RETURN r.name
 ```
 
@@ -204,23 +224,32 @@ RETURN r.name
 ### Find services referenced by security rules but not defined
 
 ```
-MATCH (r:security-rule)-[:uses-service]->(s:service)
-WHERE s.placeholder == true
+MATCH (r:security-rule)
+MATCH (s:service)
+WHERE s.placeholder == true AND r.edges_out CONTAINS {target: s.id, relation: "uses-service"}
 RETURN s.name, r.name
 ```
 
 ### Find security rules that use address groups
 
 ```
-MATCH (r:security-rule)-[:uses-source|uses-destination]->(g:address-group)
+MATCH (r:security-rule)
+MATCH (g:address-group)
+WHERE r.edges_out CONTAINS {target: g.id, relation: "uses-source"} OR
+      r.edges_out CONTAINS {target: g.id, relation: "uses-destination"}
 RETURN r.name, g.name
 ```
 
 ### Find objects used in both security and NAT rules
 
 ```
-MATCH (sr:security-rule)-[:uses-source|uses-destination]->(a:address),
-      (nr:nat-rule)-[:uses-source|uses-destination]->(a:address)
+MATCH (sr:security-rule)
+MATCH (nr:nat-rule)
+MATCH (a:address)
+WHERE (sr.edges_out CONTAINS {target: a.id, relation: "uses-source"} OR
+       sr.edges_out CONTAINS {target: a.id, relation: "uses-destination"}) AND
+      (nr.edges_out CONTAINS {target: a.id, relation: "uses-source"} OR
+       nr.edges_out CONTAINS {target: a.id, relation: "uses-destination"})
 RETURN a.name, sr.name, nr.name
 ```
 

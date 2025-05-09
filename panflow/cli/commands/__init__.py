@@ -14,6 +14,7 @@ from . import query_commands
 from . import policy_commands
 from . import nat_commands
 from . import cleanup_commands
+from . import nlq_commands
 
 # Optional modules - these may not exist yet
 # Will be imported by the parent package as needed
@@ -27,5 +28,6 @@ __all__ = [
     "group_commands",
     "report_commands",
     "config_commands",
-    "query_commands"
+    "query_commands",
+    "nlq_commands"
 ]

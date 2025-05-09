@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List, Tuple, Union, Set
 from lxml import etree
 from enum import Enum
 
-from .xml_utils import find_element, find_elements, clone_element, merge_elements, element_exists
+from .xml.base import find_element, find_elements, clone_element, merge_elements, element_exists
 
 # Initialize logger
 logger = logging.getLogger("panflow")

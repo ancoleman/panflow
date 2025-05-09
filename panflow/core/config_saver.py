@@ -21,7 +21,7 @@ except ImportError:
     import xml.etree.ElementTree as etree
     HAVE_LXML = False
 
-from .xml_utils import (
+from .xml.base import (
     parse_xml, prettify_xml, validate_xml, element_to_dict
 )
 from .exceptions import PANFlowError, ParseError

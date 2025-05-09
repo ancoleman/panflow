@@ -468,3 +468,60 @@ panflow deduplicate report --config firewall.xml --output dedup_report.json
 panflow merge policy --source-config source.xml --target-config target.xml \
   --type security_pre_rules --name allow-web --output updated.xml
 ```
+
+## Natural Language Query (NLQ) Commands
+
+PANFlow provides natural language query capabilities to simplify common tasks without remembering specific CLI syntax.
+
+### Process a Natural Language Query
+
+```bash
+panflow nlq query QUERY [options]
+```
+
+Options:
+- `--config, -c TEXT`: Path to XML configuration file (required)
+- `--output, -o TEXT`: Output file for updates (required for cleanup/modify operations, not needed for view-only queries)
+- `--interactive, -i`: Interactive mode
+- `--format, -f TEXT`: Output format (text, json) (default: text)
+- `--verbose, -v`: Show verbose output
+- `--ai/--no-ai`: Use AI for processing if available (default: use AI)
+- `--ai-provider TEXT`: AI provider to use (openai, anthropic)
+- `--ai-model TEXT`: AI model to use
+
+### Start Interactive NLQ Session
+
+```bash
+panflow nlq interactive [options]
+```
+
+Options:
+- `--config, -c TEXT`: Path to XML configuration file (required)
+- `--output, -o TEXT`: Output file for updates
+- `--format, -f TEXT`: Output format (text, json) (default: text)
+- `--verbose, -v`: Show verbose output
+- `--ai/--no-ai`: Use AI for processing if available (default: use AI)
+- `--ai-provider TEXT`: AI provider to use (openai, anthropic)
+- `--ai-model TEXT`: AI model to use
+
+### Show NLQ Help and Examples
+
+```bash
+panflow nlq help
+```
+
+### Example NLQ Commands
+
+```bash
+# Find unused address objects (view-only operation)
+panflow nlq query "show me all unused address objects" --config firewall.xml
+
+# Remove disabled security policies
+panflow nlq query "cleanup all disabled security rules" --config firewall.xml --output cleaned.xml
+
+# Find duplicate objects
+panflow nlq query "find duplicate address objects" --config firewall.xml
+
+# Start an interactive session
+panflow nlq interactive --config firewall.xml
+```

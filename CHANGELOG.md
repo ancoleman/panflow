@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Ongoing development and improvements
+- XML functionality consolidation into `panflow.core.xml` package
+  - New organized package structure with better separation of concerns
+  - Dedicated modules: `base.py`, `builder.py`, `cache.py`, `query.py`, and `diff.py`
+  - Backward compatibility through re-export pattern
+  - Deprecation warnings for old module imports
+  - Documentation to guide migration to the new API
+- Reporting functionality consolidation into `panflow.reporting` package
+  - New package structure with clear separation between generation and formatting
+  - Formatters for different output types (HTML, JSON, CSV) in `formatters/` subpackage
+  - Report generators in `reports/` subpackage
+  - New `ReportingEngine` class that supersedes `EnhancedReportingEngine`
+  - Backward compatibility through re-export pattern
+  - Deprecation warnings for old module imports
+  - Documentation to guide migration to the new API
+
+### Changed
+- Added package_consolidation_guide.md with migration instructions
+- All XML utility imports should now use `panflow.core.xml.*` instead of individual `panflow.core.xml_*` modules
+- All reporting functionality imports should now use `panflow.reporting.*` instead of `panflow.modules.reports` or `panflow.core.reporting`
 
 ## [0.1.4] - 2025-05-07
 
