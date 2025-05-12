@@ -24,6 +24,7 @@ class EntityExtractor:
         # Define entity extraction patterns
         self.entity_patterns = {
             "object_type": {
+                "all": [r"all\s+objects", r"any\s+objects?", r"every\s+objects?", r"objects\s+all", r"just\s+objects"],
                 "address": [r"address(?:\s+object)?s?", r"ip\s+address"],
                 "service": [r"service(?:\s+object)?s?"],
                 "tag": [r"tags?"],
@@ -89,12 +90,32 @@ class EntityExtractor:
         # Normalize the query
         normalized_query = query.lower().strip()
 
+        # Check if this is explicitly a request for "all objects"
+        all_objects_patterns = [
+            r"all\s+(?:duplicated?\s+)?objects",
+            r"every\s+object",
+            r"all\s+types\s+of\s+objects",
+            r"any\s+(?:duplicated?\s+)?objects?"
+        ]
+
+        # Check if this is a request for "all policies"
+        all_policies_patterns = [
+            r"all\s+(?:disabled\s+)?(?:policies|policy|rules)",
+            r"every\s+(?:disabled\s+)?(?:policy|rule)",
+            r"all\s+types\s+of\s+(?:policies|rules)",
+            r"any\s+(?:disabled\s+)?(?:policies|rules)"
+        ]
+
+        is_all_objects_request = any(re.search(pattern, normalized_query) for pattern in all_objects_patterns)
+        is_all_policies_request = any(re.search(pattern, normalized_query) for pattern in all_policies_patterns)
+
         # Initialize entities with defaults for CLI parameters
         entities = {
             "config": None,  # Will be filled in by command mapper
             "output": None,  # Will be filled in by command mapper
             "dry_run": self._extract_dry_run(normalized_query),
-            "object_type": "address",  # Default object type is address
+            "object_type": "all" if is_all_objects_request else "address",  # Default to "all" for "all objects" queries
+            "policy_type": "all" if is_all_policies_request else None,  # Set policy type to "all" for "all policies" queries
             "show_duplicates": self._extract_duplicates_request(normalized_query),
         }
 
@@ -193,14 +214,17 @@ class EntityExtractor:
             True if this is a request for duplicates, False otherwise
         """
         duplicate_patterns = [
-            r"duplicated?\s+(?:object|address|service|tag|application)",
+            r"duplicated?\s+(?:object|address|service|tag|application|all)",
             r"(?:object|address|service|tag|application)s?\s+(?:that\s+(?:are|is)\s+)?duplicated",
-            r"duplicate(?:d)?\s+(?:object|address|service|tag|application)s?",
+            r"duplicate(?:d)?\s+(?:object|address|service|tag|application|all)s?",
             r"find\s+duplicates?",
             r"show(?:\s+me)?\s+duplicates?",
             r"list\s+duplicates?",
             r"identical\s+(?:object|address|service|tag|application)s?",
             r"same\s+(?:object|address|service|tag|application)s?",
+            r"find\s+all\s+duplicated?\s+objects?",
+            r"all\s+duplicated?\s+objects",
+            r"duplicated?\s+all\s+objects",
         ]
 
         for pattern in duplicate_patterns:

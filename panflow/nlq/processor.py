@@ -501,42 +501,105 @@ class NLQProcessor:
             if "template" in command_args:
                 context_kwargs["template"] = command_args["template"]
 
-            # Adjust policy type if necessary for the device type
-            if device_type == "panorama":
-                if policy_type == "security_rules":
-                    policy_type = "security_pre_rules"
-                elif policy_type == "nat_rules":
-                    policy_type = "nat_pre_rules"
-                logger.info(f"Adjusted policy type to {policy_type} for Panorama device")
+            # Check if this is a request for all policy types
+            is_all_policy_types = policy_type.lower() == "all"
 
-            # Get policies of the specified type
-            policies = xml_config.get_policies(policy_type, context_type, **context_kwargs)
+            if is_all_policy_types:
+                logger.info("Request for 'all' policy types detected, checking multiple policy types")
 
-            # Return a simplified result
-            policy_count = len(policies)
-            logger.info(f"Found {policy_count} {policy_type}")
+                # For different device types, select appropriate policy types
+                if device_type == "panorama":
+                    policy_types = ["security_pre_rules", "security_post_rules", "nat_pre_rules", "nat_post_rules"]
+                else:
+                    policy_types = ["security_rules", "nat_rules"]
 
-            # Format policies for display
-            formatted_policies = []
-            for policy_name, policy_props in policies.items():
-                # Create a policy dict with name field
-                formatted_policy = {"name": policy_name}
-                # Add key fields to the formatted policy
-                if isinstance(policy_props, dict):
-                    key_fields = [
-                        "action",
-                        "from",
-                        "to",
-                        "source",
-                        "destination",
-                        "service",
-                        "application",
-                        "disabled",
-                    ]
-                    for field in key_fields:
-                        if field in policy_props:
-                            formatted_policy[field] = policy_props[field]
-                formatted_policies.append(formatted_policy)
+                # Store all policies with type information
+                all_policies = {}
+                all_formatted_policies = []
+
+                # Loop through each policy type
+                for current_policy_type in policy_types:
+                    logger.info(f"Getting {current_policy_type}...")
+
+                    try:
+                        # Get policies for this type
+                        current_policies = xml_config.get_policies(current_policy_type, context_type, **context_kwargs)
+
+                        # Format policies for display
+                        for policy_name, policy_props in current_policies.items():
+                            # Create a policy dict with name and type fields
+                            formatted_policy = {"name": policy_name, "policy_type": current_policy_type}
+
+                            # Add key fields to the formatted policy
+                            if isinstance(policy_props, dict):
+                                key_fields = [
+                                    "action",
+                                    "from",
+                                    "to",
+                                    "source",
+                                    "destination",
+                                    "service",
+                                    "application",
+                                    "disabled",
+                                ]
+                                for field in key_fields:
+                                    if field in policy_props:
+                                        formatted_policy[field] = policy_props[field]
+
+                            all_formatted_policies.append(formatted_policy)
+
+                        # Add all policies from this type to the combined dictionary
+                        all_policies.update(current_policies)
+                    except Exception as e:
+                        # Log error but continue with other policy types
+                        logger.warning(f"Error getting {current_policy_type}: {str(e)}")
+
+                # Use the combined results
+                policies = all_policies
+                formatted_policies = all_formatted_policies
+                policy_type = "all"  # Set to "all" for display purposes
+
+                # Get total count
+                policy_count = len(formatted_policies)
+                logger.info(f"Found {policy_count} policies across multiple policy types")
+            else:
+                # Regular single policy type handling
+                # Adjust policy type if necessary for the device type
+                if device_type == "panorama":
+                    if policy_type == "security_rules":
+                        policy_type = "security_pre_rules"
+                    elif policy_type == "nat_rules":
+                        policy_type = "nat_pre_rules"
+                    logger.info(f"Adjusted policy type to {policy_type} for Panorama device")
+
+                # Get policies of the specified type
+                policies = xml_config.get_policies(policy_type, context_type, **context_kwargs)
+
+                # Get total count
+                policy_count = len(policies)
+                logger.info(f"Found {policy_count} {policy_type}")
+
+                # Format policies for display
+                formatted_policies = []
+                for policy_name, policy_props in policies.items():
+                    # Create a policy dict with name field
+                    formatted_policy = {"name": policy_name}
+                    # Add key fields to the formatted policy
+                    if isinstance(policy_props, dict):
+                        key_fields = [
+                            "action",
+                            "from",
+                            "to",
+                            "source",
+                            "destination",
+                            "service",
+                            "application",
+                            "disabled",
+                        ]
+                        for field in key_fields:
+                            if field in policy_props:
+                                formatted_policy[field] = policy_props[field]
+                    formatted_policies.append(formatted_policy)
 
             # Try to add formatted_policies_text using the common formatter
             try:
@@ -651,7 +714,11 @@ class NLQProcessor:
             else:
                 policy_type = "security_rules"  # Default
 
-            logger.info(f"Analyzing {policy_type} for disabled policies...")
+            # Check if this is a request for all policy types
+            is_all_policy_types = False
+            if policy_type.lower() in ["all", "any", "policy", "policies"]:
+                is_all_policy_types = True
+                logger.info("Request for 'all' policy types detected, checking multiple policy types")
 
             # Initialize the configuration
             xml_config = PANFlowConfig(config_file=config_file)
@@ -688,38 +755,82 @@ class NLQProcessor:
             # For better presentation, we'll use the policy module
             from panflow.modules.policies import get_policies
 
-            # Get all policies first
-            if device_type == "panorama":
-                # Adjust policy type to match what's expected for panorama
-                if policy_type == "security_rules":
-                    policy_type = "security_pre_rules"
-                elif policy_type == "nat_rules":
-                    policy_type = "nat_pre_rules"
+            # Process policy types based on whether we're checking all or specific types
+            if is_all_policy_types:
+                # For different device types, select appropriate policy types
+                if device_type == "panorama":
+                    policy_types = ["security_pre_rules", "security_post_rules", "nat_pre_rules", "nat_post_rules"]
+                else:
+                    policy_types = ["security_rules", "nat_rules"]
 
-            # Get all policies
-            policy_dict = get_policies(
-                xml_config.tree,
-                policy_type,
-                device_type,
-                context_type,
-                xml_config.version,
-                **context_kwargs,
-            )
+                logger.info(f"Analyzing multiple policy types: {', '.join(policy_types)}")
 
-            # Filter to just the disabled ones
-            disabled_policies_details = []
-            for name, properties in policy_dict.items():
-                if properties.get("disabled") == "yes":
-                    policy_info = {"name": name}
-                    policy_info.update(properties)
-                    disabled_policies_details.append(policy_info)
+                # Store all disabled policies with type information
+                all_disabled_policies_details = []
+
+                # Loop through each policy type and collect disabled policies
+                for current_policy_type in policy_types:
+                    logger.info(f"Checking for disabled {current_policy_type}...")
+
+                    # Get policies for this type
+                    current_policy_dict = get_policies(
+                        xml_config.tree,
+                        current_policy_type,
+                        device_type,
+                        context_type,
+                        xml_config.version,
+                        **context_kwargs,
+                    )
+
+                    # Filter to just the disabled ones
+                    for name, properties in current_policy_dict.items():
+                        if properties.get("disabled") == "yes":
+                            policy_info = {"name": name, "policy_type": current_policy_type}
+                            policy_info.update(properties)
+                            all_disabled_policies_details.append(policy_info)
+
+                # Use the combined results
+                disabled_policies_details = all_disabled_policies_details
+                policy_type = "all"  # Set to "all" for display purposes
+            else:
+                # Regular single policy type handling
+                logger.info(f"Analyzing {policy_type} for disabled policies...")
+
+                # Get all policies first
+                if device_type == "panorama":
+                    # Adjust policy type to match what's expected for panorama
+                    if policy_type == "security_rules":
+                        policy_type = "security_pre_rules"
+                    elif policy_type == "nat_rules":
+                        policy_type = "nat_pre_rules"
+
+                # Get all policies
+                policy_dict = get_policies(
+                    xml_config.tree,
+                    policy_type,
+                    device_type,
+                    context_type,
+                    xml_config.version,
+                    **context_kwargs,
+                )
+
+                # Filter to just the disabled ones
+                disabled_policies_details = []
+                for name, properties in policy_dict.items():
+                    if properties.get("disabled") == "yes":
+                        policy_info = {"name": name}
+                        policy_info.update(properties)
+                        disabled_policies_details.append(policy_info)
 
             # Extract just names for backwards compatibility
             disabled_policies = [p["name"] for p in disabled_policies_details]
 
             # Return a detailed result
             disabled_count = len(disabled_policies)
-            logger.info(f"Found {disabled_count} disabled {policy_type}")
+            if is_all_policy_types:
+                logger.info(f"Found {disabled_count} disabled policies across multiple policy types")
+            else:
+                logger.info(f"Found {disabled_count} disabled {policy_type}")
 
             # Format detailed output for text display using common formatting
             try:
@@ -1062,14 +1173,43 @@ class NLQProcessor:
                 **context_kwargs,
             )
 
-            # Find duplicates based on object type
-            if object_type == "address":
-                duplicates, _ = engine.find_duplicate_addresses()
-            elif object_type == "service":
-                duplicates, _ = engine.find_duplicate_services()
+            # Check if this is a request for "all" types of objects
+            if object_type.lower() in ["all", "any", "every", "object", "objects"]:
+                logger.info("Request for 'all' object types detected, checking common object types")
+
+                # Initialize combined results
+                combined_duplicates = {}
+                common_types = ["address", "service", "tag"]
+
+                # Check each common object type
+                for obj_type in common_types:
+                    logger.info(f"Checking for duplicate {obj_type} objects...")
+                    if obj_type == "address":
+                        type_duplicates, _ = engine.find_duplicate_addresses()
+                    elif obj_type == "service":
+                        type_duplicates, _ = engine.find_duplicate_services()
+                    else:
+                        # Generic handling for other types
+                        type_duplicates, _ = engine.find_duplicates(obj_type)
+
+                    # Add type prefix to each key to avoid key collisions
+                    for key, value in type_duplicates.items():
+                        combined_key = f"{obj_type}:{key}"
+                        combined_duplicates[combined_key] = value
+
+                # Use the combined results
+                duplicates = combined_duplicates
+                # Update object type for display
+                object_type = "all"
             else:
-                # Generic handling for other types
-                duplicates, _ = engine.find_duplicates(object_type)
+                # Regular single type handling
+                if object_type == "address":
+                    duplicates, _ = engine.find_duplicate_addresses()
+                elif object_type == "service":
+                    duplicates, _ = engine.find_duplicate_services()
+                else:
+                    # Generic handling for other types
+                    duplicates, _ = engine.find_duplicates(object_type)
 
             # Count total duplicates
             total_duplicates = sum(len(items) - 1 for items in duplicates.values())

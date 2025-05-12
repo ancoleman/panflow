@@ -301,24 +301,32 @@ class CommandMapper:
         elif command == "list_disabled_policies":
             # For list commands, we just set policy_type directly
             if "policy_type" not in command_args:
-                # Initialize config to check device type if needed
-                from panflow import PANFlowConfig
-
-                if "device_type" not in command_args:
-                    xml_config = PANFlowConfig(config_file=config_file)
-                    device_type = xml_config.device_type.lower()
+                # Check if entities has policy_type set to "all"
+                if entities.get("policy_type") == "all":
+                    command_args["policy_type"] = "all"
                 else:
-                    device_type = command_args["device_type"].lower()
+                    # Initialize config to check device type if needed
+                    from panflow import PANFlowConfig
 
-                # Set appropriate default policy type based on device type
-                if device_type == "panorama":
-                    command_args["policy_type"] = "security_pre_rules"
-                else:
-                    command_args["policy_type"] = "security_rules"
+                    if "device_type" not in command_args:
+                        xml_config = PANFlowConfig(config_file=config_file)
+                        device_type = xml_config.device_type.lower()
+                    else:
+                        device_type = command_args["device_type"].lower()
+
+                    # Set appropriate default policy type based on device type
+                    if device_type == "panorama":
+                        command_args["policy_type"] = "security_pre_rules"
+                    else:
+                        command_args["policy_type"] = "security_rules"
 
         elif command == "find_duplicates":
             # For find duplicates, we just set object_type directly
             if "object_type" not in command_args:
-                command_args["object_type"] = "address"  # Default
+                # Default to address unless this is an explicit "all objects" request
+                if entities.get("original_query", "").lower().find("all object") >= 0:
+                    command_args["object_type"] = "all"
+                else:
+                    command_args["object_type"] = "address"  # Default
 
         return command_args

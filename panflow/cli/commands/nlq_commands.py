@@ -38,7 +38,9 @@ def process_query(
     ),
     dry_run: bool = ConfigOptions.dry_run(),
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode"),
-    format: str = typer.Option("text", "--format", "-f", help="Output format (text, json, table, csv, yaml, html)"),
+    format: str = typer.Option(
+        "text", "--format", "-f", help="Output format (text, json, table, csv, yaml, html)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output"),
     use_ai: bool = typer.Option(True, "--ai/--no-ai", help="Use AI for processing if available"),
     ai_provider: Optional[str] = typer.Option(
@@ -108,9 +110,588 @@ def process_query(
 
         # Display the results based on format
         if format.lower() == "json":
+            # JSON format
             typer.echo(json.dumps(result, indent=2))
+        elif format.lower() == "csv":
+            # CSV format
+            import csv
+            import io
+
+            output_stream = io.StringIO()
+            csv_writer = csv.writer(output_stream)
+
+            # Write basic information
+            csv_writer.writerow(["Intent", result["intent"]])
+            csv_writer.writerow(["Success", str(result["success"])])
+            csv_writer.writerow(["Processing", result.get("processing", "pattern")])
+            csv_writer.writerow(["Message", result.get("message", "Command executed successfully")])
+
+            # If we have result objects, add them to CSV
+            if "result" in result and result["result"] and isinstance(result["result"], dict):
+                result_data = result["result"]
+
+                # For cleanup operations (objects)
+                if "cleaned_objects" in result_data and isinstance(
+                    result_data["cleaned_objects"], list
+                ):
+                    if result_data["cleaned_objects"]:
+                        csv_writer.writerow([])  # Empty row as separator
+                        csv_writer.writerow(
+                            [f"Removed Objects ({len(result_data['cleaned_objects'])}):"]
+                        )
+                        csv_writer.writerow(["Name"])
+
+                        for obj in result_data["cleaned_objects"]:
+                            csv_writer.writerow([obj])
+
+                        if "output_file" in result_data:
+                            csv_writer.writerow([])
+                            csv_writer.writerow(
+                                ["Configuration saved to:", result_data["output_file"]]
+                            )
+
+                # For cleanup policy operations
+                elif "cleaned_policies" in result_data and isinstance(
+                    result_data["cleaned_policies"], list
+                ):
+                    if result_data["cleaned_policies"]:
+                        csv_writer.writerow([])  # Empty row as separator
+                        csv_writer.writerow(
+                            [f"Removed Policies ({len(result_data['cleaned_policies'])}):"]
+                        )
+                        csv_writer.writerow(["Name"])
+
+                        for policy in result_data["cleaned_policies"]:
+                            csv_writer.writerow([policy])
+
+                        if "output_file" in result_data:
+                            csv_writer.writerow([])
+                            csv_writer.writerow(
+                                ["Configuration saved to:", result_data["output_file"]]
+                            )
+
+            typer.echo(output_stream.getvalue())
+
+        elif format.lower() == "yaml":
+            # YAML format
+            try:
+                import yaml
+
+                # Create a function to handle non-serializable objects
+                def yaml_safe_dump(obj):
+                    if isinstance(obj, dict):
+                        return {k: yaml_safe_dump(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [yaml_safe_dump(item) for item in obj]
+                    else:
+                        return obj
+
+                # Build a structured data representation
+                yaml_data = {
+                    "nlq_result": {
+                        "intent": result["intent"],
+                        "success": result["success"],
+                        "processing": result.get("processing", "pattern"),
+                        "message": result.get("message", "Command executed successfully"),
+                    }
+                }
+
+                # Add result data if available
+                if "result" in result and result["result"]:
+                    yaml_data["result"] = yaml_safe_dump(result["result"])
+
+                # Output the YAML
+                yaml_output = yaml.dump(yaml_data, sort_keys=False, default_flow_style=False)
+                typer.echo(yaml_output)
+
+            except ImportError:
+                typer.echo("Error: PyYAML not installed. Install with 'pip install pyyaml'")
+                raise typer.Exit(1)
+
+        elif format.lower() == "html":
+            # HTML format
+            html = "<html><head><style>"
+            html += "body{font-family:Arial,sans-serif;margin:20px;max-width:1200px;margin:0 auto;padding:20px;}"
+            html += "table{border-collapse:collapse;width:100%;margin-bottom:20px;box-shadow:0 2px 3px rgba(0,0,0,0.1);}"
+            html += "th,td{text-align:left;padding:10px;border:1px solid #ddd}"
+            html += "tr:nth-child(even){background-color:#f8f8f8}"
+            html += "tr:hover{background-color:#f1f7fa}"
+            html += "th{background-color:#4CAF50;color:white}"
+            html += "h1{color:#2c3e50;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid #eee;}"
+            html += "h2{color:#3498db;margin-top:30px;margin-bottom:15px;padding-bottom:5px;border-bottom:1px solid #eee;}"
+            html += "h3{color:#555;margin-top:25px;margin-bottom:10px;}"
+            html += ".section{margin-top:30px;background-color:#fff;padding:15px;border-radius:5px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}"
+            html += ".success{color:#27ae60;font-weight:bold}.error{color:#e74c3c;font-weight:bold}"
+            html += ".value-col{color:#2980b9;font-weight:bold;}"
+            html += ".details-col{max-width:300px;word-wrap:break-word;}"
+            html += ".note{background-color:#fef9e7;padding:10px;border-left:4px solid #f39c12;margin:10px 0;}"
+            html += "</style></head><body>"
+
+            # Basic information
+            html += "<h1>Natural Language Query Result</h1>"
+            html += "<table>"
+            html += "<tr><th>Field</th><th>Value</th></tr>"
+            html += f"<tr><td>Intent</td><td>{result['intent']}</td></tr>"
+            html += f"<tr><td>Success</td><td><span class=\"{'success' if result['success'] else 'error'}\">{result['success']}</span></td></tr>"
+            html += f"<tr><td>Processing</td><td>{result.get('processing', 'pattern')}</td></tr>"
+            html += f"<tr><td>Message</td><td>{result.get('message', 'Command executed successfully')}</td></tr>"
+            html += "</table>"
+
+            # If we have result objects, create tables for them
+            if "result" in result and result["result"] and isinstance(result["result"], dict):
+                result_data = result["result"]
+
+                # For duplicate findings - need to handle this case first
+                if "duplicates" in result_data:
+                    dup_data = result_data["duplicates"]
+                    dup_count = result_data.get("count", 0)
+                    unique_values = result_data.get("unique_values", 0)
+                    object_type = result_data.get("object_type", "")
+
+                    if dup_count > 0:
+                        html += f'<div class="section">'
+
+                        # Check if this is the "all" object type (combined results)
+                        if object_type.lower() == "all":
+                            html += f"<h2>Duplicate Objects ({dup_count} across {unique_values} values)</h2>"
+                            html += "<table><tr><th>Object Type</th><th>Value/Pattern</th><th>Objects</th></tr>"
+
+                            # Add rows for each duplicated value - in "all" mode, keys are prefixed with the object type
+                            for value, objects in dup_data.items():
+                                # Skip internal fields
+                                if value.startswith('_'):
+                                    continue
+
+                                # Extract object type from the key prefix
+                                type_parts = value.split(":", 1)
+                                obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
+                                actual_value = type_parts[1] if len(type_parts) > 1 else value
+
+                                # Format the list of objects - handle both strings and tuples
+                                obj_list = []
+                                for obj in objects:
+                                    if isinstance(obj, tuple):
+                                        obj_list.append(obj[0])  # Assume the first item is the name
+                                    else:
+                                        obj_list.append(str(obj))
+
+                                objects_str = ", ".join(obj_list)
+
+                                html += f"<tr><td class=\"type-col\">{obj_type}</td><td class=\"value-col\">{actual_value}</td><td class=\"details-col\">{objects_str}</td></tr>"
+                        else:
+                            # Normal single object type display
+                            html += f"<h2>Duplicate {object_type} Objects ({dup_count} across {unique_values} values)</h2>"
+                            html += "<table><tr><th>Value/Pattern</th><th>Objects</th></tr>"
+
+                            # Add rows for each duplicated value
+                            for value, objects in dup_data.items():
+                                # Skip internal fields
+                                if value.startswith('_'):
+                                    continue
+
+                                # Format the list of objects - handle both strings and tuples
+                                obj_list = []
+                                for obj in objects:
+                                    if isinstance(obj, tuple):
+                                        obj_list.append(obj[0])  # Assume the first item is the name
+                                    else:
+                                        obj_list.append(str(obj))
+
+                                objects_str = ", ".join(obj_list)
+
+                                html += f"<tr><td class=\"value-col\">{value}</td><td class=\"details-col\">{objects_str}</td></tr>"
+
+                        html += "</table>"
+                        html += "</div>"
+
+                # For object listings that have duplicates info
+                elif "objects" in result_data and isinstance(result_data["objects"], list) and result_data.get("is_duplicate_search", False):
+                    objects = result_data.get("objects", [])
+                    if objects:
+                        # Determine object type and count
+                        object_type = result_data.get("object_type", "")
+                        count = len(objects)
+                        unique_values = result_data.get("unique_values", 0)
+
+                        # Create title based on search type
+                        title = f"Duplicated {object_type} Objects ({count})"
+                        if unique_values:
+                            title += f" across {unique_values} unique values"
+
+                        html += f'<div class="section">'
+                        html += f"<h2>{title}</h2>"
+
+                        # Create the table
+                        html += "<table><tr><th>Name</th><th>Details</th></tr>"
+
+                        for obj in objects:
+                            name = obj.get("name", "unnamed") if isinstance(obj, dict) else str(obj)
+
+                            # Extract details
+                            details = ""
+                            if isinstance(obj, dict):
+                                details_parts = []
+                                for field in ["ip-netmask", "ip-range", "fqdn", "protocol"]:
+                                    if field in obj:
+                                        details_parts.append(f"{field}: {obj[field]}")
+                                details = " | ".join(details_parts)
+
+                            html += f"<tr><td class=\"value-col\">{name}</td><td class=\"details-col\">{details}</td></tr>"
+
+                        html += "</table>"
+                        html += "</div>"
+
+                # For cleanup operations (objects)
+                elif "cleaned_objects" in result_data and isinstance(
+                    result_data["cleaned_objects"], list
+                ):
+                    if result_data["cleaned_objects"]:
+                        html += f'<div class="section">'
+                        html += f"<h2>Removed Objects ({len(result_data['cleaned_objects'])})</h2>"
+                        html += "<table><tr><th>Name</th></tr>"
+
+                        for obj in result_data["cleaned_objects"]:
+                            html += f"<tr><td>{obj}</td></tr>"
+
+                        html += "</table>"
+
+                        if "output_file" in result_data:
+                            html += f"<p>Configuration saved to: <strong>{result_data['output_file']}</strong></p>"
+
+                        html += "</div>"
+
+            html += "</body></html>"
+            typer.echo(html)
+
+        elif format.lower() == "table":
+            # Table format
+            from rich.console import Console
+            from rich.table import Table
+
+            console = Console()
+
+            # Show basic information
+            info_table = Table(title="Natural Language Query Result")
+            info_table.add_column("Field", style="cyan")
+            info_table.add_column("Value", style="green")
+
+            info_table.add_row("Intent", result["intent"])
+            info_table.add_row("Success", str(result["success"]))
+            info_table.add_row("Processing", result.get("processing", "pattern"))
+
+            if verbose:
+                # Convert command to string if it's a dict
+                command = result.get("command", "N/A")
+                if isinstance(command, dict):
+                    command = str(command)
+                info_table.add_row("Command", command)
+                if "entities" in result:
+                    entities_str = ", ".join([f"{k}={v}" for k, v in result["entities"].items()])
+                    info_table.add_row("Entities", entities_str)
+
+            # Get the message or default
+            message = result.get("message", "Command executed successfully")
+
+            # If this is a cleanup operation that got converted to find-only operation, add note
+            if result["intent"].startswith("cleanup_") and output is None:
+                message += " (NOTE: No output file provided. This is a find-only operation. Use -o/--output to specify an output file for actual cleanup.)"
+
+            info_table.add_row("Message", message)
+            console.print(info_table)
+
+            # If we have result objects, show them in a table
+            if "result" in result and result["result"] and isinstance(result["result"], dict):
+                result_data = result["result"]
+
+                # For duplicate findings - need to handle this case first
+                if "duplicates" in result_data:
+                    dup_data = result_data["duplicates"]
+                    dup_count = result_data.get("count", 0)
+                    unique_values = result_data.get("unique_values", 0)
+                    object_type = result_data.get("object_type", "")
+
+                    if dup_count > 0:
+                        # Check if this is the "all" object type (combined results)
+                        if object_type.lower() == "all":
+                            # Create a summary table with object type column
+                            dup_table = Table(
+                                title=f"Duplicate Objects ({dup_count} across {unique_values} values)"
+                            )
+                            dup_table.add_column("Object Type", style="magenta")
+                            dup_table.add_column("Value/Pattern", style="cyan")
+                            dup_table.add_column("Objects", style="green")
+
+                            # Add rows for each duplicated value - in "all" mode, keys are prefixed with the object type
+                            for value, objects in dup_data.items():
+                                # Skip internal fields
+                                if value.startswith("_"):
+                                    continue
+
+                                # Extract object type from the key prefix
+                                type_parts = value.split(":", 1)
+                                obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
+                                actual_value = type_parts[1] if len(type_parts) > 1 else value
+
+                                # Format the list of objects - handle both strings and tuples
+                                obj_list = []
+                                for obj in objects:
+                                    if isinstance(obj, tuple):
+                                        obj_list.append(obj[0])  # Assume the first item is the name
+                                    else:
+                                        obj_list.append(str(obj))
+
+                                objects_str = ", ".join(obj_list)
+                                if len(objects_str) > 70:  # Truncate if too long
+                                    objects_str = objects_str[:67] + "..."
+
+                                dup_table.add_row(obj_type, actual_value, objects_str)
+                        else:
+                            # Normal single object type display
+                            # Create a summary table
+                            dup_table = Table(
+                                title=f"Duplicate {object_type} Objects ({dup_count} across {unique_values} values)"
+                            )
+                            dup_table.add_column("Value/Pattern", style="cyan")
+                            dup_table.add_column("Objects", style="green")
+
+                            # Add rows for each duplicated value
+                            for value, objects in dup_data.items():
+                                # Skip internal fields
+                                if value.startswith("_"):
+                                    continue
+
+                                # Format the list of objects - handle both strings and tuples
+                                obj_list = []
+                                for obj in objects:
+                                    if isinstance(obj, tuple):
+                                        obj_list.append(obj[0])  # Assume the first item is the name
+                                    else:
+                                        obj_list.append(str(obj))
+
+                                objects_str = ", ".join(obj_list)
+                                if len(objects_str) > 70:  # Truncate if too long
+                                    objects_str = objects_str[:67] + "..."
+
+                                dup_table.add_row(value, objects_str)
+
+                        console.print(dup_table)
+
+                # For cleanup operations (objects)
+                if "cleaned_objects" in result_data and isinstance(
+                    result_data["cleaned_objects"], list
+                ):
+                    if result_data["cleaned_objects"]:
+                        removed_table = Table(
+                            title=f"Removed Objects ({len(result_data['cleaned_objects'])})"
+                        )
+                        removed_table.add_column("Name", style="red")
+
+                        for obj in result_data["cleaned_objects"]:
+                            removed_table.add_row(obj)
+
+                        console.print(removed_table)
+
+                        if "output_file" in result_data:
+                            console.print(
+                                f"[blue]Configuration saved to:[/blue] {result_data['output_file']}"
+                            )
+
+                # For cleanup policy operations
+                elif "cleaned_policies" in result_data and isinstance(
+                    result_data["cleaned_policies"], list
+                ):
+                    if result_data["cleaned_policies"]:
+                        removed_table = Table(
+                            title=f"Removed Policies ({len(result_data['cleaned_policies'])})"
+                        )
+                        removed_table.add_column("Name", style="red")
+
+                        for policy in result_data["cleaned_policies"]:
+                            removed_table.add_row(policy)
+
+                        console.print(removed_table)
+
+                        if "output_file" in result_data:
+                            console.print(
+                                f"[blue]Configuration saved to:[/blue] {result_data['output_file']}"
+                            )
+
+                # For object listings
+                elif "objects" in result_data and isinstance(result_data["objects"], list):
+                    objects = result_data.get("objects", [])
+                    if objects:
+                        # Determine object type and description
+                        obj_desc = "unused" if "unused_objects" in result_data else ""
+                        object_type = result_data.get("object_type", "")
+
+                        # Create title based on search type
+                        if result_data.get("is_duplicate_search"):
+                            title = f"Duplicated {object_type} Objects ({len(objects)})"
+                            if result_data.get("unique_values"):
+                                title += f" across {result_data.get('unique_values')} unique values"
+                        else:
+                            title = f"{obj_desc} {object_type} Objects ({len(objects)})".strip().capitalize()
+
+                        # Create objects table
+                        objects_table = Table(title=title)
+                        objects_table.add_column("Name")
+
+                        # Add additional columns based on first object
+                        if objects and isinstance(objects[0], dict):
+                            detail_columns = []
+                            for field in [
+                                "ip-netmask",
+                                "ip-range",
+                                "fqdn",
+                                "protocol",
+                                "port",
+                                "description",
+                            ]:
+                                if any(field in obj for obj in objects):
+                                    objects_table.add_column(field)
+                                    detail_columns.append(field)
+
+                            for obj in objects:
+                                values = [obj.get("name", "unnamed")]
+                                for col in detail_columns:
+                                    values.append(str(obj.get(col, "")))
+                                objects_table.add_row(*values)
+                        else:
+                            # Simple objects list
+                            for obj in objects:
+                                if isinstance(obj, str):
+                                    objects_table.add_row(obj)
+                                else:
+                                    objects_table.add_row(str(obj))
+
+                        console.print(objects_table)
+
+                # For policy reports
+                elif (
+                    "disabled_policies" in result_data
+                    and isinstance(result_data["disabled_policies"], list)
+                ) or ("policies" in result_data and isinstance(result_data["policies"], list)):
+                    if "disabled_policies" in result_data:
+                        policy_list = result_data.get("disabled_policies", [])
+                        policy_desc = "Disabled"
+                        # Get detailed policy data if available
+                        policy_details = result_data.get("disabled_policies_details", [])
+                    else:
+                        policy_list = result_data.get("policies", [])
+                        policy_desc = ""
+                        policy_details = policy_list if policy_list and isinstance(policy_list[0], dict) else []
+
+                    # Get the policy type to use in the title
+                    policy_type = result_data.get("policy_type", "")
+
+                    # Check if there are no policies to display
+                    if len(policy_list) == 0:
+                        if policy_type.lower() == "all":
+                            console.print(f"No {policy_desc.lower() if policy_desc else ''} policies found across any policy types.")
+                        else:
+                            type_display = f" {policy_type}" if policy_type else ""
+                            console.print(f"No {policy_desc.lower() if policy_desc else ''}{type_display} policies found.")
+                    # Check if this is an "all" policy type search with multiple policy types
+                    elif policy_type.lower() == "all" and policy_details and any("policy_type" in p for p in policy_details):
+                        # Set title for multiple policy types
+                        title = f"{policy_desc} Policies ({len(policy_list)})"
+                        if policy_desc:
+                            title += " - Multiple Policy Types"
+
+                        # Create table with policy type column
+                        policies_table = Table(title=title.strip().capitalize())
+                        policies_table.add_column("Policy Type", style="magenta")
+                        policies_table.add_column("Name", style="cyan")
+                        policies_table.add_column("Action", style="green")
+                        policies_table.add_column("Source/Destination", style="blue")
+
+                        if "disabled_policies" in result_data:
+                            policies_table.add_column("Status", style="yellow")
+
+                        # Group by policy type for display
+                        for policy in policy_details:
+                            name = policy.get("name", "unnamed")
+                            curr_policy_type = policy.get("policy_type", "unknown")
+                            action = policy.get("action", "")
+
+                            # Format source/destination details
+                            details = []
+                            if "from" in policy and "to" in policy:
+                                details.append(f"{policy['from']} → {policy['to']}")
+                            elif "source" in policy and "destination" in policy:
+                                details.append(f"{policy['source']} → {policy['destination']}")
+
+                            src_dest = " | ".join(details)
+
+                            if "disabled_policies" in result_data:
+                                policies_table.add_row(
+                                    curr_policy_type,
+                                    name,
+                                    action,
+                                    src_dest,
+                                    "Disabled" if policy.get("disabled") == "yes" else ""
+                                )
+                            else:
+                                policies_table.add_row(curr_policy_type, name, action, src_dest)
+                    else:
+                        # Regular single policy type table
+                        type_display = f" {policy_type}" if policy_type else ""
+                        title = f"{policy_desc}{type_display} Policies ({len(policy_list)})"
+
+                        policies_table = Table(title=title.strip().capitalize())
+                        policies_table.add_column("Name", style="cyan")
+
+                        # Add additional columns if policies have fields
+                        if policy_details:
+                            # Check which columns we need
+                            has_action = any("action" in p for p in policy_details)
+                            has_from_to = any(("from" in p and "to" in p) for p in policy_details)
+                            has_src_dst = any(("source" in p and "destination" in p) for p in policy_details)
+                            has_disabled = any("disabled" in p for p in policy_details)
+
+                            if has_action:
+                                policies_table.add_column("Action", style="green")
+                            if has_from_to or has_src_dst:
+                                policies_table.add_column("Source/Destination", style="blue")
+                            if has_disabled:
+                                policies_table.add_column("Status", style="yellow")
+
+                            # Add rows for each policy
+                            for policy in policy_details:
+                                name = policy.get("name", "unnamed")
+
+                                # Build row values
+                                row_values = [name]
+
+                                if has_action:
+                                    row_values.append(policy.get("action", ""))
+
+                                if has_from_to or has_src_dst:
+                                    # Format source/destination details
+                                    details = []
+                                    if "from" in policy and "to" in policy:
+                                        details.append(f"{policy['from']} → {policy['to']}")
+                                    elif "source" in policy and "destination" in policy:
+                                        details.append(f"{policy['source']} → {policy['destination']}")
+
+                                    row_values.append(" | ".join(details))
+
+                                if has_disabled:
+                                    row_values.append("Disabled" if policy.get("disabled") == "yes" else "")
+
+                                policies_table.add_row(*row_values)
+                        else:
+                            # Simple policy list
+                            for policy in policy_list:
+                                if isinstance(policy, str):
+                                    policies_table.add_row(policy)
+                                else:
+                                    policies_table.add_row(str(policy))
+
+                        console.print(policies_table)
+
         else:
-            # Text format
+            # Text format (default)
             if result["success"]:
                 processing_method = result.get("processing", "pattern")
                 if processing_method == "ai" and verbose:
@@ -121,8 +702,16 @@ def process_query(
                     typer.echo(f"Entities: {result['entities']}")
                     typer.echo(f"Command: {result['command']}")
 
+                # Get the message or default
+                message = result.get("message", "Command executed successfully")
+
+                # If this is a cleanup operation that got converted to find-only operation, add note
+                if result["intent"].startswith("cleanup_") and output is None:
+                    message += "\nNOTE: No output file provided. This is a find-only operation."
+                    message += "\nUse -o/--output to specify an output file for actual cleanup."
+
                 # Show result message
-                typer.echo(result.get("message", "Command executed successfully"))
+                typer.echo(message)
 
                 # If we have a result object, show it
                 if "result" in result and result["result"]:
@@ -276,9 +865,34 @@ def process_query(
                         # For duplicate findings
                         elif "duplicates" in result_data:
                             if result_data.get("count", 0) > 0:
-                                typer.echo(
-                                    f"\nFound {result_data.get('count')} duplicate objects across {result_data.get('unique_values')} values"
-                                )
+                                object_type = result_data.get("object_type", "")
+
+                                # Determine if this is an "all" objects search
+                                if object_type.lower() == "all":
+                                    typer.echo(
+                                        f"\nFound {result_data.get('count')} duplicate objects across {result_data.get('unique_values')} values (multiple object types)"
+                                    )
+
+                                    # Group by object type for better display
+                                    if verbose:
+                                        type_counts = {}
+                                        for key in result_data.get("duplicates", {}).keys():
+                                            if key.startswith("_"):
+                                                continue
+                                            type_parts = key.split(":", 1)
+                                            if len(type_parts) > 1:
+                                                obj_type = type_parts[0]
+                                                type_counts[obj_type] = type_counts.get(obj_type, 0) + 1
+
+                                        # Display counts by type
+                                        if type_counts:
+                                            typer.echo("\nBreakdown by type:")
+                                            for obj_type, count in type_counts.items():
+                                                typer.echo(f"  - {obj_type}: {count} duplicated values")
+                                else:
+                                    typer.echo(
+                                        f"\nFound {result_data.get('count')} duplicate {object_type} objects across {result_data.get('unique_values')} values"
+                                    )
                             else:
                                 typer.echo("\nNo duplicate objects found.")
 
@@ -373,7 +987,9 @@ def interactive_mode(
     config: str = ConfigOptions.config_file(),
     output: Optional[str] = ConfigOptions.output_file(),
     dry_run: bool = ConfigOptions.dry_run(),
-    format: str = typer.Option("text", "--format", "-f", help="Output format (text, json, table, csv, yaml, html)"),
+    format: str = typer.Option(
+        "text", "--format", "-f", help="Output format (text, json, table, csv, yaml, html)"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output"),
     use_ai: bool = typer.Option(True, "--ai/--no-ai", help="Use AI for processing if available"),
     ai_provider: Optional[str] = typer.Option(
@@ -501,10 +1117,17 @@ def interactive_mode(
                         typer.echo(f"Entities: {result['entities']}")
                         typer.echo(f"Command: {result['command']}")
 
-                    # Show result message
+                    # Get the message or default
                     message = result.get("message", "Command executed successfully")
                     if not message.endswith("."):
                         message += "."
+
+                    # If this is a cleanup operation that got converted to find-only operation, add note
+                    if result["intent"].startswith("cleanup_") and output is None:
+                        message += "\nNOTE: No output file provided. This is a find-only operation."
+                        message += "\nUse -o/--output to specify an output file for actual cleanup."
+
+                    # Show result message
                     typer.echo(message)
 
                     # If we have a result object, show it

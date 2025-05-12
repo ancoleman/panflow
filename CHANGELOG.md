@@ -13,7 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Add 'table' format to supported output formats for query commands
 - Standardize output format options in commands that support formatting (query and nlq)
-- Prepare for consistent format support across all commands when migrated to new command pattern
+- Add comprehensive format support for object_commands.py (json, table, text, csv, yaml, html)
+- Add comprehensive format support for policy_commands.py (json, table, text, csv, yaml, html)
+- Implement complete format support for NLQ commands (json, table, text, csv, yaml, html)
+- Improve NLQ duplicate objects display in table format
+- Add clearer user feedback for NLQ cleanup operations when no output file is provided
+- Ensure consistent format handling across all command types
+- Implement object type inference for NLQ "find all duplicated objects" to check multiple object types
+- Add special handling for multi-type duplicate object results in HTML, table, and text formats
+- Enhance entity extraction for "all objects" queries in NLQ processor
+- Fix missing duplicate objects in HTML output format for NLQ commands
+- Improve styling and organization of HTML tables for better data presentation
+- Add policy type inference for NLQ "show all disabled policy" to check multiple policy types
+- Add support for "show all policy" to display policies of all types (security, NAT, pre-rules, post-rules)
+- Enhance policy table display to show more details including action and source/destination
+- Implement special handling for "all" policy types with a dedicated policy type column in table format
+- Add policy details to table and text display when returning disabled policies
+- Improve entity extractor to detect "all" references in both object and policy queries
+- Fix error handling when listing all policy types to gracefully handle unsupported types
 
 ## [0.2.2] - 2025-05-12
 
