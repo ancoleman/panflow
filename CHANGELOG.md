@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI Command Migration Tools
   - Removed cli_migrate.py script used for automated command migration
   - Removed migrated directory with experimental implementations
+  - Removed tools directory with migration utilities
   - These files were transitional during the command pattern migration
 
 ## [0.2.1] - 2025-05-09
