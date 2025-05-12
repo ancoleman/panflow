@@ -65,4 +65,4 @@ def complete_output_formats() -> List[str]:
     """
     Auto-complete output formats.
     """
-    return ["json", "yaml", "xml", "html", "csv", "text"]
+    return ["json", "yaml", "xml", "html", "csv", "text", "table"]
