@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Ongoing development and improvements
+
+## [0.2.2] - 2025-05-12
+
+### Added
 - CLI Command Pattern Abstraction
   - New CommandBase class for standardizing command implementation
   - Decorator functions for common patterns (error handling, config loading, etc.)
@@ -15,12 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Improved error handling with consistent error messages
   - Parameter injection with clear type annotations
   - Comprehensive test suite for command pattern functionality
-  - Automated migration tool for existing CLI commands
   - Detailed migration guide for manual conversions
   - **Docs:** [docs/cli_command_pattern.md](docs/cli_command_pattern.md), [docs/cli_command_migration.md](docs/cli_command_migration.md)
   - **Example:** [panflow/cli/commands/object_commands_refactored.py](panflow/cli/commands/object_commands_refactored.py)
   - **Tests:** [tests/unit/cli/test_command_pattern.py](tests/unit/cli/test_command_pattern.py), [tests/unit/cli/test_command_migration.py](tests/unit/cli/test_command_migration.py)
-  - **Tool:** [tools/cli_command_migrator.py](tools/cli_command_migrator.py)
 - Enhanced NLQ Module with Deduplication Support
   - Added duplicate object detection in natural language queries
   - Implemented "cleanup_duplicate_objects" intent with pattern matching
@@ -36,7 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced documentation for bulk operations
   - Added examples for log forwarding profile operations
   - **Examples:** [examples/policy_cli_usage_examples.md](examples/policy_cli_usage_examples.md)
-- Ongoing development and improvements
+
+### Removed
+- CLI Command Migration Tools
+  - Removed cli_migrate.py script used for automated command migration
+  - Removed migrated directory with experimental implementations
+  - These files were transitional during the command pattern migration
 
 ## [0.2.1] - 2025-05-09
 
@@ -210,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.1...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.2...HEAD
+[0.2.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.1...v0.2.2
 [0.2.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.0...v0.2.1
 [0.2.0]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.4...v0.2.0
 [0.1.4]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.3...v0.1.4
