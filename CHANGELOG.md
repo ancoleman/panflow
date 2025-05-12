@@ -21,6 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Example:** [panflow/cli/commands/object_commands_refactored.py](panflow/cli/commands/object_commands_refactored.py)
   - **Tests:** [tests/unit/cli/test_command_pattern.py](tests/unit/cli/test_command_pattern.py), [tests/unit/cli/test_command_migration.py](tests/unit/cli/test_command_migration.py)
   - **Tool:** [tools/cli_command_migrator.py](tools/cli_command_migrator.py)
+- Enhanced NLQ Module with Deduplication Support
+  - Added duplicate object detection in natural language queries
+  - Implemented "cleanup_duplicate_objects" intent with pattern matching
+  - Added command mapping for deduplication operations
+  - Created formatting utilities for consistently displaying objects
+  - Enhanced documentation for deduplication features
+  - **Updated Files:** [entity_extractor.py](panflow/nlq/entity_extractor.py), [intent_parser.py](panflow/nlq/intent_parser.py), [command_mapper.py](panflow/nlq/command_mapper.py), [processor.py](panflow/nlq/processor.py)
+  - **Docs:** [docs/nlq.md](docs/nlq.md), [docs/deduplication.md](docs/deduplication.md)
+- Consistent Object and Policy Formatting
+  - Added common formatting utilities in [common.py](panflow/cli/common.py)
+  - Standardized output display across CLI commands and NLQ
+  - Improved user experience with clear, readable formatting
+  - Enhanced documentation for bulk operations
+  - Added examples for log forwarding profile operations
+  - **Examples:** [examples/policy_cli_usage_examples.md](examples/policy_cli_usage_examples.md)
 - Ongoing development and improvements
 
 ## [0.2.1] - 2025-05-09

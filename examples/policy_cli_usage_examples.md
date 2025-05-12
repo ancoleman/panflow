@@ -43,13 +43,10 @@ python3 cli.py policy list \
 ### Add a Log Forwarding Profile to All Deny Rules
 
 ```bash
-# Create operations.json
+# Create operations.json with log forwarding profile
 cat > operations.json << EOF
 {
-  "add-profile": {
-    "type": "log-forwarding",
-    "name": "detailed-logging-profile"
-  }
+  "log-setting": "detailed-logging-profile"
 }
 EOF
 
@@ -57,9 +54,190 @@ EOF
 python3 cli.py policy bulk-update \
   --config config.xml \
   --type security_pre_rules \
-  --query-filter "MATCH (r:security_rule) WHERE r.action == 'deny'" \
+  --query-filter "MATCH (r:security-rule) WHERE r.action == 'deny'" \
   --operations operations.json \
-  --output updated_config.xml
+  --output updated_config.xml \
+  --device-type panorama \
+  --context device_group \
+  --device-group your-device-group
+```
+
+### Add a Log Forwarding Profile to Multiple Specific Policies
+
+```bash
+# Create a policy criteria file for specific policies
+cat > policy_criteria.json << EOF
+{
+  "name": ["policy-name-1", "policy-name-2", "policy-name-3"]
+}
+EOF
+
+# Create operations.json
+cat > operations.json << EOF
+{
+  "log-setting": "detailed-logging-profile"
+}
+EOF
+
+# Run the command with policy criteria
+python3 cli.py policy bulk-update \
+  --config config.xml \
+  --type security_pre_rules \
+  --criteria policy_criteria.json \
+  --operations operations.json \
+  --output updated_config.xml \
+  --device-type panorama \
+  --context device_group \
+  --device-group your-device-group
+```
+
+### Remove Log Forwarding Profiles from All Policies
+
+```bash
+# Create operations.json to remove log profile
+cat > operations.json << EOF
+{
+  "log-setting": null
+}
+EOF
+
+# Run the command on all security policies
+python3 cli.py policy bulk-update \
+  --config config.xml \
+  --type security_pre_rules \
+  --operations operations.json \
+  --output updated_config.xml \
+  --device-type panorama \
+  --context device_group \
+  --device-group your-device-group
+```
+
+### Direct XML Modification for Adding Log Profiles (Alternative Method)
+
+In cases where the bulk-update command has limitations, you can use a direct XML modification approach:
+
+```python
+#!/usr/bin/env python3
+
+import sys
+import xml.etree.ElementTree as ET
+
+def add_log_profile_to_policies(xml_file, output_file, profile_name, policy_names):
+    """
+    Add a log forwarding profile to specific security policies
+    """
+    # Parse the XML file
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    # Find all the specified policies and add the log setting
+    rules_modified = 0
+
+    # Look for policies in device groups
+    for device_group in root.findall('./devices/entry/device-group/entry'):
+        dg_name = device_group.get('name')
+        print(f"Checking device group: {dg_name}")
+
+        # Look in pre-rulebase for security rules
+        for rule in device_group.findall('./pre-rulebase/security/rules/entry'):
+            rule_name = rule.get('name')
+
+            if rule_name in policy_names:
+                print(f"Found matching rule: {rule_name}")
+
+                # Check if log-setting already exists
+                log_setting = rule.find('./log-setting')
+                if log_setting is not None:
+                    print(f"Rule {rule_name} already has log-setting: {log_setting.text}")
+                    log_setting.text = profile_name
+                else:
+                    print(f"Adding log-setting {profile_name} to rule {rule_name}")
+                    log_setting = ET.SubElement(rule, 'log-setting')
+                    log_setting.text = profile_name
+
+                rules_modified += 1
+
+    # Save the updated XML
+    tree.write(output_file)
+    print(f"Modified {rules_modified} rules and saved to {output_file}")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print("Usage: python add_log_setting.py <input_xml> <output_xml> <profile_name> <policy1> [policy2 ...]")
+        sys.exit(1)
+
+    xml_file = sys.argv[1]
+    output_file = sys.argv[2]
+    profile_name = sys.argv[3]
+    policy_names = sys.argv[4:]
+
+    add_log_profile_to_policies(xml_file, output_file, profile_name, policy_names)
+```
+
+Run the script:
+```bash
+python add_log_setting.py config.xml updated_config.xml log-profile-name policy1 policy2 policy3
+```
+
+### Direct XML Modification for Removing Log Profiles (Alternative Method)
+
+```python
+#!/usr/bin/env python3
+
+import sys
+import xml.etree.ElementTree as ET
+
+def remove_log_profile_from_policies(xml_file, output_file, policy_names):
+    """
+    Remove log forwarding profile from specific security policies
+    """
+    # Parse the XML file
+    tree = ET.parse(xml_file)
+    root = tree.getroot()
+
+    # Find all the specified policies and remove the log setting
+    rules_modified = 0
+
+    # Look for policies in device groups
+    for device_group in root.findall('./devices/entry/device-group/entry'):
+        dg_name = device_group.get('name')
+        print(f"Checking device group: {dg_name}")
+
+        # Look in pre-rulebase for security rules
+        for rule in device_group.findall('./pre-rulebase/security/rules/entry'):
+            rule_name = rule.get('name')
+
+            if rule_name in policy_names:
+                print(f"Found matching rule: {rule_name}")
+
+                # Check if log-setting exists
+                log_setting = rule.find('./log-setting')
+                if log_setting is not None:
+                    print(f"Removing log-setting from rule {rule_name}")
+                    rule.remove(log_setting)
+                    rules_modified += 1
+                else:
+                    print(f"Rule {rule_name} does not have a log-setting")
+
+    # Save the updated XML
+    tree.write(output_file)
+    print(f"Modified {rules_modified} rules and saved to {output_file}")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python remove_log_setting.py <input_xml> <output_xml> <policy1> [policy2 ...]")
+        sys.exit(1)
+
+    xml_file = sys.argv[1]
+    output_file = sys.argv[2]
+    policy_names = sys.argv[3:]
+
+    remove_log_profile_from_policies(xml_file, output_file, policy_names)
+```
+
+Run the script:
+```bash
+python remove_log_setting.py config.xml updated_config.xml policy1 policy2 policy3
 ```
 
 ## 3. Logging Configuration

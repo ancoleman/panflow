@@ -123,13 +123,13 @@ def main():
         .into("entry", {"name": "vsys1"}) \
         .into("address") \
         .into("entry", {"name": "web-server"}) \
-        .add("ip-netmask", text="192.168.1.200/32") \  # Changed IP
-        .add("description", text="Updated web server") \  # Changed description
+        .add("ip-netmask", text="192.168.1.200/32") \
+        .add("description", text="Updated web server") \
         .add("tag") \
         .into("member", text="web") \
         .up() \
         .up() \
-        .into("entry", {"name": "new-server"}) \  # Added new entry
+        .into("entry", {"name": "new-server"}) \
         .add("ip-netmask", text="192.168.1.101/32") \
         .add("description", text="New server") \
         .root_up()

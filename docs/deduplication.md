@@ -6,6 +6,14 @@ The deduplication feature in PANFlow helps identify and merge duplicate objects 
 
 Duplicate objects in PAN-OS configurations are common, especially in environments where multiple administrators make changes or when configurations grow organically over time. The deduplication engine identifies objects with the same values but different names and merges them, updating all references to point to the single retained object.
 
+## Access Methods
+
+Deduplication functionality can be accessed through three interfaces:
+
+1. **CLI Commands** - Using the `deduplicate` namespace as documented below
+2. **API** - Programmatically through the DeduplicationEngine class
+3. **Natural Language Query (NLQ)** - Using natural language commands like "show duplicated address objects" or "clean up duplicated service objects"
+
 ## Supported Object Types
 
 The deduplication engine supports the following object types:
@@ -211,6 +219,36 @@ panflow deduplicate report --config firewall.xml --output report.json
 
 ```bash
 panflow deduplicate merge --config firewall.xml --type tag --output deduped.xml --include-file important_tags.json --dry-run
+```
+
+## Natural Language Query Examples
+
+PANFlow supports natural language for deduplication operations through the NLQ module:
+
+### Finding Duplicates with NLQ
+
+```bash
+# Find duplicate address objects
+panflow nlq query "show me all duplicated address objects" --config firewall.xml
+
+# Find duplicate service objects
+panflow nlq query "find duplicate service objects" --config firewall.xml
+
+# Find all types of duplicates
+panflow nlq query "show all duplicate objects" --config firewall.xml
+```
+
+### Deduplicating with NLQ
+
+```bash
+# Deduplicate address objects
+panflow nlq query "cleanup duplicated address objects" --config firewall.xml --output deduped.xml
+
+# Deduplicate services with dry run
+panflow nlq query "deduplicate service objects but don't make changes" --config firewall.xml
+
+# Deduplicate in specific context
+panflow nlq query "cleanup duplicate address objects in device group DG1" --config panorama.xml --output deduped.xml
 ```
 
 ## Best Practices
