@@ -64,5 +64,7 @@ def complete_context_types() -> List[str]:
 def complete_output_formats() -> List[str]:
     """
     Auto-complete output formats.
+
+    Returns the standard supported output formats across all commands.
     """
-    return ["json", "yaml", "xml", "html", "csv", "text", "table"]
+    return ["json", "table", "text", "csv", "yaml", "html"]

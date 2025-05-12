@@ -52,7 +52,7 @@ def execute(
         "table",
         "--format",
         "-f",
-        help="Output format (table, json, csv)",
+        help="Output format (table, json, text, csv, yaml, html)",
         callback=output_callback,
     ),
     output_file: Optional[Path] = typer.Option(

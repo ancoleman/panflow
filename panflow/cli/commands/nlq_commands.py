@@ -38,7 +38,7 @@ def process_query(
     ),
     dry_run: bool = ConfigOptions.dry_run(),
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode"),
-    format: str = typer.Option("text", "--format", "-f", help="Output format (text, json)"),
+    format: str = typer.Option("text", "--format", "-f", help="Output format (text, json, table, csv, yaml, html)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output"),
     use_ai: bool = typer.Option(True, "--ai/--no-ai", help="Use AI for processing if available"),
     ai_provider: Optional[str] = typer.Option(
@@ -349,7 +349,7 @@ def show_help():
     typer.echo("  --config      : Specify the input configuration file")
     typer.echo("  --output      : Specify the output file for modified configurations")
     typer.echo("  --dry-run     : Preview changes without modifying the configuration")
-    typer.echo("  --format      : Output format (text, json)")
+    typer.echo("  --format      : Output format (text, json, table, csv, yaml, html)")
     typer.echo("  --verbose     : Show detailed information about the query processing")
     typer.echo("  --ai/--no-ai  : Enable or disable AI processing (if available)")
     typer.echo("  --ai-provider : AI provider to use (openai, anthropic)")
@@ -373,7 +373,7 @@ def interactive_mode(
     config: str = ConfigOptions.config_file(),
     output: Optional[str] = ConfigOptions.output_file(),
     dry_run: bool = ConfigOptions.dry_run(),
-    format: str = typer.Option("text", "--format", "-f", help="Output format (text, json)"),
+    format: str = typer.Option("text", "--format", "-f", help="Output format (text, json, table, csv, yaml, html)"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show verbose output"),
     use_ai: bool = typer.Option(True, "--ai/--no-ai", help="Use AI for processing if available"),
     ai_provider: Optional[str] = typer.Option(
