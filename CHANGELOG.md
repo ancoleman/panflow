@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Add 'table' format to supported output formats for query commands
-- Standardize output format options across all commands for consistency
+- Standardize output format options in commands that support formatting (query and nlq)
+- Prepare for consistent format support across all commands when migrated to new command pattern
 
 ## [0.2.2] - 2025-05-12
 
