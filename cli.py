@@ -12,12 +12,14 @@ from pathlib import Path
 from panflow.cli import app
 from panflow.cli.completion import install_completion, show_completion
 
+
 @app.callback()
 def callback():
     """
     PANFlow CLI - Palo Alto Networks Configuration Management Tool.
     """
     pass
+
 
 @app.command()
 def completion(
@@ -28,21 +30,11 @@ def completion(
         help="Shell type (bash, zsh, fish)",
     ),
     install: bool = typer.Option(
-        False,
-        "--install",
-        "-i",
-        help="Install completion for the specified shell"
+        False, "--install", "-i", help="Install completion for the specified shell"
     ),
-    show: bool = typer.Option(
-        False,
-        "--show",
-        help="Show completion script"
-    ),
+    show: bool = typer.Option(False, "--show", help="Show completion script"),
     path: Optional[Path] = typer.Option(
-        None,
-        "--path",
-        "-p",
-        help="Custom path to install the completion script"
+        None, "--path", "-p", help="Custom path to install the completion script"
     ),
 ):
     """
@@ -72,6 +64,7 @@ def completion(
     # If no options provided, show help
     typer.echo("Use --install to install completion or --show to display completion script")
     raise typer.Exit(1)
+
 
 if __name__ == "__main__":
     app()

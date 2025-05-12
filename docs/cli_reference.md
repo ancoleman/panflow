@@ -127,7 +127,7 @@ panflow policy list --config CONFIG --type TYPE [options]
 
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
-- `--type, -t TEXT`: Type of policy to list (security_pre_rules, nat_rules, etc.) (required)
+- `--type, -t TEXT`: Type of policy to list (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (required)
 - `--output, -o TEXT`: Output file for results (JSON format)
 - `--device-type, -d TEXT`: Device type (firewall or panorama) (default: firewall)
 - `--context TEXT`: Context (shared, device_group, vsys) (default: shared)
@@ -145,7 +145,7 @@ panflow policy bulk-update --config CONFIG --type TYPE --criteria CRITERIA --ope
 
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
-- `--type, -t TEXT`: Type of policy to update (required)
+- `--type, -t TEXT`: Type of policy to update (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (required)
 - `--criteria TEXT`: JSON file with filter criteria (required)
 - `--operations TEXT`: JSON file with update operations (required)
 - `--output, -o TEXT`: Output file for updated configuration (required)
@@ -482,6 +482,7 @@ panflow nlq query QUERY [options]
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
 - `--output, -o TEXT`: Output file for updates (required for cleanup/modify operations, not needed for view-only queries)
+- `--dry-run`: Preview changes without modifying the configuration
 - `--interactive, -i`: Interactive mode
 - `--format, -f TEXT`: Output format (text, json) (default: text)
 - `--verbose, -v`: Show verbose output
@@ -498,6 +499,7 @@ panflow nlq interactive [options]
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
 - `--output, -o TEXT`: Output file for updates
+- `--dry-run`: Preview changes without modifying the configuration
 - `--format, -f TEXT`: Output format (text, json) (default: text)
 - `--verbose, -v`: Show verbose output
 - `--ai/--no-ai`: Use AI for processing if available (default: use AI)
@@ -516,12 +518,27 @@ panflow nlq help
 # Find unused address objects (view-only operation)
 panflow nlq query "show me all unused address objects" --config firewall.xml
 
-# Remove disabled security policies
-panflow nlq query "cleanup all disabled security rules" --config firewall.xml --output cleaned.xml
+# List all policy rules
+panflow nlq query "list all security policies" --config firewall.xml
 
 # Find duplicate objects
 panflow nlq query "find duplicate address objects" --config firewall.xml
 
+# Remove disabled security policies
+panflow nlq query "cleanup all disabled security rules" --config firewall.xml --output cleaned.xml
+
+# Preview changes without modifying the configuration (CLI flag)
+panflow nlq query "cleanup unused address objects" --config firewall.xml --output cleaned.xml --dry-run
+
+# Preview changes via natural language
+panflow nlq query "cleanup disabled nat rules but don't make any changes" --config firewall.xml --output cleaned.xml
+
+# Context-specific operations
+panflow nlq query "find unused objects in device group DG1" --config panorama.xml
+
 # Start an interactive session
 panflow nlq interactive --config firewall.xml
+
+# Start an interactive session with dry-run mode enabled
+panflow nlq interactive --config firewall.xml --dry-run
 ```

@@ -29,5 +29,5 @@ __all__ = [
     "report_commands",
     "config_commands",
     "query_commands",
-    "nlq_commands"
+    "nlq_commands",
 ]

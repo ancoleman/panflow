@@ -34,15 +34,11 @@ from .base import (
     validate_xml,
     load_xml_file,
     get_xpath_element_value,
-    compat_element_to_dict
+    compat_element_to_dict,
 )
 
 # Import XML builder classes
-from .builder import (
-    XmlNode,
-    XmlBuilder, 
-    XPathBuilder
-)
+from .builder import XmlNode, XmlBuilder, XPathBuilder
 
 # Import XML query class
 from .query import XmlQuery
@@ -51,12 +47,7 @@ from .query import XmlQuery
 from .diff import XmlDiff, DiffItem, DiffType
 
 # Import caching utilities
-from .cache import (
-    cached_xpath,
-    clear_xpath_cache,
-    invalidate_element_cache,
-    LRUCache
-)
+from .cache import cached_xpath, clear_xpath_cache, invalidate_element_cache, LRUCache
 
 # Import compatibility with lxml/ElementTree
 from .base import HAVE_LXML
@@ -64,45 +55,40 @@ from .base import HAVE_LXML
 # Explicitly define the public API
 __all__ = [
     # Base module exports
-    'parse_xml',
-    'parse_xml_string',
-    'find_element',
-    'find_elements',
-    'element_exists',
-    'get_element_text',
-    'get_element_attribute',
-    'create_element',
-    'set_element_text',
-    'delete_element',
-    'clone_element',
-    'merge_elements',
-    'element_to_dict',
-    'dict_to_element',
-    'prettify_xml',
-    'validate_xml',
-    'load_xml_file',
-    'get_xpath_element_value',
-    'compat_element_to_dict',
-    
+    "parse_xml",
+    "parse_xml_string",
+    "find_element",
+    "find_elements",
+    "element_exists",
+    "get_element_text",
+    "get_element_attribute",
+    "create_element",
+    "set_element_text",
+    "delete_element",
+    "clone_element",
+    "merge_elements",
+    "element_to_dict",
+    "dict_to_element",
+    "prettify_xml",
+    "validate_xml",
+    "load_xml_file",
+    "get_xpath_element_value",
+    "compat_element_to_dict",
     # XML builder exports
-    'XmlNode',
-    'XmlBuilder',
-    'XPathBuilder',
-    
+    "XmlNode",
+    "XmlBuilder",
+    "XPathBuilder",
     # XML query exports
-    'XmlQuery',
-    
+    "XmlQuery",
     # XML diff exports
-    'XmlDiff',
-    'DiffItem',
-    'DiffType',
-    
+    "XmlDiff",
+    "DiffItem",
+    "DiffType",
     # Cache exports
-    'cached_xpath',
-    'clear_xpath_cache',
-    'invalidate_element_cache',
-    'LRUCache',
-    
+    "cached_xpath",
+    "clear_xpath_cache",
+    "invalidate_element_cache",
+    "LRUCache",
     # Compatibility exports
-    'HAVE_LXML'
+    "HAVE_LXML",
 ]

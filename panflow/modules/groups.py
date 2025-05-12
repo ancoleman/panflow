@@ -15,6 +15,7 @@ from ..core.config_loader import xpath_search
 
 logger = logging.getLogger("panflow")
 
+
 def add_member_to_group(
     tree: etree._ElementTree,
     group_type: str,
@@ -23,11 +24,11 @@ def add_member_to_group(
     device_type: str,
     context_type: str,
     version: str,
-    **kwargs
+    **kwargs,
 ) -> bool:
     """
     Add a member to a group.
-    
+
     Args:
         tree: ElementTree containing the configuration
         group_type: Type of group (address_group, service_group, etc.)
@@ -37,23 +38,21 @@ def add_member_to_group(
         context_type: Type of context (shared, device_group, vsys)
         version: PAN-OS version
         **kwargs: Additional parameters (device_group, vsys)
-        
+
     Returns:
         bool: Success status
     """
     # Get the XPath for the group
-    xpath = get_object_xpath(
-        group_type, device_type, context_type, version, group_name, **kwargs
-    )
-    
+    xpath = get_object_xpath(group_type, device_type, context_type, version, group_name, **kwargs)
+
     # Find the group element
     elements = xpath_search(tree, xpath)
     if not elements:
         logger.error(f"Group '{group_name}' not found")
         return False
-    
+
     group_element = elements[0]
-    
+
     # Check if it's a static or dynamic group
     static_element = group_element.find("./static")
     if static_element is not None:
@@ -63,7 +62,7 @@ def add_member_to_group(
             if member.text == member_name:
                 logger.warning(f"Member '{member_name}' already exists in group '{group_name}'")
                 return False
-        
+
         # Add new member
         member_element = etree.SubElement(static_element, "member")
         member_element.text = member_name
@@ -77,6 +76,7 @@ def add_member_to_group(
         logger.info(f"Created static group '{group_name}' with member '{member_name}'")
         return True
 
+
 def remove_member_from_group(
     tree: etree._ElementTree,
     group_type: str,
@@ -85,11 +85,11 @@ def remove_member_from_group(
     device_type: str,
     context_type: str,
     version: str,
-    **kwargs
+    **kwargs,
 ) -> bool:
     """
     Remove a member from a group.
-    
+
     Args:
         tree: ElementTree containing the configuration
         group_type: Type of group (address_group, service_group, etc.)
@@ -99,23 +99,21 @@ def remove_member_from_group(
         context_type: Type of context (shared, device_group, vsys)
         version: PAN-OS version
         **kwargs: Additional parameters (device_group, vsys)
-        
+
     Returns:
         bool: Success status
     """
     # Get the XPath for the group
-    xpath = get_object_xpath(
-        group_type, device_type, context_type, version, group_name, **kwargs
-    )
-    
+    xpath = get_object_xpath(group_type, device_type, context_type, version, group_name, **kwargs)
+
     # Find the group element
     elements = xpath_search(tree, xpath)
     if not elements:
         logger.error(f"Group '{group_name}' not found")
         return False
-    
+
     group_element = elements[0]
-    
+
     # Check if it's a static group
     static_element = group_element.find("./static")
     if static_element is not None:
@@ -126,13 +124,14 @@ def remove_member_from_group(
                 static_element.remove(member)
                 logger.info(f"Removed member '{member_name}' from static group '{group_name}'")
                 return True
-                
+
         logger.warning(f"Member '{member_name}' not found in group '{group_name}'")
         return False
     else:
         # Not a static group
         logger.error(f"Group '{group_name}' is not a static group")
         return False
+
 
 def add_members_to_group(
     tree: etree._ElementTree,
@@ -142,11 +141,11 @@ def add_members_to_group(
     device_type: str,
     context_type: str,
     version: str,
-    **kwargs
+    **kwargs,
 ) -> Tuple[int, int]:
     """
     Add multiple members to a group.
-    
+
     Args:
         tree: ElementTree containing the configuration
         group_type: Type of group (address_group, service_group, etc.)
@@ -156,21 +155,24 @@ def add_members_to_group(
         context_type: Type of context (shared, device_group, vsys)
         version: PAN-OS version
         **kwargs: Additional parameters (device_group, vsys)
-        
+
     Returns:
         Tuple[int, int]: (number of members added, total number of members attempted)
     """
     added_count = 0
-    
+
     for member_name in member_names:
         if add_member_to_group(
             tree, group_type, group_name, member_name, device_type, context_type, version, **kwargs
         ):
             added_count += 1
             logger.debug(f"Added member '{member_name}' to {group_type} '{group_name}'")
-    
-    logger.info(f"Added {added_count} of {len(member_names)} members to {group_type} '{group_name}'")
+
+    logger.info(
+        f"Added {added_count} of {len(member_names)} members to {group_type} '{group_name}'"
+    )
     return added_count, len(member_names)
+
 
 def create_group(
     tree: etree._ElementTree,
@@ -181,11 +183,11 @@ def create_group(
     device_type: str = "firewall",
     context_type: str = "shared",
     version: str = "11.2",
-    **kwargs
+    **kwargs,
 ) -> bool:
     """
     Create a new group (static or dynamic).
-    
+
     Args:
         tree: ElementTree containing the configuration
         group_type: Type of group (address_group, service_group, etc.)
@@ -196,33 +198,31 @@ def create_group(
         context_type: Type of context (shared, device_group, vsys)
         version: PAN-OS version
         **kwargs: Additional parameters (device_group, vsys)
-        
+
     Returns:
         bool: Success status
     """
     # Get the base XPath for the group type
     base_xpath = get_object_xpath(group_type, device_type, context_type, version, **kwargs)
     parent_xpath = base_xpath.rsplit("/", 1)[0]
-    
+
     # Check if the group already exists
-    xpath = get_object_xpath(
-        group_type, device_type, context_type, version, group_name, **kwargs
-    )
+    xpath = get_object_xpath(group_type, device_type, context_type, version, group_name, **kwargs)
     existing_elements = xpath_search(tree, xpath)
-    
+
     if existing_elements:
         logger.warning(f"Group '{group_name}' already exists")
         return False
-    
+
     # Find the parent element
     parent_elements = xpath_search(tree, parent_xpath)
     if not parent_elements:
         logger.error(f"Parent element not found for path: {parent_xpath}")
         return False
-    
+
     # Create the new group element
     group_element = etree.SubElement(parent_elements[0], "entry", {"name": group_name})
-    
+
     if members is not None:
         # Static group
         static_element = etree.SubElement(group_element, "static")
@@ -240,8 +240,9 @@ def create_group(
         # Empty static group
         static_element = etree.SubElement(group_element, "static")
         logger.info(f"Created empty static {group_type} '{group_name}'")
-    
+
     return True
+
 
 def get_group_members(
     tree: etree._ElementTree,
@@ -250,11 +251,11 @@ def get_group_members(
     device_type: str,
     context_type: str,
     version: str,
-    **kwargs
+    **kwargs,
 ) -> Optional[List[str]]:
     """
     Get the members of a group.
-    
+
     Args:
         tree: ElementTree containing the configuration
         group_type: Type of group (address_group, service_group, etc.)
@@ -263,23 +264,21 @@ def get_group_members(
         context_type: Type of context (shared, device_group, vsys)
         version: PAN-OS version
         **kwargs: Additional parameters (device_group, vsys)
-        
+
     Returns:
         Optional[List[str]]: List of member names or None if not found or not a static group
     """
     # Get the XPath for the group
-    xpath = get_object_xpath(
-        group_type, device_type, context_type, version, group_name, **kwargs
-    )
-    
+    xpath = get_object_xpath(group_type, device_type, context_type, version, group_name, **kwargs)
+
     # Find the group element
     elements = xpath_search(tree, xpath)
     if not elements:
         logger.error(f"Group '{group_name}' not found")
         return None
-    
+
     group_element = elements[0]
-    
+
     # Check if it's a static group
     static_element = group_element.find("./static")
     if static_element is not None:
@@ -288,13 +287,14 @@ def get_group_members(
         for member in static_element.xpath("./member"):
             if member.text:
                 members.append(member.text)
-        
+
         logger.info(f"Found {len(members)} members in {group_type} '{group_name}'")
         return members
     else:
         # Not a static group
         logger.warning(f"Group '{group_name}' is not a static group")
         return None
+
 
 def get_group_filter(
     tree: etree._ElementTree,
@@ -303,11 +303,11 @@ def get_group_filter(
     device_type: str,
     context_type: str,
     version: str,
-    **kwargs
+    **kwargs,
 ) -> Optional[str]:
     """
     Get the filter of a dynamic group.
-    
+
     Args:
         tree: ElementTree containing the configuration
         group_type: Type of group (address_group, service_group, etc.)
@@ -316,23 +316,21 @@ def get_group_filter(
         context_type: Type of context (shared, device_group, vsys)
         version: PAN-OS version
         **kwargs: Additional parameters (device_group, vsys)
-        
+
     Returns:
         Optional[str]: Filter expression or None if not found or not a dynamic group
     """
     # Get the XPath for the group
-    xpath = get_object_xpath(
-        group_type, device_type, context_type, version, group_name, **kwargs
-    )
-    
+    xpath = get_object_xpath(group_type, device_type, context_type, version, group_name, **kwargs)
+
     # Find the group element
     elements = xpath_search(tree, xpath)
     if not elements:
         logger.error(f"Group '{group_name}' not found")
         return None
-    
+
     group_element = elements[0]
-    
+
     # Check if it's a dynamic group
     dynamic_element = group_element.find("./dynamic")
     if dynamic_element is not None:
@@ -341,7 +339,7 @@ def get_group_filter(
         if filter_element is not None and filter_element.text:
             logger.info(f"Found filter for dynamic {group_type} '{group_name}'")
             return filter_element.text
-    
+
     # Not a dynamic group or no filter
     logger.warning(f"Group '{group_name}' is not a dynamic group or has no filter")
     return None

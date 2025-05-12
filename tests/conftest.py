@@ -11,15 +11,17 @@ from lxml import etree
 from pathlib import Path
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Test fixtures path
-FIXTURES_DIR = os.path.join(os.path.dirname(__file__), 'fixtures')
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+
 
 @pytest.fixture
 def fixture_path():
     """Return the path to the fixtures directory."""
     return Path(FIXTURES_DIR)
+
 
 @pytest.fixture
 def sample_xml_string():
@@ -40,15 +42,18 @@ def sample_xml_string():
     </config>
     """
 
+
 @pytest.fixture
 def sample_xml_element(sample_xml_string):
     """Return a parsed XML element from the sample string."""
-    return etree.fromstring(sample_xml_string.encode('utf-8'))
+    return etree.fromstring(sample_xml_string.encode("utf-8"))
+
 
 @pytest.fixture
 def sample_xml_tree(sample_xml_string):
     """Return a parsed XML tree from the sample string."""
-    return etree.ElementTree(etree.fromstring(sample_xml_string.encode('utf-8')))
+    return etree.ElementTree(etree.fromstring(sample_xml_string.encode("utf-8")))
+
 
 @pytest.fixture
 def panorama_xml_tree():
@@ -77,7 +82,8 @@ def panorama_xml_tree():
       </shared>
     </config>
     """
-    return etree.ElementTree(etree.fromstring(xml_str.encode('utf-8')))
+    return etree.ElementTree(etree.fromstring(xml_str.encode("utf-8")))
+
 
 @pytest.fixture
 def firewall_xml_tree():
@@ -120,7 +126,8 @@ def firewall_xml_tree():
       </devices>
     </config>
     """
-    return etree.ElementTree(etree.fromstring(xml_str.encode('utf-8')))
+    return etree.ElementTree(etree.fromstring(xml_str.encode("utf-8")))
+
 
 @pytest.fixture
 def sample_xpath_mapping():
@@ -129,16 +136,16 @@ def sample_xpath_mapping():
         "contexts": {
             "panorama": {
                 "shared": "/config/shared",
-                "device_group": "/config/devices/entry[@name='localhost.localdomain']/device-group/entry[@name='{device_group}']"
+                "device_group": "/config/devices/entry[@name='localhost.localdomain']/device-group/entry[@name='{device_group}']",
             },
             "firewall": {
                 "shared": "/config/shared",
-                "vsys": "/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='{vsys}']"
-            }
+                "vsys": "/config/devices/entry[@name='localhost.localdomain']/vsys/entry[@name='{vsys}']",
+            },
         },
         "objects": {
             "address": "{base_path}/address/entry[@name='{name}']",
-            "address-group": "{base_path}/address-group/entry[@name='{name}']"
+            "address-group": "{base_path}/address-group/entry[@name='{name}']",
         },
         "policies": {
             "panorama": {
@@ -146,6 +153,6 @@ def sample_xpath_mapping():
             },
             "firewall": {
                 "security_rules": "{base_path}/rulebase/security/rules/entry[@name='{name}']"
-            }
-        }
+            },
+        },
     }

@@ -42,14 +42,17 @@ SAMPLE_XML = """
 </config>
 """
 
+
 # Mock the proper return value for load_config_from_file
-@patch('panflow.modules.nat_splitter.split_bidirectional_nat_rule')
-@patch('panflow.core.config_loader.load_config_from_file')
-@patch('panflow.core.config_loader.detect_device_type')
-@patch('panflow.core.config_loader.save_config')
-@patch('os.path.exists')
-@patch('lxml.etree.parse')
-def test_split_bidirectional_command(mock_parse, mock_exists, mock_save, mock_detect_type, mock_load_config, mock_split):
+@patch("panflow.modules.nat_splitter.split_bidirectional_nat_rule")
+@patch("panflow.core.config_loader.load_config_from_file")
+@patch("panflow.core.config_loader.detect_device_type")
+@patch("panflow.core.config_loader.save_config")
+@patch("os.path.exists")
+@patch("lxml.etree.parse")
+def test_split_bidirectional_command(
+    mock_parse, mock_exists, mock_save, mock_detect_type, mock_load_config, mock_split
+):
     """Test the split-bidirectional CLI command."""
     # Setup mocks
     xml_tree = etree.parse(StringIO(SAMPLE_XML))
@@ -60,28 +63,33 @@ def test_split_bidirectional_command(mock_parse, mock_exists, mock_save, mock_de
     mock_save.return_value = True
     # Make file existence check pass
     mock_exists.return_value = True
-    
+
     mock_split.return_value = {
         "success": True,
         "original_rule": "test-rule",
-        "reverse_rule": "test-rule-reverse"
+        "reverse_rule": "test-rule-reverse",
     }
-    
+
     # Run the command
     result = runner.invoke(
-        app, 
+        app,
         [
-            "policy", "nat", "split-bidirectional",
-            "--config", "test.xml",
-            "--rule-name", "test-rule",
-            "--output", "output.xml"
-        ]
+            "policy",
+            "nat",
+            "split-bidirectional",
+            "--config",
+            "test.xml",
+            "--rule-name",
+            "test-rule",
+            "--output",
+            "output.xml",
+        ],
     )
-    
+
     # Check the result
     assert result.exit_code == 0, f"Command failed with error: {result.stdout}"
     assert "Successfully split bidirectional NAT rule" in result.stdout
-    
+
     # Verify mocks were called correctly
     mock_load_config.assert_called_once_with("test.xml")
     mock_split.assert_called_once()
@@ -89,13 +97,16 @@ def test_split_bidirectional_command(mock_parse, mock_exists, mock_save, mock_de
     assert kwargs["rule_name"] == "test-rule"
     assert kwargs["tree"] == mock_config
 
-@patch('panflow.modules.nat_splitter.split_all_bidirectional_nat_rules')
-@patch('panflow.core.config_loader.load_config_from_file')
-@patch('panflow.core.config_loader.detect_device_type')
-@patch('panflow.core.config_loader.save_config')
-@patch('os.path.exists')
-@patch('lxml.etree.parse')
-def test_split_all_bidirectional_command(mock_parse, mock_exists, mock_save, mock_detect_type, mock_load_config, mock_split_all):
+
+@patch("panflow.modules.nat_splitter.split_all_bidirectional_nat_rules")
+@patch("panflow.core.config_loader.load_config_from_file")
+@patch("panflow.core.config_loader.detect_device_type")
+@patch("panflow.core.config_loader.save_config")
+@patch("os.path.exists")
+@patch("lxml.etree.parse")
+def test_split_all_bidirectional_command(
+    mock_parse, mock_exists, mock_save, mock_detect_type, mock_load_config, mock_split_all
+):
     """Test the split-all-bidirectional CLI command."""
     # Setup mocks
     xml_tree = etree.parse(StringIO(SAMPLE_XML))
@@ -106,30 +117,34 @@ def test_split_all_bidirectional_command(mock_parse, mock_exists, mock_save, moc
     mock_save.return_value = True
     # Make file existence check pass
     mock_exists.return_value = True
-    
+
     mock_split_all.return_value = {
         "success": True,
         "processed": 2,
         "succeeded": 2,
         "failed": 0,
-        "details": []
+        "details": [],
     }
-    
+
     # Run the command
     result = runner.invoke(
-        app, 
+        app,
         [
-            "policy", "nat", "split-all-bidirectional",
-            "--config", "test.xml",
-            "--output", "output.xml"
-        ]
+            "policy",
+            "nat",
+            "split-all-bidirectional",
+            "--config",
+            "test.xml",
+            "--output",
+            "output.xml",
+        ],
     )
-    
+
     # Check the result
     assert result.exit_code == 0, f"Command failed with error: {result.stdout}"
     assert "Successfully split" in result.stdout
     assert "bidirectional NAT rules" in result.stdout
-    
+
     # Verify mocks were called correctly
     mock_load_config.assert_called_once_with("test.xml")
     mock_split_all.assert_called_once()

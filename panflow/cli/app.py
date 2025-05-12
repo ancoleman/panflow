@@ -14,6 +14,15 @@ import typer
 from typing import List, Optional
 
 from panflow.core.logging_utils import configure_logging
+
+# Import completions from the dedicated module
+from .completions import (
+    complete_config_files,
+    complete_object_types,
+    complete_policy_types,
+    complete_context_types,
+    complete_output_formats,
+)
 from .common import CommonOptions
 
 # Create main Typer app with auto-completion support
@@ -56,49 +65,6 @@ merge_app = typer.Typer(
     no_args_is_help=True,
 )
 
-# Autocompletion functions for common parameters
-def complete_config_files() -> List[Path]:
-    """
-    Auto-complete configuration file paths.
-    Returns XML files in the current directory.
-    """
-    return [
-        Path(f) for f in os.listdir(".")
-        if f.endswith((".xml", ".XML")) and os.path.isfile(f)
-    ]
-
-def complete_object_types() -> List[str]:
-    """
-    Auto-complete object types.
-    """
-    return [
-        "address", "service", "address-group", "service-group",
-        "tag", "application", "application-group", "profile-group"
-    ]
-
-def complete_policy_types() -> List[str]:
-    """
-    Auto-complete policy types.
-    """
-    return [
-        "security_rules", "nat_rules", "security_pre_rules", "security_post_rules",
-        "nat_pre_rules", "nat_post_rules", "qos_rules", "decryption_rules",
-        "authentication_rules", "dos_rules", "tunnel_inspection_rules",
-        "application_override_rules"
-    ]
-
-def complete_context_types() -> List[str]:
-    """
-    Auto-complete context types.
-    """
-    return ["shared", "vsys", "device_group", "template"]
-
-def complete_output_formats() -> List[str]:
-    """
-    Auto-complete output formats.
-    """
-    return ["json", "yaml", "xml", "html", "csv", "text"]
-
 # Import the query commands app directly
 from panflow.cli.commands.query_commands import app as query_app
 
@@ -128,9 +94,10 @@ for handler in panflow_logger.handlers[:]:
 
 # Set up a single handler for the panflow logger
 handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
 panflow_logger.addHandler(handler)
 panflow_logger.setLevel(logging.INFO)
+
 
 # ===== Exception Handler =====
 def _global_exception_handler(exc_type, exc_value, exc_traceback):
@@ -139,13 +106,26 @@ def _global_exception_handler(exc_type, exc_value, exc_traceback):
     Provides more user-friendly error messages for common issues.
     """
     from panflow import (
-        PANFlowError, ConfigError, ValidationError, ParseError, 
-        XPathError, ContextError, ObjectError, ObjectNotFoundError,
-        ObjectExistsError, PolicyError, PolicyNotFoundError,
-        PolicyExistsError, MergeError, ConflictError, VersionError,
-        FileOperationError, BulkOperationError, SecurityError
+        PANFlowError,
+        ConfigError,
+        ValidationError,
+        ParseError,
+        XPathError,
+        ContextError,
+        ObjectError,
+        ObjectNotFoundError,
+        ObjectExistsError,
+        PolicyError,
+        PolicyNotFoundError,
+        PolicyExistsError,
+        MergeError,
+        ConflictError,
+        VersionError,
+        FileOperationError,
+        BulkOperationError,
+        SecurityError,
     )
-    
+
     # Handle PANFlow exceptions
     if isinstance(exc_value, PANFlowError):
         if isinstance(exc_value, ObjectNotFoundError):
@@ -184,10 +164,12 @@ def _global_exception_handler(exc_type, exc_value, exc_traceback):
         logger.error(f"Unexpected error: {exc_type.__name__}: {exc_value}")
         if logger.getEffectiveLevel() <= logging.DEBUG:
             import traceback
+
             logger.debug("Traceback:")
             for line in traceback.format_tb(exc_traceback):
                 logger.debug(line.rstrip())
         sys.exit(1)
+
 
 # Set up the global exception handler
 sys.excepthook = _global_exception_handler

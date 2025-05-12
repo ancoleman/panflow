@@ -22,6 +22,7 @@ This guide provides a comprehensive overview of the command-line interface (CLI)
 - [Bulk Operations](#bulk-operations)
 - [Deduplication](#deduplication)
 - [Logging](#logging)
+- [Natural Language Query (NLQ)](#natural-language-query-nlq)
 - [Usage Examples](#usage-examples)
 - [Tips and Best Practices](#tips-and-best-practices)
 
@@ -430,7 +431,7 @@ python cli.py policy list --config CONFIG_FILE --type POLICY_TYPE [--query-filte
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to list (e.g., security_pre_rules, nat_rules) (**required**)
+- `--type`, `-t`: Type of policy to list (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--query-filter`, `-q`: Graph query filter to select policies
 - `--output`, `-o`: Output file for results (JSON format)
 
@@ -456,7 +457,7 @@ python cli.py policy filter --config CONFIG_FILE --type POLICY_TYPE [--criteria 
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to filter (**required**)
+- `--type`, `-t`: Type of policy to filter (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--criteria`: JSON file with filter criteria
 - `--query-filter`, `-q`: Graph query filter to select policies
 - `--output`, `-o`: Output file for results (JSON format)
@@ -485,7 +486,7 @@ python cli.py policy add --config CONFIG_FILE --type POLICY_TYPE --name NAME --p
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to add (**required**)
+- `--type`, `-t`: Type of policy to add (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--name`, `-n`: Name of the policy (**required**)
 - `--properties`, `-p`: JSON file with policy properties (**required**)
 - `--output`, `-o`: Output file for updated configuration (**required**)
@@ -505,7 +506,7 @@ python cli.py policy update --config CONFIG_FILE --type POLICY_TYPE --name NAME 
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to update (**required**)
+- `--type`, `-t`: Type of policy to update (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--name`, `-n`: Name of the policy (**required**)
 - `--properties`, `-p`: JSON file with updated policy properties (**required**)
 - `--output`, `-o`: Output file for updated configuration (**required**)
@@ -525,7 +526,7 @@ python cli.py policy delete --config CONFIG_FILE --type POLICY_TYPE --name NAME 
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to delete (**required**)
+- `--type`, `-t`: Type of policy to delete (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--name`, `-n`: Name of the policy (**required**)
 - `--output`, `-o`: Output file for updated configuration (**required**)
 
@@ -544,7 +545,7 @@ python cli.py policy filter --config CONFIG_FILE --type POLICY_TYPE --criteria C
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to filter (**required**)
+- `--type`, `-t`: Type of policy to filter (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--criteria`: JSON file with filter criteria (**required**)
 - `--output`, `-o`: Output file for results (JSON format)
 
@@ -563,7 +564,7 @@ python cli.py policy bulk-update --config CONFIG_FILE --type POLICY_TYPE [--crit
 
 Options:
 - `--config`, `-c`: Path to XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to update (**required**)
+- `--type`, `-t`: Type of policy to update (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--criteria`: JSON file with filter criteria
 - `--query-filter`, `-q`: Graph query filter to select policies
 - `--operations`: JSON file with update operations (**required**)
@@ -777,7 +778,7 @@ python cli.py merge policy --source-config SOURCE_CONFIG --target-config TARGET_
 Options:
 - `--source-config`: Path to source XML configuration file (**required**)
 - `--target-config`: Path to target XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to merge (e.g., security_pre_rules) (**required**)
+- `--type`, `-t`: Type of policy to merge (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--name`, `-n`: Name of the policy to merge (**required**)
 - `--output`, `-o`: Output file for updated configuration (**required**)
 - `--source-context`: Source context (shared, device_group, vsys)
@@ -807,7 +808,7 @@ python cli.py merge policies --source-config SOURCE_CONFIG --target-config TARGE
 Options:
 - `--source-config`: Path to source XML configuration file (**required**)
 - `--target-config`: Path to target XML configuration file (**required**)
-- `--type`, `-t`: Type of policy to merge (**required**)
+- `--type`, `-t`: Type of policy to merge (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (**required**)
 - `--names-file`: File containing policy names to merge (one per line)
 - `--criteria`: JSON file with filter criteria
 - `--output`, `-o`: Output file for updated configuration (**required**)
@@ -1205,6 +1206,115 @@ python cli.py object list --config firewall.xml --type address --log-level warni
 # Suppress console output but log to file
 python cli.py object list --config firewall.xml --type address --quiet --log-file operations.log
 ```
+
+## Natural Language Query (NLQ)
+
+The Natural Language Query (NLQ) module allows you to interact with PANFlow using plain English commands instead of remembering CLI syntax.
+
+### Basic Usage
+
+```bash
+# Process a natural language query (view-only operation)
+python cli.py nlq query "show me all unused address objects" --config firewall.xml
+
+# Cleanup operation requires an output file
+python cli.py nlq query "cleanup unused service objects" --config firewall.xml --output cleaned.xml
+
+# Use dry run mode via CLI flag
+python cli.py nlq query "cleanup unused address objects" --config firewall.xml --output cleaned.xml --dry-run
+
+# Use dry run mode via natural language
+python cli.py nlq query "cleanup unused address objects but don't make any changes" --config firewall.xml
+```
+
+### Interactive Mode
+
+```bash
+# Start an interactive session
+python cli.py nlq interactive --config firewall.xml
+
+# Example interaction
+PANFlow> show me all unused address objects
+PANFlow> cleanup disabled security policies
+PANFlow> find duplicate address objects
+PANFlow> exit
+```
+
+### NLQ Help and Examples
+
+```bash
+# Get help and examples for NLQ
+python cli.py nlq help
+```
+
+### Example NLQ Queries
+
+#### Object Management
+
+```bash
+# List objects
+python cli.py nlq query "list all address objects" --config firewall.xml
+python cli.py nlq query "show me service objects" --config firewall.xml
+python cli.py nlq query "find address objects with 10.0.0 in them" --config firewall.xml
+
+# List groups
+python cli.py nlq query "list address-groups" --config firewall.xml
+python cli.py nlq query "show service-groups" --config firewall.xml
+```
+
+#### Policy Management
+
+```bash
+# List policies
+python cli.py nlq query "list security policies" --config firewall.xml
+python cli.py nlq query "show nat rules" --config firewall.xml
+python cli.py nlq query "list pre security rules" --config firewall.xml
+python cli.py nlq query "show security post rules" --config firewall.xml
+```
+
+#### Cleanup Operations
+
+```bash
+# Cleanup unused objects
+python cli.py nlq query "cleanup unused address objects" --config firewall.xml --output cleaned.xml
+
+# Cleanup disabled policies
+python cli.py nlq query "remove all disabled security rules" --config firewall.xml --output cleaned.xml
+
+# Dry run mode
+python cli.py nlq query "cleanup unused service objects in dry run mode" --config firewall.xml --output cleaned.xml
+python cli.py nlq query "cleanup disabled nat rules" --config firewall.xml --output cleaned.xml --dry-run
+```
+
+#### Finding Unused & Disabled Items
+
+```bash
+# Find unused objects
+python cli.py nlq query "show me all unused address objects" --config firewall.xml
+python cli.py nlq query "find unused service groups" --config firewall.xml
+
+# Find disabled policies
+python cli.py nlq query "list disabled security policies" --config firewall.xml
+python cli.py nlq query "find disabled NAT policies" --config firewall.xml
+```
+
+#### Deduplication
+
+```bash
+# Find duplicates
+python cli.py nlq query "find duplicate address objects" --config firewall.xml
+python cli.py nlq query "show me address objects with the same IP" --config firewall.xml
+```
+
+#### Contextual Operations
+
+```bash
+# Context-specific operations
+python cli.py nlq query "cleanup unused objects in device group DG1" --config panorama.xml --output cleaned.xml
+python cli.py nlq query "show disabled policies in vsys1" --config firewall.xml
+```
+
+For a comprehensive guide to the NLQ module, see [Natural Language Query Documentation](docs/nlq.md).
 
 ## Usage Examples
 

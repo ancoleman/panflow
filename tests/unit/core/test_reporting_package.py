@@ -14,7 +14,7 @@ from panflow.reporting import (
     generate_duplicate_objects_report,
     generate_security_rule_coverage_report,
     EnhancedReportingEngine,
-    ReportingEngine
+    ReportingEngine,
 )
 from panflow.reporting.formatters.html import HTMLFormatter
 from panflow.reporting.formatters.json import JSONFormatter
@@ -27,12 +27,14 @@ from panflow.reporting.reports.policy_analysis import generate_security_policy_a
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 CONFIG_FILE = FIXTURES_DIR / "sample_config.xml"
 
+
 @pytest.fixture
 def xml_tree():
     """Load sample configuration file as XML ElementTree."""
     if not CONFIG_FILE.exists():
         pytest.skip(f"Sample config file not found at {CONFIG_FILE}")
     return etree.parse(str(CONFIG_FILE))
+
 
 def test_reporting_imports():
     """Test that all reporting modules can be imported correctly."""
@@ -50,14 +52,11 @@ def test_reporting_imports():
     assert generate_duplicate_objects_report_data is not None
     assert generate_security_policy_analysis_data is not None
 
+
 def test_reporting_engine_initialization(xml_tree):
     """Test that the ReportingEngine can be initialized correctly."""
     engine = ReportingEngine(
-        xml_tree,
-        device_type="firewall",
-        context_type="vsys",
-        version="10.1.0",
-        vsys="vsys1"
+        xml_tree, device_type="firewall", context_type="vsys", version="10.1.0", vsys="vsys1"
     )
     assert engine is not None
     assert engine.tree is xml_tree
@@ -68,6 +67,7 @@ def test_reporting_engine_initialization(xml_tree):
     assert engine.html_formatter is not None
     assert engine.json_formatter is not None
     assert engine.csv_formatter is not None
+
 
 def test_json_formatter():
     """Test that the JSONFormatter works correctly."""
@@ -81,13 +81,12 @@ def test_json_formatter():
     assert "sub" in json_str
     assert "data" in json_str
 
+
 def test_csv_formatter():
     """Test that the CSVFormatter works correctly."""
     formatter = CSVFormatter()
     test_data = {
-        "unused_objects": [
-            {"name": "test-object", "properties": {"ip-netmask": "192.168.1.1/24"}}
-        ]
+        "unused_objects": [{"name": "test-object", "properties": {"ip-netmask": "192.168.1.1/24"}}]
     }
     csv_str = formatter.format_unused_objects_report(test_data)
     assert csv_str is not None
@@ -95,22 +94,24 @@ def test_csv_formatter():
     assert "IP/Netmask" in csv_str
     assert "192.168.1.1/24" in csv_str
 
+
 def test_html_formatter(mocker):
     """Test that the HTMLFormatter works correctly."""
     # Mock the template loader to avoid needing actual template files
-    mock_template_loader = mocker.patch('panflow.core.template_loader.TemplateLoader')
+    mock_template_loader = mocker.patch("panflow.core.template_loader.TemplateLoader")
     mock_template_loader.return_value.render_template.return_value = "<html>Test HTML</html>"
-    mock_template_loader.return_value.render_security_policy_analysis.return_value = "<html>Test Policy Analysis</html>"
-    
+    mock_template_loader.return_value.render_security_policy_analysis.return_value = (
+        "<html>Test Policy Analysis</html>"
+    )
+
     formatter = HTMLFormatter()
     test_data = {
-        "unused_objects": [
-            {"name": "test-object", "properties": {"ip-netmask": "192.168.1.1/24"}}
-        ]
+        "unused_objects": [{"name": "test-object", "properties": {"ip-netmask": "192.168.1.1/24"}}]
     }
     html_str = formatter.format_unused_objects_report(test_data)
     assert html_str is not None
     assert "<html>Test HTML</html>" == html_str
+
 
 def test_backward_compatibility(xml_tree):
     """Test that the original reporting functions still work."""
@@ -121,9 +122,9 @@ def test_backward_compatibility(xml_tree):
         context_type="vsys",
         version="10.1.0",
         object_type="address",
-        vsys="vsys1"
+        vsys="vsys1",
     )
-    
+
     # The function should return a dictionary with an 'unused_objects' key
     assert isinstance(report_data, dict)
     assert "unused_objects" in report_data
