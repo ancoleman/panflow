@@ -60,6 +60,14 @@ class IntentParser:
                 r"(find|identify|discover|locate|show|list|display|get).*duplicates",
                 r"(find|identify|discover|locate|show|list|display|get).*duplicate.*object",
             ],
+            "bulk_update_policies": [
+                r"(update|change|modify|set|add).*?(?:tag|action|log|profile|security-profile).*?(?:policies|rules|policy|rule|security)",
+                r"(update|change|modify|set|add).*?(?:tag|action|log|profile|security-profile).*?to.*?(?:policies|rules|policy|rule|security)",
+                r"(enable|disable).*?(?:policies|rules|policy|rule|security)",
+                r"(update|change|modify|set|add).*?tag.*?(?:policies|rules|policy|rule|security)",
+                r"(update|change|modify|set|add).*?action.*?(?:policies|rules|policy|rule|security)",
+                r"(enable|disable).*?logging.*?(?:policies|rules|policy|rule|security)",
+            ],
             "help": [
                 r"help",
                 r"what can (you|this) do",
@@ -222,6 +230,23 @@ class IntentParser:
             "help": "help",
             "what can you do": "help",
             "how does this work": "help",
+            # Bulk Update Operations
+            "add tag to all policies": "bulk_update_policies",
+            "add tag to security policies": "bulk_update_policies",
+            "add tag to all security policies": "bulk_update_policies",
+            "update tag for all policies": "bulk_update_policies",
+            "set tag on all security policies": "bulk_update_policies",
+            "change action for security policies": "bulk_update_policies",
+            "set action to allow for all policies": "bulk_update_policies",
+            "set action to deny for all security rules": "bulk_update_policies",
+            "change action to allow": "bulk_update_policies",
+            "change action to deny": "bulk_update_policies",
+            "enable all security policies": "bulk_update_policies",
+            "disable all security policies": "bulk_update_policies",
+            "enable logging for all policies": "bulk_update_policies",
+            "disable logging for all policies": "bulk_update_policies",
+            "enable logging for security policies": "bulk_update_policies",
+            "disable logging for security policies": "bulk_update_policies",
         }
 
         return exact_matches.get(query)

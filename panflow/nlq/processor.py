@@ -1181,6 +1181,9 @@ class NLQProcessor:
                 combined_duplicates = {}
                 common_types = ["address", "service", "tag"]
 
+                # For deduplication, track which type each value belongs to
+                value_to_type_map = {}
+
                 # Check each common object type
                 for obj_type in common_types:
                     logger.info(f"Checking for duplicate {obj_type} objects...")
@@ -1196,11 +1199,21 @@ class NLQProcessor:
                     for key, value in type_duplicates.items():
                         combined_key = f"{obj_type}:{key}"
                         combined_duplicates[combined_key] = value
+                        # Store the mapping of combined key to object type for deduplication
+                        value_to_type_map[combined_key] = obj_type
 
                 # Use the combined results
                 duplicates = combined_duplicates
                 # Update object type for display
+                original_object_type = object_type
                 object_type = "all"
+
+                # If this is a deduplication request, we need to modify the to_remove processing
+                if is_deduplication and not dry_run:
+                    # Set a flag to indicate we're deduplicating all types
+                    deduplicating_all_types = True
+                else:
+                    deduplicating_all_types = False
             else:
                 # Regular single type handling
                 if object_type == "address":
@@ -1235,6 +1248,8 @@ class NLQProcessor:
 
                     # Process duplicates - keep first occurrence, mark others for removal
                     to_remove = []
+                    object_type_map = {}  # Used to track object type for "all" deduplication
+
                     for value, objects_list in duplicates.items():
                         # Skip if there's only one object
                         if len(objects_list) <= 1:
@@ -1248,28 +1263,108 @@ class NLQProcessor:
                                 obj_name = obj[0] if len(obj) > 0 else None
                                 if obj_name:
                                     to_remove.append(obj_name)
+                                    # If this is deduplicating all types, track the object type
+                                    if 'deduplicating_all_types' in locals() and deduplicating_all_types and 'value_to_type_map' in locals():
+                                        if value in value_to_type_map:
+                                            object_type_map[obj_name] = value_to_type_map[value]
+                                        # If the key itself contains object type info (e.g., "address:10.10.10.10")
+                                        elif ":" in value:
+                                            obj_type = value.split(":", 1)[0]
+                                            object_type_map[obj_name] = obj_type
                         else:
                             # Handle other formats (might have object_name attribute)
                             for obj in objects_list[1:]:
                                 if hasattr(obj, "object_name"):
                                     to_remove.append(obj.object_name)
+                                    # If this is deduplicating all types, track the object type
+                                    if 'deduplicating_all_types' in locals() and deduplicating_all_types and 'value_to_type_map' in locals():
+                                        if value in value_to_type_map:
+                                            object_type_map[obj.object_name] = value_to_type_map[value]
+                                        # If the key itself contains object type info (e.g., "address:10.10.10.10")
+                                        elif ":" in value:
+                                            obj_type = value.split(":", 1)[0]
+                                            object_type_map[obj.object_name] = obj_type
                                 elif isinstance(obj, str):
                                     to_remove.append(obj)
+                                    # If this is deduplicating all types, track the object type
+                                    if 'deduplicating_all_types' in locals() and deduplicating_all_types and 'value_to_type_map' in locals():
+                                        if value in value_to_type_map:
+                                            object_type_map[obj] = value_to_type_map[value]
+                                        # If the key itself contains object type info (e.g., "address:10.10.10.10")
+                                        elif ":" in value:
+                                            obj_type = value.split(":", 1)[0]
+                                            object_type_map[obj] = obj_type
 
                     # Remove the duplicate objects
                     cleaned_count = len(to_remove)
                     cleaned_objects = to_remove
 
                     if cleaned_count > 0:
-                        # Save the updated configuration
-                        import shutil
+                        # Actually remove the duplicated objects from the config
+                        import lxml.etree as ET
 
-                        shutil.copy(config_file, output_file)
+                        # Create a copy of the XML tree
+                        updated_tree = ET.ElementTree(ET.fromstring(ET.tostring(xml_config.tree.getroot())))
+
+                        # Track successful removals
+                        successful_removals = []
+
+                        # Process each object to remove
+                        for obj_name in to_remove:
+                            try:
+                                # Determine the object type for this object
+                                current_obj_type = object_type
+                                if 'deduplicating_all_types' in locals() and deduplicating_all_types and obj_name in object_type_map:
+                                    # Use the object type from the map for this specific object
+                                    current_obj_type = object_type_map[obj_name]
+                                    logger.debug(f"Using specific object type '{current_obj_type}' for object '{obj_name}'")
+
+                                # Find the object's context type
+                                if device_type == "panorama":
+                                    # Try to find in device groups first
+                                    if "device_group" in context_kwargs:
+                                        context = "device_group"
+                                        dg_name = context_kwargs["device_group"]
+                                        xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{dg_name}"]/{current_obj_type}/entry[@name="{obj_name}"]'
+                                    else:
+                                        # Default to shared
+                                        context = "shared"
+                                        xpath = f'/config/shared/{current_obj_type}/entry[@name="{obj_name}"]'
+                                else:
+                                    # For firewall configs
+                                    if "vsys" in context_kwargs:
+                                        vsys_name = context_kwargs["vsys"]
+                                        xpath = f'/config/devices/entry[@name="localhost.localdomain"]/vsys/entry[@name="{vsys_name}"]/{current_obj_type}/entry[@name="{obj_name}"]'
+                                    else:
+                                        # Default to vsys1
+                                        xpath = f'/config/devices/entry[@name="localhost.localdomain"]/vsys/entry[@name="vsys1"]/{current_obj_type}/entry[@name="{obj_name}"]'
+
+                                # Find the object element
+                                object_elem = updated_tree.xpath(xpath)
+                                if object_elem and len(object_elem) > 0:
+                                    # Get the parent element
+                                    parent = object_elem[0].getparent()
+                                    if parent is not None:
+                                        # Remove the object from its parent
+                                        parent.remove(object_elem[0])
+                                        successful_removals.append(obj_name)
+                                        logger.info(f"Removed duplicate object: {obj_name}")
+                                    else:
+                                        logger.warning(f"Could not find parent for object: {obj_name}")
+                                else:
+                                    logger.warning(f"Could not find object {obj_name} using xpath: {xpath}")
+                            except Exception as e:
+                                logger.error(f"Error removing duplicate object {obj_name}: {str(e)}")
+
+                        # Save the updated tree to the output file
+                        updated_tree.write(output_file, pretty_print=True, encoding="UTF-8", xml_declaration=True)
+
+                        # Update the count to reflect actually removed objects
+                        cleaned_count = len(successful_removals)
+                        cleaned_objects = successful_removals
+
                         logger.info(f"Deduplicated {cleaned_count} {object_type} objects")
-                        logger.info(
-                            f"For now, we're just simulating deduplication. The actual object removal functionality will be implemented soon."
-                        )
-                        logger.info(f"Output saved to {output_file}")
+                        logger.info(f"Updated configuration saved to {output_file}")
                     else:
                         logger.info(f"No objects to deduplicate")
 
@@ -1311,7 +1406,579 @@ class NLQProcessor:
                 }
 
         else:
-            raise ValueError(f"Unknown command: {command_name}")
+            # For bulk update operations
+            if command_name == "bulk_update_policies":
+                from panflow import PANFlowConfig
+                from panflow.core.bulk_operations import ConfigUpdater, ConfigQuery
+                import json
+                import os
+                from lxml import etree
+
+                # Extract parameters
+                config_file = command_args.get("config")
+                output_file = command_args.get("output")
+                policy_type = command_args.get("policy_type")
+                operation = command_args.get("operation")
+                value = command_args.get("value")
+                criteria = command_args.get("criteria", None)  # Optional criteria for filtering
+                dry_run = command_args.get("dry_run", False)
+
+                # Make sure we have required parameters
+                if not all([config_file, output_file, policy_type, operation, value]):
+                    missing = []
+                    if not config_file:
+                        missing.append("config_file")
+                    if not output_file:
+                        missing.append("output_file")
+                    if not policy_type:
+                        missing.append("policy_type")
+                    if not operation:
+                        missing.append("operation")
+                    if not value:
+                        missing.append("value")
+                    raise ValueError(f"Missing required parameters for bulk update: {', '.join(missing)}")
+
+                # Initialize the configuration
+                xml_config = PANFlowConfig(config_file=config_file)
+
+                # Determine the device type
+                device_type = xml_config.device_type.lower()
+
+                # Default context type based on device type
+                if device_type == "panorama":
+                    # Panorama uses "device_group" as context type
+                    context_type = command_args.get("context", "device_group")
+                    if "device_group" not in command_args:
+                        # Use the first device group or "shared" as default
+                        device_groups = xml_config.tree.xpath(
+                            '/config/devices/entry[@name="localhost.localdomain"]/device-group/entry/@name'
+                        )
+                        default_dg = device_groups[0] if device_groups else "shared"
+                        command_args["device_group"] = default_dg
+                else:
+                    context_type = command_args.get("context", "vsys")
+                    if "vsys" not in command_args:
+                        command_args["vsys"] = "vsys1"  # Default vsys
+
+                # Get context kwargs
+                context_kwargs = {}
+                if "device_group" in command_args:
+                    context_kwargs["device_group"] = command_args["device_group"]
+                if "vsys" in command_args:
+                    context_kwargs["vsys"] = command_args["vsys"]
+                if "template" in command_args:
+                    context_kwargs["template"] = command_args["template"]
+
+                # Create a temporary report file to capture the results
+                import tempfile
+                temp_report_file = os.path.join(
+                    tempfile.gettempdir(), f"panflow_bulkupdate_report_{os.getpid()}.json"
+                )
+
+                # Set up operation parameters for bulk update
+                operation_args = {
+                    "config_file": config_file,
+                    "device_type": device_type,
+                    "context_type": context_type,
+                    "policy_type": policy_type,
+                    "output_file": output_file,
+                    "report_file": temp_report_file,
+                    "dry_run": dry_run,
+                    "operation": operation,
+                    "value": value,
+                }
+
+                # Add context specific parameters
+                operation_args.update(context_kwargs)
+
+                # Add criteria if specified
+                if criteria:
+                    operation_args["criteria"] = criteria
+
+                # Adjust policy type based on device type if necessary
+                if device_type == "panorama" and policy_type == "security_rules":
+                    policy_type = "security_pre_rules"
+                    logger.info(f"Adjusted policy_type from security_rules to security_pre_rules for Panorama device")
+                elif device_type == "panorama" and policy_type == "nat_rules":
+                    policy_type = "nat_pre_rules"
+                    logger.info(f"Adjusted policy_type from nat_rules to nat_pre_rules for Panorama device")
+
+                # Log the operation
+                logger.info(f"Performing bulk update: {operation}={value} on {policy_type} policies")
+
+                try:
+                    # Initialize the configuration
+                    xml_config = PANFlowConfig(config_file=config_file)
+                    tree = xml_config.tree
+
+                    # Create a ConfigUpdater and ConfigQuery
+                    updater = ConfigUpdater(tree, device_type, context_type, xml_config.version, **context_kwargs)
+                    query = ConfigQuery(tree, device_type, context_type, xml_config.version, **context_kwargs)
+
+                    # Get policies to update
+                    if policy_type == "all":
+                        # For "all" policy types, we need to update each type separately
+                        if device_type == "panorama":
+                            policy_types_to_update = ["security_pre_rules", "security_post_rules", "nat_pre_rules", "nat_post_rules"]
+                            logger.info("Using all panorama policy types for 'all' policy update")
+                        else:
+                            policy_types_to_update = ["security_rules", "nat_rules"]
+                            logger.info("Using all firewall policy types for 'all' policy update")
+                    else:
+                        # Still need to handle individual policy types for Panorama properly
+                        if device_type == "panorama" and policy_type == "security_rules":
+                            policy_types_to_update = ["security_pre_rules"]
+                            logger.info("Using security_pre_rules for 'security_rules' on Panorama")
+                        elif device_type == "panorama" and policy_type == "nat_rules":
+                            policy_types_to_update = ["nat_pre_rules"]
+                            logger.info("Using nat_pre_rules for 'nat_rules' on Panorama")
+                        else:
+                            policy_types_to_update = [policy_type]
+
+                    # Track all updated policies
+                    all_updated_policies = []
+
+                    # Process each policy type
+                    for current_policy_type in policy_types_to_update:
+                        logger.info(f"Applying operation {operation}={value} to {current_policy_type}")
+
+                        # Get all policies of this type
+                        try:
+                            # Use queries for policy selection
+                            # First try to get policies directly from the config
+                            from panflow.modules.policies import get_policies
+
+                            policies_dict = get_policies(
+                                tree,
+                                current_policy_type,
+                                device_type,
+                                context_type,
+                                xml_config.version,
+                                **context_kwargs
+                            )
+
+                            policy_names = list(policies_dict.keys())
+
+                            if not policy_names:
+                                logger.warning(f"No {current_policy_type} found in configuration using get_policies")
+                                # Fall back to query system
+                                policy_list = query.select_policies(current_policy_type)
+                                logger.debug(f"Policy list from query: {policy_list}")
+
+                                if not policy_list:
+                                    logger.info(f"No {current_policy_type} found to update")
+                                    continue
+
+                                # Get just the policy names
+                                policy_names = []
+                                for policy in policy_list:
+                                    if isinstance(policy, dict) and "name" in policy:
+                                        policy_names.append(policy["name"])
+                                    elif hasattr(policy, "get") and policy.get("name"):
+                                        policy_names.append(policy.get("name"))
+                                    elif hasattr(policy, "name"):
+                                        policy_names.append(policy.name)
+                                    elif hasattr(policy, "get") and callable(policy.get):
+                                        name = policy.get("name")
+                                        if name:
+                                            policy_names.append(name)
+
+                            logger.info(f"Found {len(policy_names)} policies of type {current_policy_type}: {policy_names}")
+
+                            if not policy_names:
+                                logger.info(f"No {current_policy_type} found with names")
+                                continue
+                        except Exception as e:
+                            logger.error(f"Error retrieving policies of type {current_policy_type}: {str(e)}")
+                            continue
+
+                        if not policy_names:
+                            logger.info(f"No {current_policy_type} found to update")
+                            continue
+
+                        # Apply the operation to all policies
+                        if operation == "add_tag":
+                            # Find the policies and add tags directly
+                            updated = []
+                            for policy_name in policy_names:
+                                try:
+                                    # Create xpath to the specific policy
+                                    if current_policy_type in ["security_pre_rules", "security_post_rules"] and device_type.lower() == "panorama":
+                                        # For Panorama security policies
+                                        rulebase = "pre-rulebase" if current_policy_type == "security_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                    elif current_policy_type in ["nat_pre_rules", "nat_post_rules"] and device_type.lower() == "panorama":
+                                        # For Panorama NAT policies
+                                        rulebase = "pre-rulebase" if current_policy_type == "nat_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                    else:
+                                        # For other security policies, use the actual xpath resolver
+                                        from panflow.core.xpath_resolver import get_policy_xpath
+                                        xpath = get_policy_xpath(
+                                            current_policy_type,
+                                            device_type,
+                                            context_type,
+                                            xml_config.version,
+                                            name=policy_name,
+                                            **context_kwargs
+                                        )
+
+                                    # Find the policy element
+                                    policy_elem = tree.xpath(xpath)
+                                    if policy_elem and len(policy_elem) > 0:
+                                        policy = policy_elem[0]
+
+                                        # Find or create tag element
+                                        tag_elem = policy.find('./tag')
+                                        if tag_elem is None:
+                                            tag_elem = etree.SubElement(policy, 'tag')
+
+                                        # Check if tag already exists
+                                        member_exists = False
+                                        for member in tag_elem.findall('./member'):
+                                            if member.text == value:
+                                                member_exists = True
+                                                break
+
+                                        # Add the tag if it doesn't exist
+                                        if not member_exists:
+                                            member = etree.SubElement(tag_elem, 'member')
+                                            member.text = value
+                                            updated.append(policy_name)
+                                            logger.info(f"Added tag '{value}' to policy '{policy_name}'")
+                                    else:
+                                        logger.warning(f"Policy '{policy_name}' not found at xpath: {xpath}")
+                                except Exception as e:
+                                    logger.error(f"Error adding tag to policy '{policy_name}': {str(e)}")
+                        elif operation == "set_action":
+                            updated = []
+                            for policy_name in policy_names:
+                                try:
+                                    # Similar approach as add_tag but for action
+                                    if current_policy_type in ["security_pre_rules", "security_post_rules"] and device_type.lower() == "panorama":
+                                        rulebase = "pre-rulebase" if current_policy_type == "security_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                    elif current_policy_type in ["nat_pre_rules", "nat_post_rules"] and device_type.lower() == "panorama":
+                                        # For Panorama NAT policies
+                                        rulebase = "pre-rulebase" if current_policy_type == "nat_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                    else:
+                                        from panflow.core.xpath_resolver import get_policy_xpath
+                                        xpath = get_policy_xpath(
+                                            current_policy_type,
+                                            device_type,
+                                            context_type,
+                                            xml_config.version,
+                                            name=policy_name,
+                                            **context_kwargs
+                                        )
+
+                                    policy_elem = tree.xpath(xpath)
+                                    if policy_elem and len(policy_elem) > 0:
+                                        policy = policy_elem[0]
+
+                                        # Find or create action element
+                                        action_elem = policy.find('./action')
+                                        if action_elem is None:
+                                            action_elem = etree.SubElement(policy, 'action')
+
+                                        # Update the action
+                                        old_value = action_elem.text
+                                        action_elem.text = value
+                                        updated.append(policy_name)
+                                        logger.info(f"Changed action from '{old_value}' to '{value}' for policy '{policy_name}'")
+                                    else:
+                                        logger.warning(f"Policy '{policy_name}' not found at xpath: {xpath}")
+                                except Exception as e:
+                                    logger.error(f"Error setting action for policy '{policy_name}': {str(e)}")
+                        elif operation == "enable":
+                            updated = []
+                            for policy_name in policy_names:
+                                try:
+                                    # Similar approach for enabling policies
+                                    if current_policy_type in ["security_pre_rules", "security_post_rules"] and device_type.lower() == "panorama":
+                                        rulebase = "pre-rulebase" if current_policy_type == "security_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                    elif current_policy_type in ["nat_pre_rules", "nat_post_rules"] and device_type.lower() == "panorama":
+                                        # For Panorama NAT policies
+                                        rulebase = "pre-rulebase" if current_policy_type == "nat_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                    else:
+                                        from panflow.core.xpath_resolver import get_policy_xpath
+                                        xpath = get_policy_xpath(
+                                            current_policy_type,
+                                            device_type,
+                                            context_type,
+                                            xml_config.version,
+                                            name=policy_name,
+                                            **context_kwargs
+                                        )
+
+                                    policy_elem = tree.xpath(xpath)
+                                    if policy_elem and len(policy_elem) > 0:
+                                        policy = policy_elem[0]
+
+                                        # Remove the disabled element if it exists
+                                        disabled_elem = policy.find('./disabled')
+                                        if disabled_elem is not None:
+                                            policy.remove(disabled_elem)
+                                            updated.append(policy_name)
+                                            logger.info(f"Enabled policy '{policy_name}'")
+                                    else:
+                                        logger.warning(f"Policy '{policy_name}' not found at xpath: {xpath}")
+                                except Exception as e:
+                                    logger.error(f"Error enabling policy '{policy_name}': {str(e)}")
+                        elif operation == "disable":
+                            updated = []
+                            for policy_name in policy_names:
+                                try:
+                                    # Similar approach for disabling policies
+                                    if current_policy_type in ["security_pre_rules", "security_post_rules"] and device_type.lower() == "panorama":
+                                        rulebase = "pre-rulebase" if current_policy_type == "security_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                    elif current_policy_type in ["nat_pre_rules", "nat_post_rules"] and device_type.lower() == "panorama":
+                                        # For Panorama NAT policies
+                                        rulebase = "pre-rulebase" if current_policy_type == "nat_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                    else:
+                                        from panflow.core.xpath_resolver import get_policy_xpath
+                                        xpath = get_policy_xpath(
+                                            current_policy_type,
+                                            device_type,
+                                            context_type,
+                                            xml_config.version,
+                                            name=policy_name,
+                                            **context_kwargs
+                                        )
+
+                                    policy_elem = tree.xpath(xpath)
+                                    if policy_elem and len(policy_elem) > 0:
+                                        policy = policy_elem[0]
+
+                                        # Find or create disabled element
+                                        disabled_elem = policy.find('./disabled')
+                                        if disabled_elem is None:
+                                            disabled_elem = etree.SubElement(policy, 'disabled')
+                                            disabled_elem.text = "yes"
+                                            updated.append(policy_name)
+                                            logger.info(f"Disabled policy '{policy_name}'")
+                                    else:
+                                        logger.warning(f"Policy '{policy_name}' not found at xpath: {xpath}")
+                                except Exception as e:
+                                    logger.error(f"Error disabling policy '{policy_name}': {str(e)}")
+                        elif operation == "enable_logging":
+                            # Handle enable_logging operation directly
+                            updated = []
+                            for policy_name in policy_names:
+                                try:
+                                    # Similar approach for enabling logging
+                                    if current_policy_type in ["security_pre_rules", "security_post_rules"] and device_type.lower() == "panorama":
+                                        rulebase = "pre-rulebase" if current_policy_type == "security_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                    elif current_policy_type in ["nat_pre_rules", "nat_post_rules"] and device_type.lower() == "panorama":
+                                        # For Panorama NAT policies
+                                        rulebase = "pre-rulebase" if current_policy_type == "nat_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                    else:
+                                        from panflow.core.xpath_resolver import get_policy_xpath
+                                        xpath = get_policy_xpath(
+                                            current_policy_type,
+                                            device_type,
+                                            context_type,
+                                            xml_config.version,
+                                            name=policy_name,
+                                            **context_kwargs
+                                        )
+
+                                    policy_elem = tree.xpath(xpath)
+                                    if policy_elem and len(policy_elem) > 0:
+                                        policy = policy_elem[0]
+
+                                        # Create or update log-start and log-end
+                                        for log_type in ['log-start', 'log-end']:
+                                            log_elem = policy.find(f'./{log_type}')
+                                            if log_elem is None:
+                                                log_elem = etree.SubElement(policy, log_type)
+                                                log_elem.text = "yes"
+                                                updated.append(policy_name)
+                                                logger.info(f"Enabled {log_type} for policy '{policy_name}'")
+                                    else:
+                                        logger.warning(f"Policy '{policy_name}' not found at xpath: {xpath}")
+                                except Exception as e:
+                                    logger.error(f"Error enabling logging for policy '{policy_name}': {str(e)}")
+                        elif operation == "disable_logging":
+                            # Handle disable_logging operation directly
+                            updated = []
+                            for policy_name in policy_names:
+                                try:
+                                    # Similar approach for disabling logging
+                                    if current_policy_type in ["security_pre_rules", "security_post_rules"] and device_type.lower() == "panorama":
+                                        rulebase = "pre-rulebase" if current_policy_type == "security_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/security/rules/entry[@name="{policy_name}"]'
+                                    elif current_policy_type in ["nat_pre_rules", "nat_post_rules"] and device_type.lower() == "panorama":
+                                        # For Panorama NAT policies
+                                        rulebase = "pre-rulebase" if current_policy_type == "nat_pre_rules" else "post-rulebase"
+                                        device_group = context_kwargs.get("device_group", "shared")
+
+                                        if device_group == "shared":
+                                            xpath = f'/config/shared/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                        else:
+                                            xpath = f'/config/devices/entry[@name="localhost.localdomain"]/device-group/entry[@name="{device_group}"]/{rulebase}/nat/rules/entry[@name="{policy_name}"]'
+                                    else:
+                                        from panflow.core.xpath_resolver import get_policy_xpath
+                                        xpath = get_policy_xpath(
+                                            current_policy_type,
+                                            device_type,
+                                            context_type,
+                                            xml_config.version,
+                                            name=policy_name,
+                                            **context_kwargs
+                                        )
+
+                                    policy_elem = tree.xpath(xpath)
+                                    if policy_elem and len(policy_elem) > 0:
+                                        policy = policy_elem[0]
+
+                                        # Find and remove or set log-start and log-end
+                                        for log_type in ['log-start', 'log-end']:
+                                            log_elem = policy.find(f'./{log_type}')
+                                            if log_elem is not None:
+                                                log_elem.text = "no"
+                                                updated.append(policy_name)
+                                                logger.info(f"Disabled {log_type} for policy '{policy_name}'")
+                                    else:
+                                        logger.warning(f"Policy '{policy_name}' not found at xpath: {xpath}")
+                                except Exception as e:
+                                    logger.error(f"Error disabling logging for policy '{policy_name}': {str(e)}")
+                        else:
+                            logger.warning(f"Unknown operation: {operation}")
+                            continue
+
+                        # Remove duplicates from the updated list
+                        if isinstance(updated, list):
+                            updated = list(set(updated))
+
+                        # Add policy type information for "all" policy types
+                        if policy_type == "all":
+                            updated_with_type = []
+                            for policy_name in updated:
+                                updated_with_type.append({"name": policy_name, "policy_type": current_policy_type})
+                            all_updated_policies.extend(updated_with_type)
+                        else:
+                            all_updated_policies.extend([{"name": name} for name in updated])
+
+                    # Save the updated configuration if not in dry run mode
+                    if not dry_run:
+                        # Save the tree to the output file
+                        tree.write(output_file, pretty_print=True, encoding="UTF-8", xml_declaration=True)
+                        logger.info(f"Updated configuration saved to {output_file}")
+
+                    # Create a summary
+                    updated_policies = all_updated_policies
+                    updated_count = len(updated_policies)
+
+                    # Get operation description
+                    operation_desc = {
+                        "enable": "Enabled",
+                        "disable": "Disabled",
+                        "add_tag": "Added tag",
+                        "set_action": "Updated action to",
+                        "enable_logging": "Enabled logging for",
+                        "disable_logging": "Disabled logging for",
+                    }.get(operation, operation)
+
+                    # Format policies for better display
+                    formatted_policies = []
+                    for policy in updated_policies:
+                        if isinstance(policy, dict):
+                            policy_name = policy.get("name", "unnamed")
+                            policy_type_str = policy.get("policy_type", policy_type)
+                            formatted_policies.append(f"{policy_name} ({policy_type_str})")
+                        else:
+                            formatted_policies.append(str(policy))
+
+                    message = f"{operation_desc} {updated_count} {policy_type} policies"
+                    if updated_count > 0:
+                        # Add details about what was updated if available
+                        if operation == "add_tag":
+                            message += f" with tag '{value}'"
+                        elif operation == "set_action":
+                            message += f" to '{value}'"
+
+                    if dry_run:
+                        message = f"Would {operation_desc.lower()} {updated_count} {policy_type} policies (dry run)"
+
+                    return {
+                        "message": message,
+                        "count": updated_count,
+                        "operation": operation,
+                        "value": value,
+                        "policy_type": policy_type,
+                        "updated_policies": updated_policies,
+                        "formatted_policies": formatted_policies,  # Add formatted policies for better display
+                        "output_file": output_file,
+                    }
+
+                except Exception as e:
+                    logger.error(f"Error in bulk update operation: {str(e)}")
+                    raise ValueError(f"Error in bulk update operation: {str(e)}")
+            else:
+                raise ValueError(f"Unknown command: {command_name}")
 
     def get_suggestions(self, query: str) -> List[str]:
         """

@@ -32,6 +32,7 @@ class CommandMapper:
             "list_objects": "list_objects",
             "list_policies": "list_policies",
             "find_duplicates": "find_duplicates",
+            "bulk_update_policies": "bulk_update_policies",
             "help": "help",
         }
 
@@ -57,6 +58,7 @@ class CommandMapper:
             "list_objects": ["config"],  # Only config required for listing objects
             "list_policies": ["config"],  # Only config required for listing policies
             "find_duplicates": ["config"],  # Only config required for listing
+            "bulk_update_policies": ["config", "output", "operation", "value"],  # Need config, output, operation, and value for bulk updates
             "help": [],
         }
 
@@ -125,6 +127,16 @@ class CommandMapper:
                 "device_group",
                 "vsys",
                 "template",
+            ],
+            "bulk_update_policies": [
+                "policy_type",
+                "device_type",
+                "context",
+                "device_group",
+                "vsys",
+                "template",
+                "criteria",
+                "dry_run",
             ],
             "help": [],
         }
@@ -328,5 +340,133 @@ class CommandMapper:
                     command_args["object_type"] = "all"
                 else:
                     command_args["object_type"] = "address"  # Default
+
+        elif command == "bulk_update_policies":
+            # Extract operation type and value from the query
+            query = entities.get("original_query", "").lower()
+
+            # Make sure we have a valid output file for bulk operations
+            if "output" not in command_args or command_args["output"] is None:
+                if output_file is not None:
+                    command_args["output"] = output_file
+                else:
+                    # If we're doing a bulk update but no output file is provided, convert to a list operation
+                    logger.info("No output file provided for bulk update operation, converting to list-only operation")
+                    command_args["command"] = "list_policies"
+                    if "policy_type" not in command_args:
+                        # Initialize config to check device type if needed
+                        from panflow import PANFlowConfig
+
+                        if "device_type" not in entities:
+                            xml_config = PANFlowConfig(config_file=config_file)
+                            device_type = xml_config.device_type.lower()
+                        else:
+                            device_type = entities["device_type"].lower()
+
+                        # Set appropriate default policy type based on device type
+                        if device_type == "panorama":
+                            command_args["policy_type"] = "security_pre_rules"
+                        else:
+                            command_args["policy_type"] = "security_rules"
+                    return command_args
+
+            # Check if the entity extractor already determined the operation
+            if "operation" in entities and entities["operation"] in ["enable_logging", "disable_logging", "add_tag", "set_action", "enable", "disable"]:
+                logger.info(f"Using operation from entity extractor: {entities['operation']}")
+                command_args["operation"] = entities["operation"]
+                if "value" in entities:
+                    command_args["value"] = entities["value"]
+                else:
+                    command_args["value"] = "yes"  # Default value
+            else:
+                # Determine operation type from query if not already set by entity extractor
+                if ("log" in query or "logging" in query) and any(word in query for word in ["enable", "set", "add", "turn on", "activate"]):
+                    command_args["operation"] = "enable_logging"
+                    command_args["value"] = "yes"
+                    logger.info("Detected enable_logging operation from query")
+                elif ("log" in query or "logging" in query) and any(word in query for word in ["disable", "remove", "turn off", "deactivate"]):
+                    command_args["operation"] = "disable_logging"
+                    command_args["value"] = "yes"
+                    logger.info("Detected disable_logging operation from query")
+                elif ("tag" in query) and any(word in query for word in ["add", "set", "apply"]):
+                    command_args["operation"] = "add_tag"
+                    # Extract tag value from entities or from the query
+                    if "tag_value" in entities:
+                        command_args["value"] = entities["tag_value"]
+                    else:
+                        # Try to extract from query using regex
+                        import re
+                        tag_match = re.search(r"tag\s+['\"]?([^'\"]+)['\"]?", query)
+                        if tag_match:
+                            command_args["value"] = tag_match.group(1)
+                        else:
+                            # Default tag value
+                            command_args["value"] = "updated-by-nlq"
+                elif "action" in query and any(word in query for word in ["set", "change", "update"]):
+                    command_args["operation"] = "set_action"
+                    # Extract action value
+                    if "action_value" in entities:
+                        command_args["value"] = entities["action_value"]
+                    else:
+                        # Try to determine action from query
+                        if "allow" in query or "accept" in query:
+                            command_args["value"] = "allow"
+                        elif "deny" in query or "drop" in query or "block" in query:
+                            command_args["value"] = "deny"
+                        else:
+                            # Default
+                            command_args["value"] = "allow"
+                elif (("enable" in query or "enabling" in query) and
+                    not ("disable" in query or "disabling" in query)):
+                    command_args["operation"] = "enable"
+                    command_args["value"] = "yes"
+                elif "disable" in query or "disabling" in query:
+                    command_args["operation"] = "disable"
+                    command_args["value"] = "yes"
+                else:
+                    # Default to enable/disable operation
+                    if "disable" in query:
+                        command_args["operation"] = "disable"
+                        command_args["value"] = "yes"
+                    else:
+                        command_args["operation"] = "enable"
+                        command_args["value"] = "yes"
+
+            logger.info(f"Final operation determined: {command_args.get('operation')}, value: {command_args.get('value')}")
+
+            # Set policy type if not already set
+            if "policy_type" not in command_args:
+                from panflow import PANFlowConfig
+
+                # Determine device type
+                if "device_type" not in entities:
+                    xml_config = PANFlowConfig(config_file=config_file)
+                    device_type = xml_config.device_type.lower()
+                else:
+                    device_type = entities["device_type"].lower()
+
+                # Extract policy type from query
+                if "security" in query and "pre" in query:
+                    command_args["policy_type"] = "security_pre_rules" if device_type == "panorama" else "security_rules"
+                elif "security" in query and "post" in query:
+                    command_args["policy_type"] = "security_post_rules" if device_type == "panorama" else "security_rules"
+                elif "nat" in query and "pre" in query:
+                    command_args["policy_type"] = "nat_pre_rules" if device_type == "panorama" else "nat_rules"
+                elif "nat" in query and "post" in query:
+                    command_args["policy_type"] = "nat_post_rules" if device_type == "panorama" else "nat_rules"
+                elif "nat" in query:
+                    command_args["policy_type"] = "nat_pre_rules" if device_type == "panorama" else "nat_rules"
+                elif "all" in query:
+                    command_args["policy_type"] = "all"
+                elif "security" in query and device_type == "panorama":
+                    # Default to pre rules for security policies on Panorama
+                    command_args["policy_type"] = "security_pre_rules"
+                else:
+                    # Default to security rules
+                    command_args["policy_type"] = "security_pre_rules" if device_type == "panorama" else "security_rules"
+
+            # Default to dry_run if not specified
+            if "dry_run" not in command_args:
+                command_args["dry_run"] = False
 
         return command_args

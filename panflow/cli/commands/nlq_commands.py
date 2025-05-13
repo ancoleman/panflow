@@ -170,6 +170,62 @@ def process_query(
                                 ["Configuration saved to:", result_data["output_file"]]
                             )
 
+                # For bulk update policy operations
+                elif "updated_policies" in result_data and isinstance(
+                    result_data["updated_policies"], list
+                ):
+                    if result_data["updated_policies"]:
+                        # Get operation details
+                        operation = result_data.get("operation", "updated")
+                        value = result_data.get("value", "")
+                        dry_run = result_data.get("dry_run", False)
+
+                        # Format header based on operation type
+                        operation_desc = {
+                            "enable": "Enabled",
+                            "disable": "Disabled",
+                            "add_tag": f"Added Tag '{value}' to",
+                            "set_action": f"Set Action '{value}' for",
+                            "enable_logging": "Enabled Logging for",
+                            "disable_logging": "Disabled Logging for",
+                        }.get(operation, "Updated")
+
+                        if dry_run:
+                            header = f"Would {operation_desc} Policies (Dry Run) ({len(result_data['updated_policies'])})"
+                        else:
+                            header = f"{operation_desc} Policies ({len(result_data['updated_policies'])})"
+
+                        csv_writer.writerow([])  # Empty row as separator
+                        csv_writer.writerow([header])
+
+                        # Add policy type if it might be present
+                        if result_data.get("policy_type") == "all":
+                            csv_writer.writerow(["Name", "Policy Type"])
+
+                            for policy in result_data["updated_policies"]:
+                                if isinstance(policy, dict) and "name" in policy:
+                                    policy_name = policy["name"]
+                                    policy_type = policy.get("policy_type", "")
+                                    csv_writer.writerow([policy_name, policy_type])
+                                else:
+                                    csv_writer.writerow([str(policy), ""])
+                        else:
+                            csv_writer.writerow(["Name"])
+                            policy_type = result_data.get("policy_type", "")
+
+                            for policy in result_data["updated_policies"]:
+                                if isinstance(policy, dict) and "name" in policy:
+                                    policy_name = policy["name"]
+                                    csv_writer.writerow([policy_name])
+                                else:
+                                    csv_writer.writerow([str(policy)])
+
+                        if "output_file" in result_data:
+                            csv_writer.writerow([])
+                            csv_writer.writerow(
+                                ["Configuration saved to:", result_data["output_file"]]
+                            )
+
             typer.echo(output_stream.getvalue())
 
         elif format.lower() == "yaml":
@@ -360,6 +416,63 @@ def process_query(
 
                         html += "</div>"
 
+                # For bulk update policy operations
+                elif "updated_policies" in result_data and isinstance(
+                    result_data["updated_policies"], list
+                ):
+                    if result_data["updated_policies"]:
+                        # Get operation details
+                        operation = result_data.get("operation", "updated")
+                        value = result_data.get("value", "")
+                        dry_run = result_data.get("dry_run", False)
+
+                        # Format title based on operation type
+                        operation_desc = {
+                            "enable": "Enabled",
+                            "disable": "Disabled",
+                            "add_tag": f"Added Tag '{value}' to",
+                            "set_action": f"Set Action '{value}' for",
+                            "enable_logging": "Enabled Logging for",
+                            "disable_logging": "Disabled Logging for",
+                        }.get(operation, "Updated")
+
+                        if dry_run:
+                            title = f"Would {operation_desc} {len(result_data['updated_policies'])} Policies (Dry Run)"
+                        else:
+                            title = f"{operation_desc} {len(result_data['updated_policies'])} Policies"
+
+                        html += f'<div class="section">'
+                        html += f"<h2>{title}</h2>"
+
+                        if "policy_type" in result_data and result_data.get("policy_type") != "all":
+                            html += f"<p>Policy Type: <strong>{result_data['policy_type']}</strong></p>"
+
+                        html += "<table><tr><th>Name</th>"
+                        # Add policy type column if it might be present
+                        if result_data.get("policy_type") == "all":
+                            html += "<th>Policy Type</th>"
+                        html += "</tr>"
+
+                        for policy in result_data["updated_policies"]:
+                            if isinstance(policy, dict) and "name" in policy:
+                                policy_name = policy["name"]
+                                if "policy_type" in policy and result_data.get("policy_type") == "all":
+                                    html += f"<tr><td>{policy_name}</td><td>{policy['policy_type']}</td></tr>"
+                                else:
+                                    html += f"<tr><td>{policy_name}</td></tr>"
+                            else:
+                                if result_data.get("policy_type") == "all":
+                                    html += f"<tr><td>{policy}</td><td></td></tr>"
+                                else:
+                                    html += f"<tr><td>{policy}</td></tr>"
+
+                        html += "</table>"
+
+                        if "output_file" in result_data:
+                            html += f"<p>Configuration saved to: <strong>{result_data['output_file']}</strong></p>"
+
+                        html += "</div>"
+
             html += "</body></html>"
             typer.echo(html)
 
@@ -510,6 +623,60 @@ def process_query(
                             removed_table.add_row(policy)
 
                         console.print(removed_table)
+
+                        if "output_file" in result_data:
+                            console.print(
+                                f"[blue]Configuration saved to:[/blue] {result_data['output_file']}"
+                            )
+
+                # For bulk update policy operations
+                elif "updated_policies" in result_data and isinstance(
+                    result_data["updated_policies"], list
+                ):
+                    if result_data["updated_policies"]:
+                        # Create an appropriate title based on the operation
+                        operation = result_data.get("operation", "updated")
+                        value = result_data.get("value", "")
+                        dry_run = result_data.get("dry_run", False)
+
+                        # Format title based on operation type
+                        operation_desc = {
+                            "enable": "Enabled",
+                            "disable": "Disabled",
+                            "add_tag": f"Added Tag '{value}' to",
+                            "set_action": f"Set Action '{value}' for",
+                            "enable_logging": "Enabled Logging for",
+                            "disable_logging": "Disabled Logging for",
+                        }.get(operation, "Updated")
+
+                        if dry_run:
+                            title = f"Would {operation_desc} {len(result_data['updated_policies'])} Policies (Dry Run)"
+                        else:
+                            title = f"{operation_desc} {len(result_data['updated_policies'])} Policies"
+
+                        updated_table = Table(title=title)
+                        updated_table.add_column("Name", style="green")
+
+                        if "policy_type" in result_data:
+                            updated_table.add_column("Policy Type", style="cyan")
+
+                            for policy in result_data["updated_policies"]:
+                                # Check if policy is a dict with type information
+                                if isinstance(policy, dict) and "policy_type" in policy:
+                                    updated_table.add_row(policy["name"], policy["policy_type"])
+                                else:
+                                    # Assume it's a string or doesn't have policy_type
+                                    policy_name = policy if isinstance(policy, str) else policy.get("name", str(policy))
+                                    updated_table.add_row(policy_name, result_data.get("policy_type", ""))
+                        else:
+                            for policy in result_data["updated_policies"]:
+                                # Handle both string policy names and policy dictionaries
+                                if isinstance(policy, dict):
+                                    updated_table.add_row(policy.get("name", str(policy)))
+                                else:
+                                    updated_table.add_row(str(policy))
+
+                        console.print(updated_table)
 
                         if "output_file" in result_data:
                             console.print(
@@ -948,6 +1115,11 @@ def show_help():
         "show me all the unused objects in vsys1",
         "show me all duplicate service objects in the shared context",
         "remove all disabled security rules in device group DG1",
+        "add tag 'reviewed' to all security policies",
+        "disable all nat policies",
+        "enable all policies that have deny action",
+        "set action to allow for all security rules in device group DG1",
+        "enable logging for all security policies",
     ]
 
     for example in examples:
@@ -1167,6 +1339,49 @@ def interactive_mode(
                                         typer.echo(f"  - {policy}")
                                 else:
                                     typer.echo("\nNo policies were removed.")
+
+                                # Show output file if available
+                                if "output_file" in result_data:
+                                    typer.echo(
+                                        f"\nConfiguration saved to: {result_data['output_file']}"
+                                    )
+
+                            # For bulk update policy operations
+                            elif "updated_policies" in result_data and isinstance(
+                                result_data["updated_policies"], list
+                            ):
+                                if result_data["updated_policies"]:
+                                    # Get operation details
+                                    operation = result_data.get("operation", "updated")
+                                    value = result_data.get("value", "")
+                                    dry_run = result_data.get("dry_run", False)
+
+                                    # Format title based on operation type
+                                    operation_desc = {
+                                        "enable": "Enabled",
+                                        "disable": "Disabled",
+                                        "add_tag": f"Added tag '{value}' to",
+                                        "set_action": f"Set action '{value}' for",
+                                        "enable_logging": "Enabled logging for",
+                                        "disable_logging": "Disabled logging for",
+                                    }.get(operation, "Updated")
+
+                                    if dry_run:
+                                        typer.echo(f"\nWould {operation_desc.lower()} {result_data.get('count', len(result_data['updated_policies']))} policies (dry run):")
+                                    else:
+                                        typer.echo(f"\n{operation_desc} {result_data.get('count', len(result_data['updated_policies']))} policies:")
+
+                                    for policy in result_data["updated_policies"]:
+                                        if isinstance(policy, dict) and "name" in policy:
+                                            policy_name = policy["name"]
+                                            if "policy_type" in policy:
+                                                typer.echo(f"  - {policy_name} ({policy['policy_type']})")
+                                            else:
+                                                typer.echo(f"  - {policy_name}")
+                                        else:
+                                            typer.echo(f"  - {policy}")
+                                else:
+                                    typer.echo("\nNo policies were updated.")
 
                                 # Show output file if available
                                 if "output_file" in result_data:

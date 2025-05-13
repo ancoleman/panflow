@@ -10,13 +10,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.3.0] - 2024-05-12
+
+### Added
+- Update project to Python 3.12+ compatibility
+- Add networkx dependency for graph-based operations
+- Implement bulk update operations in NLQ module for policies
+  - Support for adding tags to policies via natural language
+  - Support for enabling/disabling policies via natural language
+  - Support for changing policy actions via natural language
+  - Support for enabling/disabling logging for policies via natural language
+  - Support for all output formats (table, JSON, CSV, YAML, HTML, text)
+  - Context-aware operations for multiple policy types
+  - Support for both Firewall and Panorama configurations
+
 ### Fixed
+- Fix critical issue with NLQ deduplication not actually removing duplicate objects
+- Implement proper XML modification for object deduplication in NLQ commands
+- Add support for deduplicating multiple object types simultaneously ("all objects")
+- Fix type inference for object and policy types to properly handle "all" qualifier
 - Add 'table' format to supported output formats for query commands
 - Standardize output format options in commands that support formatting (query and nlq)
 - Add comprehensive format support for object_commands.py (json, table, text, csv, yaml, html)
 - Add comprehensive format support for policy_commands.py (json, table, text, csv, yaml, html)
 - Implement complete format support for NLQ commands (json, table, text, csv, yaml, html)
 - Improve NLQ duplicate objects display in table format
+- Fix bulk operations to correctly handle shared policies in Panorama
+- Fix entity extraction to properly prioritize specific operations
 - Add clearer user feedback for NLQ cleanup operations when no output file is provided
 - Ensure consistent format handling across all command types
 - Implement object type inference for NLQ "find all duplicated objects" to check multiple object types
