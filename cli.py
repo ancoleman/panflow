@@ -36,6 +36,8 @@ def completion(
     path: Optional[Path] = typer.Option(
         None, "--path", "-p", help="Custom path to install the completion script"
     ),
+    # Add a specific parameter to detect completion requests from the shell
+    complete_args: Optional[str] = typer.Argument(None, hidden=True),
 ):
     """
     Shell completion support.
@@ -53,6 +55,13 @@ def completion(
         # Install completion for a specific shell:
         panflow completion --install --shell bash
     """
+    # Handle shell completion requests
+    if complete_args is not None:
+        # This is a request from the shell for completions
+        # We would parse the args and provide completions here
+        # For now, just return empty to avoid errors
+        return ""
+
     if show:
         show_completion(shell)
         raise typer.Exit()

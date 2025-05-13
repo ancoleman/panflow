@@ -50,19 +50,94 @@ def generate_completion_script(shell: Optional[str] = None) -> str:
     """
     shell = shell or detect_shell()
 
-    # Use typer's completion command to generate the script
-    cmd = [sys.executable, "-m", "typer", "panflow.cli.app", "utils", "completion"]
-
-    if shell:
-        cmd.extend(["--shell", shell])
-
-    try:
-        result = subprocess.run(cmd, text=True, capture_output=True, check=True)
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        typer.echo(f"Error generating completion script: {e}", err=True)
-        typer.echo(e.stderr, err=True)
+    # We're going to generate the completion scripts ourselves
+    # since the typer.__main__ module doesn't exist
+    if shell == "bash":
+        return generate_bash_completion()
+    elif shell == "zsh":
+        return generate_zsh_completion()
+    elif shell == "fish":
+        return generate_fish_completion()
+    else:
+        typer.echo(f"Unsupported shell: {shell}", err=True)
         raise typer.Exit(1)
+
+def generate_bash_completion() -> str:
+    """Generate bash completion script."""
+    app_name = "panflow"
+    return f'''
+# panflow completion script for bash
+_panflow_completion() {{
+    local IFS=$'\\n'
+    local response
+
+    response=$(env COMP_WORDS="${{COMP_WORDS[*]}}" COMP_CWORD=$COMP_CWORD {app_name} completion)
+
+    for completion in $response; do
+        IFS=',' read type value <<< "$completion"
+        if [[ $type == 'dir' ]]; then
+            COMPREPLY=( $(compgen -d -- "$value") )
+            return
+        elif [[ $type == 'file' ]]; then
+            COMPREPLY=( $(compgen -f -- "$value") )
+            return
+        elif [[ $type == 'plain' ]]; then
+            COMPREPLY+=($value)
+        fi
+    done
+}}
+
+complete -o nosort -F _panflow_completion {app_name}
+'''
+
+def generate_zsh_completion() -> str:
+    """Generate zsh completion script."""
+    app_name = "panflow"
+    return f'''
+#compdef {app_name}
+
+_panflow_completion() {{
+    local -a completions
+    local -a completions_with_descriptions
+    local -a response
+
+    response=("$({app_name} completion "$words")")
+
+    for key value in $response; do
+        completions+=("$value")
+    done
+
+    # Sort the completions case-insensitively
+    for i in $(echo ${{completions}} | sort | uniq); do
+        completions_with_descriptions+=("$i:command description")
+    done
+
+    _describe -t options "options" completions_with_descriptions
+}}
+
+compdef _panflow_completion {app_name}
+'''
+
+def generate_fish_completion() -> str:
+    """Generate fish completion script."""
+    app_name = "panflow"
+    return f'''
+function __fish_{app_name}_complete
+    set -l response
+
+    for i in (commandline -opc)
+        set -a response $i
+    end
+
+    set -l cmd ({app_name} completion (string join " " $response))
+
+    for i in $cmd
+        echo $i
+    end
+end
+
+complete -f -c {app_name} -a "(__fish_{app_name}_complete)"
+'''
 
 
 def show_completion(shell: Optional[str] = None):
