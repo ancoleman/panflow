@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
-## [0.3.1] - 2024-05-22
+## [0.3.1] - 2025-05-22
 
 ### Fixed
 - Fixed bulk update policies with device group context and query filter
@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed query modification to correctly filter by device group
   - Added support for both pre-rulebase and post-rulebase security rules
 
-## [0.3.0] - 2024-05-12
+## [0.3.0] - 2025-05-12
 
 ### Added
 - Update project to Python 3.12+ compatibility
