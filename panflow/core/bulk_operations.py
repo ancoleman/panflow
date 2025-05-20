@@ -1,32 +1,53 @@
 """
-Bulk operations for PANFlow.
+Bulk operations module for PANFlow.
 
-This module provides functionality for performing operations on multiple configuration
-elements simultaneously, such as bulk policy updates, object modifications, and more.
+This module provides functionality for bulk operations on PAN-OS configurations.
 """
 
-import os
-import json
 import logging
-from typing import Dict, Any, Optional, List, Tuple, Union, Set
+import json
+from typing import Dict, List, Any, Optional, Union, Tuple
+
 from lxml import etree
 
-from .xpath_resolver import get_object_xpath, get_policy_xpath
-from .config_loader import xpath_search
-from .object_merger import ObjectMerger
-from .deduplication import DeduplicationEngine
-from .conflict_resolver import ConflictStrategy
+from .config_loader import load_config_from_file
 
-# Get module logger
+def xpath_search(tree, xpath):
+    """
+    Utility function to safely search XML using XPath.
+    
+    Args:
+        tree: The ElementTree to search
+        xpath: XPath expression
+        
+    Returns:
+        List of matched elements
+    """
+    try:
+        return tree.xpath(xpath)
+    except Exception as e:
+        logger.error(f"XPath search failed: {e}")
+        return []
+
+from .xpath_resolver import (
+    get_policy_xpath,
+    get_object_xpath,
+    get_context_xpath,
+)
+from .graph_utils import ConfigGraph
+from .graph_service import GraphService
+from .query_language import Query
+from .query_engine import QueryExecutor
+
+
 logger = logging.getLogger("panflow")
 
 
 class ConfigQuery:
     """
-    Class for selecting configuration elements based on criteria.
+    Class for querying PAN-OS configurations.
 
-    This class provides methods to search for and select policies or objects
-    that match specific filtering criteria.
+    This class provides methods for querying policies and objects with advanced filtering.
     """
 
     def __init__(self, tree, device_type, context_type, version, **kwargs):
@@ -324,9 +345,14 @@ class ConfigQuery:
 
                 # Handle standard field matching (as in the original method)
                 elif key == "name":
-                    if element.get("name") != value:
-                        logger.debug(f"Element '{element_name}' name does not match {value}")
-                        return False
+                    if isinstance(value, list):
+                        if element.get("name") not in value:
+                            logger.debug(f"Element '{element_name}' name not in list: {value}")
+                            return False
+                    else:
+                        if element.get("name") != value:
+                            logger.debug(f"Element '{element_name}' name does not match {value}")
+                            return False
                 elif key == "has-tag":
                     tag_elements = element.xpath("./tag/member")
                     tag_values = [tag.text for tag in tag_elements if tag.text]
@@ -427,12 +453,9 @@ class ConfigQuery:
         """
         Check if an element matches the provided criteria.
 
-        This internal method evaluates whether an XML element matches the
-        given filter criteria.
-
         Args:
             element: XML element to check
-            criteria: Dictionary of criteria to match
+            criteria: Dictionary of criteria to match against
 
         Returns:
             bool: True if the element matches all criteria, False otherwise
@@ -442,82 +465,132 @@ class ConfigQuery:
 
         try:
             for key, value in criteria.items():
-                # Handle XPath expressions in criteria
-                if key.startswith("xpath:"):
-                    xpath = key[6:]  # Remove 'xpath:' prefix
-                    logger.debug(f"Evaluating XPath criterion: {xpath}")
-                    matches = element.xpath(xpath)
-                    if not matches:
-                        logger.debug(f"Element '{element_name}' does not match XPath: {xpath}")
-                        return False
-                    continue
-
-                # Handle standard field matching
+                # Handle 'name' specially since it's an attribute, not a child element
                 if key == "name":
-                    if element.get("name") != value:
-                        logger.debug(f"Element '{element_name}' name does not match {value}")
-                        return False
-                elif key == "has-tag":
-                    tag_elements = element.xpath("./tag/member")
-                    tag_values = [tag.text for tag in tag_elements if tag.text]
-                    if value not in tag_values:
-                        logger.debug(f"Element '{element_name}' does not have tag: {value}")
-                        return False
-                    else:
-                        logger.debug(f"Element '{element_name}' has tag: {value}")
-                elif key in ["source", "destination", "application", "service"]:
-                    # Handle list-type fields (e.g., source, destination, service)
-                    member_elements = element.xpath(f"./{key}/member")
-                    member_values = [m.text for m in member_elements if m.text]
-
                     if isinstance(value, list):
-                        # Check if any of the criteria values are in the member list
-                        matches = any(v in member_values for v in value)
-                        if not matches:
-                            logger.debug(
-                                f"Element '{element_name}' {key} values {member_values} don't match any in {value}"
-                            )
+                        if element.get("name") not in value:
+                            logger.debug(f"Element '{element_name}' name not in list: {value}")
                             return False
                     else:
-                        # Check if the criteria value is in the member list
-                        if value not in member_values:
-                            logger.debug(
-                                f"Element '{element_name}' {key} values {member_values} don't include {value}"
-                            )
+                        if element.get("name") != value:
+                            logger.debug(f"Element '{element_name}' name doesn't match: {value}")
                             return False
+                # For other fields, check if they exist and match the expected value
                 else:
-                    # For other fields, check if they exist as child elements
                     child_elements = element.xpath(f"./{key}")
                     if not child_elements:
                         logger.debug(f"Element '{element_name}' has no child element: {key}")
                         return False
 
-                    # If child element has text content, check that too
-                    if child_elements[0].text and value is not None:
-                        text_value = child_elements[0].text.strip()
-                        expected_value = str(value).strip()
-                        if text_value != expected_value:
-                            logger.debug(
-                                f"Element '{element_name}' {key} value '{text_value}' doesn't match '{expected_value}'"
-                            )
-                            return False
+                    if (
+                        value is not None
+                        and child_elements[0].text
+                        and child_elements[0].text.strip() != str(value).strip()
+                    ):
+                        logger.debug(
+                            f"Element '{element_name}' {key} value '{child_elements[0].text}' doesn't match '{value}'"
+                        )
+                        return False
 
             logger.debug(f"Element '{element_name}' matches all criteria")
             return True
-
         except Exception as e:
             logger.error(
                 f"Error matching criteria for element '{element_name}': {str(e)}", exc_info=True
             )
             return False
 
+    def get_all_objects(self, object_type):
+        """
+        Get all objects of the specified type.
+
+        Args:
+            object_type: Type of object to get (address, service, etc.)
+
+        Returns:
+            List of object dictionaries with all relevant attributes
+        """
+        logger.info(f"Getting all {object_type} objects")
+
+        try:
+            # Get all object elements of this type
+            objects = self.select_objects(object_type)
+
+            if not objects:
+                logger.info(f"No {object_type} objects found")
+                return []
+
+            # Convert XML elements to dictionaries
+            object_dicts = []
+            for obj in objects:
+                object_dict = self._object_to_dict(obj, object_type)
+                object_dicts.append(object_dict)
+
+            logger.info(f"Found {len(object_dicts)} {object_type} objects")
+            return object_dicts
+
+        except Exception as e:
+            logger.error(f"Error getting objects: {str(e)}", exc_info=True)
+            return []
+
+    def _object_to_dict(self, object_element, object_type):
+        """
+        Convert an object XML element to a dictionary.
+
+        Args:
+            object_element: The object XML element
+            object_type: Type of the object
+
+        Returns:
+            Dictionary containing the object attributes
+        """
+        try:
+            # Base object attributes
+            object_dict = {
+                "name": object_element.get("name", "unnamed"),
+                "type": object_type,
+                "xml_element": object_element,  # Keep reference to original element
+            }
+
+            # Extract type-specific attributes
+            if object_type == "address":
+                for addr_type in ["ip-netmask", "ip-range", "fqdn"]:
+                    addr_elem = object_element.find(f"./{addr_type}")
+                    if addr_elem is not None and addr_elem.text:
+                        object_dict["addr_type"] = addr_type
+                        object_dict["value"] = addr_elem.text
+                        break
+            elif object_type == "service":
+                for protocol in ["tcp", "udp"]:
+                    port_elem = object_element.find(f"./{protocol}/port")
+                    if port_elem is not None and port_elem.text:
+                        object_dict["protocol"] = protocol
+                        object_dict["port"] = port_elem.text
+                        break
+
+            # Description is common to many object types
+            description_elem = object_element.find("./description")
+            if description_elem is not None and description_elem.text:
+                object_dict["description"] = description_elem.text
+
+            # Tags are also common
+            tags = object_element.findall("./tag/member")
+            if tags:
+                object_dict["tags"] = [t.text for t in tags if t.text]
+
+            return object_dict
+
+        except Exception as e:
+            logger.error(f"Error converting object element to dict: {str(e)}", exc_info=True)
+            # Return minimal dict with name to avoid breaking code that expects a dict
+            return {"name": object_element.get("name", "unknown"), "type": object_type, "error": str(e)}
+
 
 class ConfigUpdater:
     """
-    Class for applying bulk updates to configuration elements.
+    Class for updating PAN-OS configurations with bulk operations.
 
-    This class provides methods to apply operations to multiple configuration
-    elements that match specific criteria.
+    This class provides methods for bulk updating policies and objects with various operations.
     """
 
     def __init__(self, tree, device_type, context_type, version, **kwargs):
@@ -536,6 +609,8 @@ class ConfigUpdater:
         self.context_type = context_type
         self.version = version
         self.context_kwargs = kwargs
+        
+        # Create a query object for selecting elements
         self.query = ConfigQuery(tree, device_type, context_type, version, **kwargs)
 
         logger.debug(
@@ -543,278 +618,709 @@ class ConfigUpdater:
             f"version={version}, context_kwargs={kwargs}"
         )
 
-    def bulk_update_policies(self, policy_type, criteria, update_operations):
+    def add_object(self, object_type, object_data):
         """
-        Update all policies matching criteria with specified operations.
+        Add a new object to the configuration.
+
+        Args:
+            object_type: Type of object to add (address, service, etc.)
+            object_data: Dictionary containing object data
+
+        Returns:
+            bool: True if the object was added, False if it already exists or an error occurred
+        """
+        logger.info(f"Adding {object_type} object: {object_data.get('name')}")
+
+        try:
+            # Get the base XPath for this object type and context
+            base_xpath = get_object_xpath(
+                object_type, self.device_type, self.context_type, self.version, **self.context_kwargs
+            )
+
+            logger.debug(f"Generated base XPath: {base_xpath}")
+
+            # Check if the object already exists
+            object_name = object_data.get("name")
+            if not object_name:
+                logger.error("Missing object name in object data")
+                return False
+
+            # Generate XPath for the specific object
+            object_xpath = f"{base_xpath}[@name='{object_name}']"
+            existing_objects = self.tree.xpath(object_xpath)
+
+            if existing_objects:
+                logger.warning(f"{object_type} object '{object_name}' already exists")
+                return False
+
+            # Find or create the parent element
+            parent_xpath = "/".join(base_xpath.split("/")[:-1])
+            parents = self.tree.xpath(parent_xpath)
+
+            if not parents:
+                logger.error(f"Parent element not found: {parent_xpath}")
+                return False
+
+            parent = parents[0]
+
+            # Create the new object element
+            new_object = etree.SubElement(parent, "entry")
+            new_object.set("name", object_name)
+
+            # Set object attributes based on type
+            if object_type == "address":
+                self._set_address_attributes(new_object, object_data)
+            elif object_type == "service":
+                self._set_service_attributes(new_object, object_data)
+            # Add more object types as needed
+
+            logger.info(f"Added {object_type} object: {object_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error adding object: {str(e)}", exc_info=True)
+            return False
+
+    def _set_address_attributes(self, element, data):
+        """Set attributes for an address object."""
+        addr_type = data.get("addr_type", "ip-netmask")
+        value = data.get("value")
+
+        if not value:
+            logger.warning(f"Missing value for address object: {data.get('name')}")
+            return
+
+        addr_elem = etree.SubElement(element, addr_type)
+        addr_elem.text = value
+
+        # Add description if provided
+        description = data.get("description")
+        if description:
+            desc_elem = etree.SubElement(element, "description")
+            desc_elem.text = description
+
+        # Add tags if provided
+        tags = data.get("tags")
+        if tags:
+            tags_elem = etree.SubElement(element, "tag")
+            for tag in tags:
+                tag_member = etree.SubElement(tags_elem, "member")
+                tag_member.text = tag
+
+    def _set_service_attributes(self, element, data):
+        """Set attributes for a service object."""
+        protocol = data.get("protocol", "tcp")
+        port = data.get("port")
+
+        if not port:
+            logger.warning(f"Missing port for service object: {data.get('name')}")
+            return
+
+        protocol_elem = etree.SubElement(element, protocol)
+        port_elem = etree.SubElement(protocol_elem, "port")
+        port_elem.text = port
+
+        # Add description if provided
+        description = data.get("description")
+        if description:
+            desc_elem = etree.SubElement(element, "description")
+            desc_elem.text = description
+
+        # Add tags if provided
+        tags = data.get("tags")
+        if tags:
+            tags_elem = etree.SubElement(element, "tag")
+            for tag in tags:
+                tag_member = etree.SubElement(tags_elem, "member")
+                tag_member.text = tag
+
+    def update_object(self, object_type, object_name, updates):
+        """
+        Update an existing object with the provided updates.
+
+        Args:
+            object_type: Type of object to update (address, service, etc.)
+            object_name: Name of the object to update
+            updates: Dictionary of updates to apply
+
+        Returns:
+            bool: True if updates were applied, False otherwise
+        """
+        logger.info(f"Updating {object_type} object: {object_name}")
+
+        try:
+            # Get the object element
+            objects = self.query.select_objects(object_type, {"name": object_name})
+
+            if not objects:
+                logger.warning(f"{object_type} object '{object_name}' not found")
+                return False
+
+            object_elem = objects[0]
+
+            # Apply updates based on object type
+            if object_type == "address":
+                return self._update_address_object(object_elem, updates)
+            elif object_type == "service":
+                return self._update_service_object(object_elem, updates)
+            # Add more object types as needed
+
+            logger.warning(f"Unsupported object type for updates: {object_type}")
+            return False
+
+        except Exception as e:
+            logger.error(f"Error updating object: {str(e)}", exc_info=True)
+            return False
+
+    def _update_address_object(self, element, updates):
+        """Update an address object with the provided updates."""
+        modified = False
+
+        # Update value if provided
+        if "value" in updates:
+            # Check if addr_type is also being updated
+            addr_type = updates.get("addr_type", None)
+            if not addr_type:
+                # Try to find existing type
+                for a_type in ["ip-netmask", "ip-range", "fqdn"]:
+                    existing = element.find(f"./{a_type}")
+                    if existing is not None:
+                        addr_type = a_type
+                        break
+
+            if addr_type:
+                # Remove all existing address type elements
+                for a_type in ["ip-netmask", "ip-range", "fqdn"]:
+                    for existing in element.findall(f"./{a_type}"):
+                        element.remove(existing)
+
+                # Add new address type element
+                addr_elem = etree.SubElement(element, addr_type)
+                addr_elem.text = updates["value"]
+                modified = True
+            else:
+                logger.warning("Cannot update address value without knowing the address type")
+
+        # Update description if provided
+        if "description" in updates:
+            desc_elem = element.find("./description")
+            if desc_elem is not None:
+                desc_elem.text = updates["description"]
+            else:
+                desc_elem = etree.SubElement(element, "description")
+                desc_elem.text = updates["description"]
+            modified = True
+
+        # Update tags if provided
+        if "tags" in updates:
+            tags_elem = element.find("./tag")
+            if tags_elem is not None:
+                # Remove existing tags
+                for member in tags_elem.findall("./member"):
+                    tags_elem.remove(member)
+            else:
+                tags_elem = etree.SubElement(element, "tag")
+
+            # Add new tags
+            for tag in updates["tags"]:
+                tag_member = etree.SubElement(tags_elem, "member")
+                tag_member.text = tag
+            modified = True
+
+        return modified
+
+    def _update_service_object(self, element, updates):
+        """Update a service object with the provided updates."""
+        modified = False
+
+        # Update port if provided
+        if "port" in updates:
+            protocol = updates.get("protocol", None)
+            if not protocol:
+                # Try to find existing protocol
+                for p_type in ["tcp", "udp"]:
+                    existing = element.find(f"./{p_type}")
+                    if existing is not None:
+                        protocol = p_type
+                        break
+
+            if protocol:
+                # Remove all existing protocol elements
+                for p_type in ["tcp", "udp"]:
+                    for existing in element.findall(f"./{p_type}"):
+                        element.remove(existing)
+
+                # Add new protocol element with port
+                protocol_elem = etree.SubElement(element, protocol)
+                port_elem = etree.SubElement(protocol_elem, "port")
+                port_elem.text = updates["port"]
+                modified = True
+            else:
+                logger.warning("Cannot update port value without knowing the protocol")
+
+        # Update description if provided
+        if "description" in updates:
+            desc_elem = element.find("./description")
+            if desc_elem is not None:
+                desc_elem.text = updates["description"]
+            else:
+                desc_elem = etree.SubElement(element, "description")
+                desc_elem.text = updates["description"]
+            modified = True
+
+        # Update tags if provided
+        if "tags" in updates:
+            tags_elem = element.find("./tag")
+            if tags_elem is not None:
+                # Remove existing tags
+                for member in tags_elem.findall("./member"):
+                    tags_elem.remove(member)
+            else:
+                tags_elem = etree.SubElement(element, "tag")
+
+            # Add new tags
+            for tag in updates["tags"]:
+                tag_member = etree.SubElement(tags_elem, "member")
+                tag_member.text = tag
+            modified = True
+
+        return modified
+
+    def delete_object(self, object_type, object_name):
+        """
+        Delete an object from the configuration.
+
+        Args:
+            object_type: Type of object to delete (address, service, etc.)
+            object_name: Name of the object to delete
+
+        Returns:
+            bool: True if the object was deleted, False otherwise
+        """
+        logger.info(f"Deleting {object_type} object: {object_name}")
+
+        try:
+            # Get the base XPath for this object type and context
+            base_xpath = get_object_xpath(
+                object_type, self.device_type, self.context_type, self.version, **self.context_kwargs
+            )
+
+            # Generate XPath for the specific object
+            object_xpath = f"{base_xpath}[@name='{object_name}']"
+            objects = self.tree.xpath(object_xpath)
+
+            if not objects:
+                logger.warning(f"{object_type} object '{object_name}' not found")
+                return False
+
+            # Remove the object
+            for obj in objects:
+                parent = obj.getparent()
+                if parent is not None:
+                    parent.remove(obj)
+                    logger.info(f"Deleted {object_type} object: {object_name}")
+                    return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error deleting object: {str(e)}", exc_info=True)
+            return False
+
+    def bulk_update_policies(self, policy_type, criteria=None, operations=None, query_filter=None, existing_graph=None):
+        """
+        Update multiple policies matching criteria with specified operations.
 
         Args:
             policy_type: Type of policy to update (security_pre_rules, nat_rules, etc.)
             criteria: Dictionary of criteria to select policies
-            update_operations: Dictionary of operations to apply
+            operations: Dictionary of operations to perform on selected policies
+            query_filter: Optional graph query filter to select policies
+            existing_graph: Optional existing graph to reuse
 
         Returns:
             int: Number of policies updated
         """
         logger.info(f"Starting bulk update of {policy_type} policies")
         logger.info(f"Selection criteria: {criteria}")
-        logger.info(f"Update operations: {update_operations}")
+        logger.info(f"Update operations: {operations}")
+        if query_filter:
+            logger.info(f"Using graph query filter: {query_filter}")
+
+        if not criteria and not query_filter:
+            logger.error("No selection criteria or query filter provided")
+            raise ValueError("No selection criteria or query filter provided")
+            
+        # If we have a query filter but no results were found, still keep going with empty criteria
+        # This will allow for the fallback XPath method to work
+
+        if not operations:
+            logger.error("No update operations provided")
+            raise ValueError("No update operations provided")
 
         try:
-            # Select matching policies
-            policies = self.query.select_policies(policy_type, criteria)
+            # For Panorama, we need to handle pre and post rules differently
+            actual_policy_type = policy_type
+            if self.device_type == "panorama" and policy_type in ["security_rules", "nat_rules"]:
+                # Convert generic types to pre-rulebase types for Panorama
+                if policy_type == "security_rules":
+                    actual_policy_type = "security_pre_rules"
+                elif policy_type == "nat_rules":
+                    actual_policy_type = "nat_pre_rules"
+                logger.info(f"Converted policy_type from {policy_type} to {actual_policy_type} for Panorama")
+            
+            # If we have a graph query filter, process it first to get matching policy names
+            if query_filter:
+                matching_policy_names = self._get_policies_from_query(
+                    query_filter,
+                    policy_type=actual_policy_type,
+                    context_type=self.context_type,
+                    device_group=self.context_kwargs.get("device_group"),
+                    existing_graph=existing_graph
+                )
+                
+                if matching_policy_names:
+                    # If we already have criteria, extend it with the names from the query
+                    if criteria:
+                        if "name" in criteria:
+                            if isinstance(criteria["name"], list):
+                                criteria["name"].extend(matching_policy_names)
+                            else:
+                                criteria["name"] = [criteria["name"]] + matching_policy_names
+                        else:
+                            criteria["name"] = matching_policy_names
+                    else:
+                        # If we don't have criteria yet, create one with the names
+                        criteria = {"name": matching_policy_names}
+                    
+                    logger.info(f"Updated selection criteria with query results: {criteria}")
+                else:
+                    logger.warning(f"Query filter did not match any policies. Creating empty criteria to continue.")
+                    # If no policies matched, create an empty criteria that won't match anything
+                    # This will prevent errors later when trying to use a None criteria
+                    if not criteria:
+                        criteria = {"name": []}
+                        
+                    # Let the process continue so the XPath fallback method or direct selection can work
 
-            if not policies:
+            # Now use the regular policy selection with the updated criteria and correct policy type
+            matching_policies = self.query.select_policies(actual_policy_type, criteria)
+            
+            # For Panorama, try post-rulebase as well if no matches found in pre-rulebase
+            if self.device_type == "panorama" and not matching_policies:
+                if actual_policy_type == "security_pre_rules":
+                    post_type = "security_post_rules"
+                elif actual_policy_type == "nat_pre_rules":
+                    post_type = "nat_post_rules"
+                else:
+                    post_type = None
+                
+                if post_type:
+                    logger.info(f"No matches in pre-rulebase, trying {post_type}")
+                    matching_policies = self.query.select_policies(post_type, criteria)
+            
+            # Debug: print the names of available policies
+            available_policies = self.query.select_policies(actual_policy_type)
+            available_names = [p.get('name', 'unknown') for p in available_policies]
+            logger.info(f"Available policies in context: {available_names}")
+            
+            # If still no matching policies but we have device group context,
+            # try directly querying the XML as a last resort
+            if not matching_policies and self.device_type == "panorama" and self.context_type == "device_group":
+                device_group = self.context_kwargs.get("device_group")
+                if device_group and criteria and "name" in criteria:
+                    # Use direct XPath to find policies with matching names
+                    logger.info(f"Trying direct XML lookup for policies in device group {device_group}")
+                    policy_names = criteria["name"] if isinstance(criteria["name"], list) else [criteria["name"]]
+                    
+                    direct_matches = []
+                    # Check both pre and post rulebase
+                    pre_xpath = f"/config/devices/entry/device-group/entry[@name='{device_group}']/pre-rulebase/security/rules/entry"
+                    post_xpath = f"/config/devices/entry/device-group/entry[@name='{device_group}']/post-rulebase/security/rules/entry"
+                    
+                    for policy in self.tree.xpath(pre_xpath):
+                        name = policy.get("name")
+                        if name in policy_names:
+                            logger.info(f"Found policy '{name}' in pre-rulebase via direct XML lookup")
+                            direct_matches.append(policy)
+                    
+                    for policy in self.tree.xpath(post_xpath):
+                        name = policy.get("name")
+                        if name in policy_names:
+                            logger.info(f"Found policy '{name}' in post-rulebase via direct XML lookup")
+                            direct_matches.append(policy)
+                    
+                    if direct_matches:
+                        logger.info(f"Found {len(direct_matches)} policies via direct XML lookup")
+                        matching_policies = direct_matches
+            
+            if not matching_policies:
                 logger.warning("No policies found matching the criteria")
                 return 0
 
-            logger.info(f"Found {len(policies)} matching policies to update")
-
             updated_count = 0
-            for policy in policies:
-                policy_name = policy.get("name", "unknown")
-                logger.info(f"Updating policy: {policy_name}")
-
-                if self._apply_updates(policy, update_operations):
+            for policy in matching_policies:
+                if self._apply_operations(policy, operations):
                     updated_count += 1
-                    logger.info(f"Successfully updated policy: {policy_name}")
-                else:
-                    logger.warning(f"No changes applied to policy: {policy_name}")
 
-            logger.info(
-                f"Bulk update completed: {updated_count} of {len(policies)} policies updated"
-            )
+            logger.info(f"Updated {updated_count} policies")
             return updated_count
 
         except Exception as e:
-            logger.error(f"Error during bulk policy update: {str(e)}", exc_info=True)
-            return 0
+            logger.error(f"Error in bulk update: {str(e)}", exc_info=True)
+            raise
 
-    def bulk_update_objects(self, object_type, criteria, update_operations):
+    def _get_policies_from_query(self, query_filter, policy_type=None, context_type=None, device_group=None, existing_graph=None):
         """
-        Update all objects matching criteria with specified operations.
+        Get policy names from a graph query filter.
 
         Args:
-            object_type: Type of object to update (address, service, etc.)
-            criteria: Dictionary of criteria to select objects
-            update_operations: Dictionary of operations to apply
+            query_filter: The graph query filter to execute
+            policy_type: Type of policy (security_pre_rules, nat_rules, etc.)
+            context_type: The type of context (shared, device_group, vsys)
+            device_group: The device group name (for device_group context)
+            existing_graph: Optional existing graph to reuse
 
         Returns:
-            int: Number of objects updated
+            List of policy names matching the query
         """
-        logger.info(f"Starting bulk update of {object_type} objects")
-        logger.info(f"Selection criteria: {criteria}")
-        logger.info(f"Update operations: {update_operations}")
-
         try:
-            # Select matching objects
-            objects = self.query.select_objects(object_type, criteria)
+            # Use existing graph if provided, otherwise create a new one
+            if existing_graph:
+                logger.debug("Using existing graph for query")
+                graph = existing_graph
+            else:
+                # Create graph with device context
+                logger.debug(f"Creating graph with device_type={self.device_type}, context_type={self.context_type}, context_kwargs={self.context_kwargs}")
+                graph = ConfigGraph(self.device_type, self.context_type, **self.context_kwargs)
+                graph.build_from_xml(self.tree)
+            
+            # Determine context values to use, prioritizing passed parameters
+            actual_context_type = context_type if context_type else self.context_type
+            actual_device_group = device_group if device_group else self.context_kwargs.get("device_group")
+            
+            # Log all security rule nodes in the graph for debugging
+            security_rule_nodes = []
+            for node_id, attrs in graph.graph.nodes(data=True):
+                if attrs.get("type") == "security-rule":
+                    name = attrs.get("name", "unknown")
+                    dg = attrs.get("device_group", "none")
+                    action = attrs.get("action", "unknown")
+                    security_rule_nodes.append(f"{name} (device_group: {dg}, action: {action})")
+            
+            logger.debug(f"Security rule nodes in graph: {security_rule_nodes}")
 
-            if not objects:
-                logger.warning("No objects found matching the criteria")
-                return 0
-
-            logger.info(f"Found {len(objects)} matching objects to update")
-
-            updated_count = 0
-            for obj in objects:
-                obj_name = obj.get("name", "unknown")
-                logger.info(f"Updating object: {obj_name}")
-
-                if self._apply_updates(obj, update_operations):
-                    updated_count += 1
-                    logger.info(f"Successfully updated object: {obj_name}")
-                else:
-                    logger.warning(f"No changes applied to object: {obj_name}")
-
-            logger.info(f"Bulk update completed: {updated_count} of {len(objects)} objects updated")
-            return updated_count
-
-        except Exception as e:
-            logger.error(f"Error during bulk object update: {str(e)}", exc_info=True)
-            return 0
-
-    def bulk_delete_policies(self, policy_type, criteria):
-        """
-        Delete all policies matching criteria.
-
-        Args:
-            policy_type: Type of policy to delete (security_pre_rules, nat_rules, etc.)
-            criteria: Dictionary of criteria to select policies
-
-        Returns:
-            int: Number of policies deleted
-        """
-        logger.info(f"Starting bulk deletion of {policy_type} policies")
-        logger.info(f"Deletion criteria: {criteria}")
-
-        try:
-            # Select matching policies
-            policies = self.query.select_policies(policy_type, criteria)
-
-            if not policies:
-                logger.warning("No policies found matching the criteria")
-                return 0
-
-            logger.info(f"Found {len(policies)} matching policies to delete")
-
-            deleted_count = 0
-            for policy in policies:
-                policy_name = policy.get("name", "unknown")
-                logger.info(f"Deleting policy: {policy_name}")
-
-                try:
-                    parent = policy.getparent()
-                    if parent is not None:
-                        parent.remove(policy)
-                        deleted_count += 1
-                        logger.info(f"Successfully deleted policy: {policy_name}")
+            # Prepare a query that returns policy names and device group if available
+            # For device-group specific contexts, modify the query to filter by device group
+            if self.device_type == "panorama" and actual_context_type == "device_group":
+                if actual_device_group:
+                    # Use more specific query to filter by device group as well
+                    if "RETURN" not in query_filter.upper():
+                        device_group_condition = f" AND r.device_group == '{actual_device_group}'"
+                        if "WHERE" in query_filter:
+                            # Add device group condition to existing WHERE clause
+                            query_text = query_filter.replace("WHERE", f"WHERE r.device_group == '{actual_device_group}' AND ")
+                        else:
+                            # Add WHERE clause with device group condition
+                            query_text = f"{query_filter} WHERE r.device_group == '{actual_device_group}'"
+                        query_text = f"{query_text} RETURN r.name"
                     else:
-                        logger.warning(
-                            f"Could not delete policy '{policy_name}': parent element not found"
-                        )
-                except Exception as e:
-                    logger.error(f"Error deleting policy '{policy_name}': {str(e)}", exc_info=True)
-
-            logger.info(
-                f"Bulk deletion completed: {deleted_count} of {len(policies)} policies deleted"
-            )
-            return deleted_count
-
-        except Exception as e:
-            logger.error(f"Error during bulk policy deletion: {str(e)}", exc_info=True)
-            return 0
-
-    def bulk_delete_objects(self, object_type, criteria):
-        """
-        Delete all objects matching criteria.
-
-        Args:
-            object_type: Type of object to delete (address, service, etc.)
-            criteria: Dictionary of criteria to select objects
-
-        Returns:
-            int: Number of objects deleted
-        """
-        logger.info(f"Starting bulk deletion of {object_type} objects")
-        logger.info(f"Deletion criteria: {criteria}")
-
-        try:
-            # Select matching objects
-            objects = self.query.select_objects(object_type, criteria)
-
-            if not objects:
-                logger.warning("No objects found matching the criteria")
-                return 0
-
-            logger.info(f"Found {len(objects)} matching objects to delete")
-
-            deleted_count = 0
-            for obj in objects:
-                obj_name = obj.get("name", "unknown")
-                logger.info(f"Deleting object: {obj_name}")
-
-                try:
-                    parent = obj.getparent()
-                    if parent is not None:
-                        parent.remove(obj)
-                        deleted_count += 1
-                        logger.info(f"Successfully deleted object: {obj_name}")
-                    else:
-                        logger.warning(
-                            f"Could not delete object '{obj_name}': parent element not found"
-                        )
-                except Exception as e:
-                    logger.error(f"Error deleting object '{obj_name}': {str(e)}", exc_info=True)
-
-            logger.info(
-                f"Bulk deletion completed: {deleted_count} of {len(objects)} objects deleted"
-            )
-            return deleted_count
-
-        except Exception as e:
-            logger.error(f"Error during bulk object deletion: {str(e)}", exc_info=True)
-            return 0
-
-    def _apply_updates(self, element, operations):
-        """
-        Apply update operations to an element.
-
-        This internal method applies the specified operations to an XML element.
-
-        Args:
-            element: XML element to update
-            operations: Dictionary of operations to apply
-
-        Returns:
-            bool: True if modifications were made, False otherwise
-        """
-        element_name = element.get("name", "unknown")
-        logger.debug(f"Applying updates to element: {element_name}")
-
-        try:
-            modified = False
-
-            for operation, params in operations.items():
-                logger.debug(f"Applying operation '{operation}' with params: {params}")
-
-                if operation == "add-profile":
-                    # Add log forwarding profile or security profile
-                    modified |= self._add_profile(element, params)
-
-                elif operation == "add-tag":
-                    # Add tag to the element
-                    modified |= self._add_tag(element, params)
-
-                elif operation == "add-zone":
-                    # Add zone to the element (for policies)
-                    modified |= self._add_zone(element, params)
-
-                elif operation == "change-action":
-                    # Change policy action
-                    modified |= self._change_action(element, params)
-
-                elif operation == "add-object":
-                    # Add address or service object to source/destination/service
-                    modified |= self._add_object(element, params)
-
-                elif operation == "remove-object":
-                    # Remove address or service object from source/destination/service
-                    modified |= self._remove_object(element, params)
-
-                elif operation == "update-description":
-                    # Update description field
-                    modified |= self._update_description(element, params)
-
-                elif operation == "enable-disable":
-                    # Enable or disable the element
-                    modified |= self._enable_disable(element, params)
-
-                elif operation == "update-logging":
-                    # Update logging options
-                    modified |= self._update_logging(element, params)
-
-                elif operation == "update-ip-address":
-                    # Update IP address for address objects
-                    modified |= self._update_ip_address(element, params)
-
-                elif operation == "rename":
-                    # Rename the policy or object
-                    modified |= self._rename_element(element, params)
-
+                        # Preserve existing RETURN clause, but add device group condition
+                        if "WHERE" in query_filter:
+                            query_text = query_filter.replace("WHERE", f"WHERE r.device_group == '{actual_device_group}' AND ")
+                        else:
+                            # Insert WHERE clause before RETURN
+                            parts = query_filter.split("RETURN")
+                            query_text = f"{parts[0]} WHERE r.device_group == '{actual_device_group}' RETURN{parts[1]}"
+                    
+                    logger.info(f"Modified query for device group {actual_device_group}: {query_text}")
                 else:
-                    logger.warning(f"Unknown operation: {operation}")
+                    # No device group specified, use original query
+                    if "RETURN" not in query_filter.upper():
+                        query_text = f"{query_filter} RETURN r.name"
+                    else:
+                        query_text = query_filter
+            else:
+                # Not a device group context, use original query
+                if "RETURN" not in query_filter.upper():
+                    query_text = f"{query_filter} RETURN r.name"
+                else:
+                    query_text = query_filter
 
-            return modified
+            # Execute the query
+            query = Query(query_text)
+            executor = QueryExecutor(graph)
+            results = executor.execute(query)
+
+            # Extract policy names from results
+            policy_names = []
+            for row in results:
+                if "r.name" in row:
+                    policy_names.append(row["r.name"])
+                elif len(row) == 1:  # If only one column, use its value
+                    policy_names.append(list(row.values())[0])
+
+            logger.info(f"Query matched {len(policy_names)} policies")
+            
+            # Now filter to ensure we only have policies that match both the query and the device group
+            if self.device_type == "panorama" and actual_context_type == "device_group":
+                if actual_device_group:
+                    # Get all policies from the specific device group context
+                    dg_policies = []
+                    dg_xpath = f"/config/devices/entry/device-group/entry[@name='{actual_device_group}']/pre-rulebase/security/rules/entry"
+                    for rule in self.tree.xpath(dg_xpath):
+                        name = rule.get("name")
+                        if name:
+                            dg_policies.append(name)
+                    
+                    # Now filter the query results to only include policies from this device group
+                    filtered_names = [name for name in policy_names if name in dg_policies]
+                    if len(filtered_names) != len(policy_names):
+                        logger.info(f"Filtered from {len(policy_names)} to {len(filtered_names)} policies in device group {actual_device_group}")
+                    return filtered_names
+                    
+            return policy_names
 
         except Exception as e:
-            logger.error(
-                f"Error applying updates to element '{element_name}': {str(e)}", exc_info=True
-            )
-            return False
+            logger.warning(f"Graph query failed: {e}. Falling back to regular policy selection.")
+            
+            # For device-group specific contexts, try to get policies directly from XPath
+            if self.device_type == "panorama" and actual_context_type == "device_group":
+                if actual_device_group:
+                    # Try to understand the query intent - are we looking for allow rules?
+                    action_match = None
+                    if "r.action" in query_filter and "allow" in query_filter:
+                        action_match = "allow"
+                    elif "r.action" in query_filter and "deny" in query_filter:
+                        action_match = "deny"
+                    elif "r.action" in query_filter and "drop" in query_filter:
+                        action_match = "drop"
+                    
+                    # Get all policies from the specific device group context
+                    dg_policies = []
+                    
+                    # Check both pre and post rulebase
+                    pre_xpath = f"/config/devices/entry/device-group/entry[@name='{actual_device_group}']/pre-rulebase/security/rules/entry"
+                    post_xpath = f"/config/devices/entry/device-group/entry[@name='{actual_device_group}']/post-rulebase/security/rules/entry"
+                    
+                    # If we're filtering by action, include that in XPath
+                    if action_match:
+                        pre_xpath = f"{pre_xpath}[action='{action_match}']"
+                        post_xpath = f"{post_xpath}[action='{action_match}']"
+                    
+                    # Get rules from pre-rulebase
+                    for rule in self.tree.xpath(pre_xpath):
+                        name = rule.get("name")
+                        if name:
+                            dg_policies.append(name)
+                    
+                    # Get rules from post-rulebase
+                    for rule in self.tree.xpath(post_xpath):
+                        name = rule.get("name")
+                        if name:
+                            dg_policies.append(name)
+                    
+                    logger.info(f"Found {len(dg_policies)} policies in device group {actual_device_group} using XPath fallback")
+                    return dg_policies
+            
+            # Return empty list as a last resort
+            return []
+
+    def _apply_operations(self, policy, operations):
+        """
+        Apply operations to a policy.
+
+        Args:
+            policy: The policy XML element to update
+            operations: Dictionary of operations to perform
+
+        Returns:
+            bool: True if any modifications were made, False otherwise
+        """
+        policy_name = policy.get("name", "unknown")
+        logger.debug(f"Applying operations to policy: {policy_name}")
+
+        modified = False
+        for op, params in operations.items():
+            if op == "log-setting":
+                # Set log setting
+                log_setting_elem = policy.find("./log-setting")
+                if log_setting_elem is not None:
+                    old_setting = log_setting_elem.text
+                    log_setting_elem.text = params
+                    logger.info(
+                        f"Updated log-setting of policy '{policy_name}' from '{old_setting}' to '{params}'"
+                    )
+                else:
+                    log_setting_elem = etree.SubElement(policy, "log-setting")
+                    log_setting_elem.text = params
+                    logger.info(f"Added log-setting '{params}' to policy '{policy_name}'")
+                modified = True
+            elif op == "disable":
+                # Disable the policy
+                disabled_elem = policy.find("./disabled")
+                if disabled_elem is not None:
+                    disabled_elem.text = "yes"
+                else:
+                    disabled_elem = etree.SubElement(policy, "disabled")
+                    disabled_elem.text = "yes"
+                logger.info(f"Disabled policy: {policy_name}")
+                modified = True
+            elif op == "enable":
+                # Enable the policy
+                disabled_elem = policy.find("./disabled")
+                if disabled_elem is not None:
+                    policy.remove(disabled_elem)
+                    logger.info(f"Enabled policy: {policy_name}")
+                    modified = True
+            elif op == "set-log":
+                # Set log start/end values
+                for log_type, value in params.items():
+                    if log_type not in ["log-start", "log-end"]:
+                        logger.warning(f"Invalid log type: {log_type}")
+                        continue
+
+                    log_elem = policy.find(f"./{log_type}")
+                    if log_elem is not None:
+                        old_value = log_elem.text
+                        log_elem.text = value
+                        logger.info(
+                            f"Updated {log_type} of policy '{policy_name}' from '{old_value}' to '{value}'"
+                        )
+                    else:
+                        log_elem = etree.SubElement(policy, log_type)
+                        log_elem.text = value
+                        logger.info(f"Added {log_type} '{value}' to policy '{policy_name}'")
+                    modified = True
+            elif op == "add-profile":
+                # Add profile settings
+                modified |= self._add_profile(policy, params)
+            elif op == "add-tag":
+                # Add a tag
+                modified |= self._add_tag(policy, params)
+            elif op == "add-zone":
+                # Add a zone
+                modified |= self._add_zone(policy, params)
+            elif op == "change-action":
+                # Change the action
+                modified |= self._change_action(policy, params)
+            elif op == "add-object":
+                # Add an object to source/destination/service
+                modified |= self._add_object(policy, params)
+            elif op == "remove-object":
+                # Remove an object from source/destination/service
+                modified |= self._remove_object(policy, params)
+            elif op == "update-description":
+                # Update the description
+                modified |= self._update_description(policy, params)
+            else:
+                logger.warning(f"Unsupported operation: {op}")
+
+        return modified
 
     def _add_profile(self, element, params):
         """
-        Add a profile to an element.
+        Add a profile to a policy element.
 
         Args:
             element: XML element to update
@@ -829,55 +1335,86 @@ class ConfigUpdater:
 
         if not profile_type or not profile_name:
             logger.warning(
-                f"Missing type or name in add-profile operation for element '{element_name}'"
+                f"Missing profile type or name in add-profile operation for policy '{element_name}'"
             )
             return False
 
-        logger.debug(
-            f"Adding profile of type '{profile_type}' named '{profile_name}' to element '{element_name}'"
-        )
+        logger.debug(f"Adding profile '{profile_name}' of type '{profile_type}' to policy '{element_name}'")
 
         try:
-            # Check if profile-setting exists
+            # Check if profile-setting element exists
             profile_setting = element.find("./profile-setting")
             if profile_setting is None:
                 logger.debug(f"Creating new profile-setting element for '{element_name}'")
                 profile_setting = etree.SubElement(element, "profile-setting")
 
-            if profile_type == "log-forwarding":
-                # Set log-forwarding profile
-                log_setting = profile_setting.find("./log-setting")
-                if log_setting is not None:
-                    old_value = log_setting.text
-                    log_setting.text = profile_name
-                    logger.info(
-                        f"Updated log-forwarding profile from '{old_value}' to '{profile_name}'"
-                    )
+            # Handle different types of profiles
+            if profile_type == "group":
+                # Add to group element
+                group_elem = profile_setting.find("./group")
+                if group_elem is None:
+                    group_elem = etree.SubElement(profile_setting, "group")
+
+                # Check if profile already exists
+                members = group_elem.xpath("./member")
+                member_values = [m.text for m in members if m.text]
+
+                if profile_name not in member_values:
+                    member = etree.SubElement(group_elem, "member")
+                    member.text = profile_name
+                    logger.info(f"Added group profile '{profile_name}' to policy '{element_name}'")
+                    return True
                 else:
-                    log_setting = etree.SubElement(profile_setting, "log-setting")
-                    log_setting.text = profile_name
-                    logger.info(f"Added log-forwarding profile '{profile_name}'")
-
-                return True
-
-            elif profile_type in [
-                "group",
-                "virus",
-                "spyware",
-                "vulnerability",
-                "url-filtering",
-                "wildfire-analysis",
-                "data-filtering",
-                "file-blocking",
-                "dns-security",
-            ]:
-                # Add security profile or group
+                    logger.debug(f"Group profile '{profile_name}' already exists in policy '{element_name}'")
+                    return False
+            elif profile_type == "log-forwarding":
+                # Set log-forwarding profile
+                log_forwarding = profile_setting.find("./log-forwarding")
+                if log_forwarding is not None:
+                    old_profile = log_forwarding.text
+                    log_forwarding.text = profile_name
+                    logger.info(
+                        f"Updated log-forwarding profile of policy '{element_name}' from '{old_profile}' to '{profile_name}'"
+                    )
+                    return True
+                else:
+                    log_forwarding = etree.SubElement(profile_setting, "log-forwarding")
+                    log_forwarding.text = profile_name
+                    logger.info(f"Added log-forwarding profile '{profile_name}' to policy '{element_name}'")
+                    return True
+            elif profile_type in ["virus", "spyware", "vulnerability", "url-filtering", "file-blocking", "wildfire-analysis"]:
+                # Add individual security profiles
                 profile_elem = profile_setting.find(f"./{profile_type}")
                 if profile_elem is None:
-                    logger.debug(f"Creating new {profile_type} element")
                     profile_elem = etree.SubElement(profile_setting, profile_type)
 
-                # Add as member if it's not already there
+                # Check if this profile is already set
+                if profile_elem.text == profile_name:
+                    logger.debug(f"Profile '{profile_name}' already set for {profile_type} in policy '{element_name}'")
+                    return False
+
+                # Update the profile
+                old_profile = profile_elem.text
+                profile_elem.text = profile_name
+                if old_profile:
+                    logger.info(
+                        f"Updated {profile_type} profile of policy '{element_name}' from '{old_profile}' to '{profile_name}'"
+                    )
+                else:
+                    logger.info(f"Added {profile_type} profile '{profile_name}' to policy '{element_name}'")
+                return True
+            elif profile_type in ["profiles"]:
+                # Handle profiles container for individual security profiles
+                profiles_elem = profile_setting.find("./profiles")
+                if profiles_elem is None:
+                    profiles_elem = etree.SubElement(profile_setting, "profiles")
+
+                # The 'name' parameter contains a dict of profile settings
+                for profile_key, profile_value in params.get("profiles", {}).items():
+                    profile_elem = profiles_elem.find(f"./{profile_key}")
+                    if profile_elem is None:
+                        profile_elem = etree.SubElement(profiles_elem, profile_key)
+
                 members = profile_elem.xpath("./member")
                 member_values = [m.text for m in members if m.text]
 
@@ -1181,46 +1718,51 @@ class ConfigUpdater:
             )
             return False
 
-        logger.debug(f"Updating description of element '{element_name}' with mode '{mode}'")
+        logger.debug(f"Updating description of element '{element_name}'")
 
         try:
             # Find the description element
             desc_elem = element.find("./description")
-
-            # Different behavior based on mode
-            if mode == "replace" or desc_elem is None:
-                if desc_elem is not None:
-                    old_desc = desc_elem.text or ""
-                    desc_elem.text = description
-                    logger.info(
-                        f"Replaced description of element '{element_name}': '{old_desc}' -> '{description}'"
-                    )
-                else:
+            
+            # If the element doesn't exist, create it unless description is empty
+            if desc_elem is None:
+                if description:
                     desc_elem = etree.SubElement(element, "description")
                     desc_elem.text = description
-                    logger.info(f"Added description to element '{element_name}': '{description}'")
-                return True
-
-            elif mode == "append":
-                old_desc = desc_elem.text or ""
-                new_desc = old_desc + description
-                desc_elem.text = new_desc
-                logger.info(
-                    f"Appended to description of element '{element_name}': '{old_desc}' -> '{new_desc}'"
-                )
-                return True
-
-            elif mode == "prepend":
-                old_desc = desc_elem.text or ""
-                new_desc = description + old_desc
-                desc_elem.text = new_desc
-                logger.info(
-                    f"Prepended to description of element '{element_name}': '{old_desc}' -> '{new_desc}'"
-                )
-                return True
-
+                    logger.info(f"Added description to element '{element_name}'")
+                    return True
+                else:
+                    # Nothing to do if there's no description element and we're setting an empty description
+                    return False
             else:
-                logger.warning(f"Unsupported description update mode: {mode}")
+                # Element exists, update based on mode
+                old_desc = desc_elem.text or ""
+                
+                if mode == "replace":
+                    # Simply replace the text
+                    if old_desc != description:
+                        desc_elem.text = description
+                        logger.info(f"Updated description of element '{element_name}'")
+                        return True
+                elif mode == "append":
+                    # Append the new text
+                    new_desc = old_desc + description
+                    if old_desc != new_desc:
+                        desc_elem.text = new_desc
+                        logger.info(f"Appended to description of element '{element_name}'")
+                        return True
+                elif mode == "prepend":
+                    # Prepend the new text
+                    new_desc = description + old_desc
+                    if old_desc != new_desc:
+                        desc_elem.text = new_desc
+                        logger.info(f"Prepended to description of element '{element_name}'")
+                        return True
+                else:
+                    logger.warning(f"Unsupported description update mode: {mode}")
+                    return False
+                
+                logger.debug(f"Description of element '{element_name}' already matches desired value")
                 return False
 
         except Exception as e:
@@ -1228,473 +1770,3 @@ class ConfigUpdater:
                 f"Error updating description of element '{element_name}': {str(e)}", exc_info=True
             )
             return False
-
-    def _enable_disable(self, element, params):
-        """
-        Enable or disable an element.
-
-        Args:
-            element: XML element to update
-            params: Parameters for the operation
-
-        Returns:
-            bool: True if modifications were made, False otherwise
-        """
-        element_name = element.get("name", "unknown")
-        action = params.get("action")  # 'enable' or 'disable'
-
-        if not action or action not in ["enable", "disable"]:
-            logger.warning(
-                f"Invalid action in enable-disable operation for element '{element_name}': {action}"
-            )
-            return False
-
-        logger.debug(f"{action.capitalize()}ing element '{element_name}'")
-
-        try:
-            # Find the disabled element
-            disabled_elem = element.find("./disabled")
-
-            if action == "disable":
-                # Disable the element
-                if disabled_elem is not None:
-                    if disabled_elem.text != "yes":
-                        disabled_elem.text = "yes"
-                        logger.info(f"Disabled element '{element_name}'")
-                        return True
-                    else:
-                        logger.debug(f"Element '{element_name}' is already disabled")
-                        return False
-                else:
-                    disabled_elem = etree.SubElement(element, "disabled")
-                    disabled_elem.text = "yes"
-                    logger.info(f"Disabled element '{element_name}'")
-                    return True
-            else:
-                # Enable the element
-                if disabled_elem is not None:
-                    if disabled_elem.text == "yes":
-                        element.remove(disabled_elem)
-                        logger.info(f"Enabled element '{element_name}'")
-                        return True
-                    else:
-                        logger.debug(f"Element '{element_name}' is already enabled")
-                        return False
-                else:
-                    logger.debug(f"Element '{element_name}' is already enabled (no disabled tag)")
-                    return False
-
-        except Exception as e:
-            logger.error(f"Error {action}ing element '{element_name}': {str(e)}", exc_info=True)
-            return False
-
-    def _update_logging(self, element, params):
-        """
-        Update logging options for a policy.
-
-        Args:
-            element: XML element to update
-            params: Parameters for the operation
-
-        Returns:
-            bool: True if modifications were made, False otherwise
-        """
-        element_name = element.get("name", "unknown")
-        log_setting = params.get("setting")  # 'log-start', 'log-end', 'log-both', 'log-none'
-
-        if not log_setting:
-            logger.warning(
-                f"Missing log setting in update-logging operation for policy '{element_name}'"
-            )
-            return False
-
-        logger.debug(f"Updating logging options for policy '{element_name}' to '{log_setting}'")
-
-        try:
-            # Different log settings require different elements
-            modified = False
-
-            # First remove any existing log settings
-            log_start = element.find("./log-start")
-            log_end = element.find("./log-end")
-
-            if log_start is not None:
-                element.remove(log_start)
-                modified = True
-
-            if log_end is not None:
-                element.remove(log_end)
-                modified = True
-
-            # Then add the new log setting
-            if log_setting == "log-start":
-                etree.SubElement(element, "log-start")
-                logger.info(f"Set log-start for policy '{element_name}'")
-                modified = True
-
-            elif log_setting == "log-end":
-                etree.SubElement(element, "log-end")
-                logger.info(f"Set log-end for policy '{element_name}'")
-                modified = True
-
-            elif log_setting == "log-both":
-                etree.SubElement(element, "log-start")
-                etree.SubElement(element, "log-end")
-                logger.info(f"Set log-both (log-start and log-end) for policy '{element_name}'")
-                modified = True
-
-            elif log_setting == "log-none":
-                # Just removing existing log settings is sufficient
-                if modified:
-                    logger.info(f"Set log-none for policy '{element_name}'")
-                else:
-                    logger.debug(f"Policy '{element_name}' already has log-none (no logging tags)")
-            else:
-                logger.warning(f"Unsupported log setting: {log_setting}")
-                return False
-
-            return modified
-
-        except Exception as e:
-            logger.error(
-                f"Error updating logging for policy '{element_name}': {str(e)}", exc_info=True
-            )
-            return False
-
-    def _update_ip_address(self, element, params):
-        """
-        Update the IP address of an address object.
-
-        Args:
-            element: XML element to update
-            params: Parameters for the operation
-
-        Returns:
-            bool: True if modifications were made, False otherwise
-        """
-        element_name = element.get("name", "unknown")
-        ip_type = params.get("type")  # 'ip-netmask', 'ip-range', 'fqdn'
-        value = params.get("value")
-
-        if not ip_type or not value:
-            logger.warning(
-                f"Missing type or value in update-ip-address operation for object '{element_name}'"
-            )
-            return False
-
-        logger.debug(f"Updating {ip_type} of address object '{element_name}' to '{value}'")
-
-        try:
-            # First, remove any existing IP address elements
-            for type_name in ["ip-netmask", "ip-range", "fqdn"]:
-                elem = element.find(f"./{type_name}")
-                if elem is not None:
-                    element.remove(elem)
-
-            # Add the new IP address element
-            new_elem = etree.SubElement(element, ip_type)
-            new_elem.text = value
-            logger.info(f"Updated address object '{element_name}' with {ip_type}='{value}'")
-            return True
-
-        except Exception as e:
-            logger.error(
-                f"Error updating IP address of object '{element_name}': {str(e)}", exc_info=True
-            )
-            return False
-
-    def _rename_element(self, element, params):
-        """
-        Rename a policy or object.
-
-        Args:
-            element: XML element to update
-            params: Parameters for the operation including:
-                - name: New name to set (direct replacement)
-                - mode: Optional mode - 'replace' (default), 'prefix', 'suffix', 'regex'
-                - pattern: For regex mode, the pattern to search for
-                - replacement: For regex mode, the replacement string
-                - prefix: For prefix mode, the prefix to add
-                - suffix: For suffix mode, the suffix to add
-
-        Returns:
-            bool: True if modifications were made, False otherwise
-        """
-        old_name = element.get("name", "unknown")
-        mode = params.get("mode", "replace")
-
-        try:
-            new_name = None
-
-            if mode == "replace":
-                # Direct name replacement
-                new_name = params.get("name")
-                if not new_name:
-                    logger.warning(f"Missing 'name' in rename operation for element '{old_name}'")
-                    return False
-
-            elif mode == "prefix":
-                # Add a prefix to the name
-                prefix = params.get("prefix")
-                if not prefix:
-                    logger.warning(f"Missing 'prefix' in rename operation for element '{old_name}'")
-                    return False
-                new_name = f"{prefix}{old_name}"
-
-            elif mode == "suffix":
-                # Add a suffix to the name
-                suffix = params.get("suffix")
-                if not suffix:
-                    logger.warning(f"Missing 'suffix' in rename operation for element '{old_name}'")
-                    return False
-                new_name = f"{old_name}{suffix}"
-
-            elif mode == "regex":
-                # Use regex pattern replacement
-                pattern = params.get("pattern")
-                replacement = params.get("replacement")
-                if not pattern or replacement is None:  # Allow empty string replacement
-                    logger.warning(
-                        f"Missing 'pattern' or 'replacement' in rename operation for element '{old_name}'"
-                    )
-                    return False
-
-                import re
-
-                new_name = re.sub(pattern, replacement, old_name)
-
-            else:
-                logger.warning(f"Unsupported rename mode: {mode}")
-                return False
-
-            # Check if the new name is different from the old name
-            if new_name == old_name:
-                logger.debug(f"New name same as old name, no change needed for '{old_name}'")
-                return False
-
-            # Update the name attribute
-            element.set("name", new_name)
-            logger.info(f"Renamed element from '{old_name}' to '{new_name}'")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error renaming element '{old_name}': {str(e)}", exc_info=True)
-            return False
-
-    def bulk_merge_objects(
-        self,
-        source_tree: etree._ElementTree,
-        object_type: str,
-        criteria: Optional[Dict[str, Any]],
-        source_context_type: str,
-        target_context_type: str,
-        source_device_type: Optional[str] = None,
-        source_version: Optional[str] = None,
-        skip_if_exists: bool = True,
-        copy_references: bool = True,
-        conflict_strategy: Optional[ConflictStrategy] = None,
-        **kwargs,
-    ) -> Tuple[int, int]:
-        """
-        Merge objects from a source tree to the target tree based on criteria.
-
-        This method combines the ConfigQuery functionality with ObjectMerger to
-        perform bulk merging of objects from one configuration to another.
-
-        Args:
-            source_tree: Source ElementTree containing objects to merge from
-            object_type: Type of object to merge (address, service, etc.)
-            criteria: Dictionary of criteria to select objects to merge
-            source_context_type: Type of source context (shared, device_group, vsys)
-            target_context_type: Type of target context (shared, device_group, vsys)
-            source_device_type: Type of source device ("firewall" or "panorama")
-            source_version: PAN-OS version of source configuration
-            skip_if_exists: Skip if object already exists in target (deprecated, use conflict_strategy instead)
-            copy_references: Copy object references (e.g., address group members)
-            conflict_strategy: Strategy to use when resolving conflicts with existing objects
-            **kwargs: Additional parameters like source_device_group, target_device_group, etc.
-
-        Returns:
-            Tuple[int, int]: (number of objects merged, total number of objects attempted)
-        """
-        logger.info(
-            f"Performing bulk merge of {object_type} objects from {source_context_type} to {target_context_type}"
-        )
-        logger.debug(f"Merge criteria: {criteria}")
-
-        # Set default source device type and version if not provided
-        source_device_type = source_device_type or self.device_type
-        source_version = source_version or self.version
-
-        # Extract source context parameters
-        source_params = {}
-        for k, v in kwargs.items():
-            if k.startswith("source_"):
-                source_params[k] = v
-
-        # Create a query object for the source tree
-        source_query = ConfigQuery(
-            source_tree, source_device_type, source_context_type, source_version, **source_params
-        )
-
-        # Select objects to merge
-        objects_to_merge = source_query.select_objects(object_type, criteria)
-
-        if not objects_to_merge:
-            logger.warning("No objects found in source matching the criteria")
-            return 0, 0
-
-        logger.info(f"Found {len(objects_to_merge)} objects in source matching the criteria")
-
-        # Create the merger
-        merger = ObjectMerger(
-            source_tree,
-            self.tree,
-            source_device_type,
-            self.device_type,
-            source_version,
-            self.version,
-        )
-
-        # Merge each object
-        merged_count = 0
-        for obj in objects_to_merge:
-            name = obj.get("name")
-            if not name:
-                logger.warning("Skipping object with no name attribute")
-                continue
-
-            logger.info(f"Merging {object_type} object '{name}'")
-
-            # Extract target context parameters
-            target_params = {}
-            for k, v in kwargs.items():
-                if k.startswith("target_"):
-                    target_params[k] = v
-
-            try:
-                success = merger.copy_object(
-                    object_type,
-                    name,
-                    source_context_type,
-                    target_context_type,
-                    skip_if_exists,
-                    copy_references,
-                    conflict_strategy=conflict_strategy,
-                    **{**source_params, **target_params},
-                )
-
-                if success:
-                    merged_count += 1
-                    logger.info(f"Successfully merged {object_type} object '{name}'")
-                else:
-                    logger.warning(f"Failed to merge {object_type} object '{name}'")
-
-            except Exception as e:
-                logger.error(
-                    f"Error merging {object_type} object '{name}': {str(e)}", exc_info=True
-                )
-
-        logger.info(
-            f"Bulk merge completed: {merged_count} of {len(objects_to_merge)} objects merged"
-        )
-        return merged_count, len(objects_to_merge)
-
-    def bulk_deduplicate_objects(
-        self,
-        object_type: str,
-        criteria: Optional[Dict[str, Any]] = None,
-        primary_name_strategy: str = "shortest",
-        dry_run: bool = False,
-        **kwargs,
-    ) -> Tuple[Dict[str, Dict[str, Any]], int]:
-        """
-        Find and merge duplicate objects in the configuration.
-
-        This method integrates with the DeduplicationEngine to find and merge
-        duplicate objects based on their values.
-
-        Args:
-            object_type: Type of object to deduplicate (address, service, tag)
-            criteria: Optional criteria to filter objects before deduplication
-            primary_name_strategy: Strategy for selecting primary object name
-                                  ("first", "shortest", "longest", "alphabetical")
-            dry_run: If True, only identify duplicates but don't merge them
-            **kwargs: Additional context parameters
-
-        Returns:
-            Tuple: (
-                Dictionary containing details of the changes made,
-                Number of duplicate objects merged
-            )
-        """
-        logger.info(f"Performing bulk deduplication of {object_type} objects")
-
-        # If criteria is provided, first filter objects
-        if criteria:
-            logger.info(f"Pre-filtering objects using criteria: {criteria}")
-            objects = self.query.select_objects(object_type, criteria)
-
-            if not objects:
-                logger.warning(f"No {object_type} objects found matching the criteria")
-                return {}, 0
-
-            logger.info(f"Found {len(objects)} objects matching criteria for deduplication")
-
-            # We need to use these specific objects for deduplication
-            # Currently we don't have a way to pass specific objects to the deduplication engine
-            # This would require enhancing the deduplication engine to accept a list of objects
-            logger.warning(
-                "Criteria-based filtering for deduplication is not fully implemented yet"
-            )
-            # For now, we'll proceed with deduplicating all objects of this type
-
-        # Create the deduplication engine
-        dedup_engine = DeduplicationEngine(
-            self.tree, self.device_type, self.context_type, self.version, **self.context_kwargs
-        )
-
-        # Find duplicate objects
-        logger.info(f"Finding duplicate {object_type} objects")
-        duplicates, references = dedup_engine.find_duplicates(object_type)
-
-        if not duplicates:
-            logger.info(f"No duplicate {object_type} objects found")
-            return {}, 0
-
-        total_duplicates = sum(len(group) - 1 for group in duplicates.values())
-        logger.info(
-            f"Found {total_duplicates} duplicate objects across {len(duplicates)} unique values"
-        )
-
-        # If dry run, just return the duplicates without merging
-        if dry_run:
-            logger.info("Dry run mode, not merging duplicates")
-            changes = {}
-
-            for value, objects in duplicates.items():
-                object_names = [name for name, _ in objects]
-                primary = object_names[0]  # Just use first as example
-
-                changes[value] = {
-                    "primary": primary,
-                    "merged": object_names[1:],
-                    "references_updated": [],
-                }
-
-            return changes, 0
-
-        # Merge the duplicate objects
-        logger.info(
-            f"Merging duplicate {object_type} objects using '{primary_name_strategy}' strategy"
-        )
-        changes = dedup_engine.merge_duplicates(duplicates, references, primary_name_strategy)
-
-        merged_count = sum(len(info["merged"]) for info in changes.values())
-        reference_count = sum(len(info["references_updated"]) for info in changes.values())
-
-        logger.info(
-            f"Deduplication complete: merged {merged_count} objects and updated {reference_count} references"
-        )
-
-        return changes, merged_count

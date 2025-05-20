@@ -28,7 +28,10 @@ def list_objects(
     config: str = ConfigOptions.config_file(),
     object_type: str = ObjectOptions.object_type(),
     output: Optional[str] = typer.Option(
-        None, "--output", "-o", help="Output file for results (JSON format)"
+        None, "--output", "-o", help="Output file for results"
+    ),
+    format: str = typer.Option(
+        "json", "--format", "-f", help="Output format (json, table, text, csv, yaml, html)"
     ),
     query_filter: Optional[str] = typer.Option(
         None,
@@ -98,65 +101,171 @@ def list_objects(
             objects = filtered_objects
             logger.info(f"Filtered to {len(objects)} {object_type} objects matching query")
 
-        # Display a list of object names using the common formatter
-        if objects:
-            # We've already logged the count from the get_objects function,
-            # but we'll format the objects nicely for display
+        # Convert objects dictionary to a list of dictionaries with name field
+        object_list = []
+        for name, properties in objects.items():
+            obj = {"name": name}
+            obj.update(properties)
+            object_list.append(obj)
 
-            # Convert objects dictionary to a list of dictionaries with name field
-            object_list = []
-            for name, properties in objects.items():
-                obj = {"name": name}
-                obj.update(properties)
-                object_list.append(obj)
+        # Format the output based on format option
+        if format.lower() == "table":
+            # Table format using rich
+            from rich.console import Console
+            from rich.table import Table
 
-            # Use the common format_objects_list function
+            console = Console()
+            table = Table(title=f"{object_type.capitalize()} Objects")
+
+            # Add columns based on the data
+            if object_list:
+                # Always include name column
+                table.add_column("name")
+
+                # Add columns for common fields based on object type
+                if object_type == "address":
+                    for key in ["ip-netmask", "ip-range", "fqdn", "description"]:
+                        if any(key in obj for obj in object_list):
+                            table.add_column(key)
+                elif object_type == "service":
+                    for key in ["protocol", "port", "source-port", "dest-port", "description"]:
+                        if any(key in obj for obj in object_list):
+                            table.add_column(key)
+                elif "group" in object_type:
+                    table.add_column("members")
+                    table.add_column("description")
+
+                # Add rows
+                for obj in object_list:
+                    values = []
+                    for column in table.columns:
+                        header = column.header
+
+                        # Special handling for group members
+                        if header == "members" and "static" in obj and isinstance(obj["static"], list):
+                            values.append(str(len(obj["static"])))
+                        else:
+                            values.append(str(obj.get(header, "")))
+
+                    table.add_row(*values)
+
+                # Display the table
+                console.print(table)
+            else:
+                typer.echo(f"No {object_type} objects found matching criteria")
+
+        elif format.lower() in ["text", "txt"]:
+            # Text format using common formatter
+            from ..common import format_objects_list
+
+            formatted_lines = format_objects_list(object_list, include_header=True, object_type=object_type)
+            for line in formatted_lines:
+                typer.echo(line)
+
+        elif format.lower() == "csv":
+            # CSV format
+            if object_list:
+                import csv
+                import io
+
+                output_stream = io.StringIO()
+
+                # Find all fields for headers
+                fields = set(["name"])
+                for obj in object_list:
+                    fields.update(obj.keys())
+
+                writer = csv.DictWriter(output_stream, fieldnames=sorted(list(fields)))
+                writer.writeheader()
+                for obj in object_list:
+                    writer.writerow(obj)
+
+                csv_output = output_stream.getvalue()
+
+                if output:
+                    with open(output, "w") as f:
+                        f.write(csv_output)
+                    typer.echo(f"Saved {len(object_list)} objects to {output} in CSV format")
+                else:
+                    typer.echo(csv_output)
+            else:
+                typer.echo(f"No {object_type} objects found matching criteria")
+
+        elif format.lower() == "yaml":
+            # YAML format
             try:
+                import yaml
+
+                yaml_output = yaml.dump(object_list, sort_keys=False, default_flow_style=False)
+
+                if output:
+                    with open(output, "w") as f:
+                        f.write(yaml_output)
+                    typer.echo(f"Saved {len(object_list)} objects to {output} in YAML format")
+                else:
+                    typer.echo(yaml_output)
+            except ImportError:
+                typer.echo("Error: PyYAML not installed. Install with 'pip install pyyaml'")
+                raise typer.Exit(1)
+
+        elif format.lower() == "html":
+            # HTML format
+            html = "<html><head><style>"
+            html += "table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:8px;border:1px solid #ddd}"
+            html += "tr:nth-child(even){background-color:#f2f2f2}th{background-color:#4CAF50;color:white}"
+            html += "</style></head><body>"
+
+            html += f"<h2>{object_type.capitalize()} Objects</h2>"
+
+            if object_list:
+                html += "<table><tr>"
+
+                # Find all fields for headers
+                fields = set(["name"])
+                for obj in object_list:
+                    fields.update(obj.keys())
+
+                # Add headers
+                for field in sorted(list(fields)):
+                    html += f"<th>{field}</th>"
+
+                html += "</tr>"
+
+                # Add rows
+                for obj in object_list:
+                    html += "<tr>"
+                    for field in sorted(list(fields)):
+                        value = obj.get(field, "")
+                        html += f"<td>{value}</td>"
+                    html += "</tr>"
+
+                html += "</table>"
+            else:
+                html += f"<p>No {object_type} objects found matching criteria</p>"
+
+            html += "</body></html>"
+
+            if output:
+                with open(output, "w") as f:
+                    f.write(html)
+                typer.echo(f"Saved {len(object_list)} objects to {output} in HTML format")
+            else:
+                typer.echo(html)
+
+        else:
+            # Default JSON format
+            if output:
+                # Save to JSON file
+                with open(output, "w") as f:
+                    json.dump(object_list, f, indent=2)
+                typer.echo(f"Saved {len(object_list)} objects to {output} in JSON format")
+            else:
+                # If no output file specified, display in text format for console readability
                 from ..common import format_objects_list
 
-                formatted_lines = format_objects_list(object_list, include_header=False)
+                formatted_lines = format_objects_list(object_list, include_header=True, object_type=object_type)
                 for line in formatted_lines:
-                    logger.info(line)
-            except ImportError:
-                # Fallback to basic formatting if import fails
-                for name, data in objects.items():
-                    # Create a summarized version of the object data
-                    data_info = []
-
-                    if object_type == "address":
-                        for key in ["ip-netmask", "ip-range", "fqdn"]:
-                            if key in data:
-                                data_info.append(f"{key}:{data[key]}")
-                                break
-                    elif object_type == "service":
-                        if "protocol" in data:
-                            protocol = data["protocol"]
-                            if "port" in data:
-                                data_info.append(f"{protocol}:{data['port']}")
-                            elif "dest-port" in data:
-                                data_info.append(f"{protocol}:{data['dest-port']}")
-                            else:
-                                data_info.append(f"{protocol}")
-                    elif object_type.endswith("_group"):
-                        if "static" in data and isinstance(data["static"], list):
-                            data_info.append(f"members:{len(data['static'])}")
-                        elif "dynamic" in data:
-                            filter_text = data.get("dynamic", {}).get("filter", "")
-                            data_info.append(f"filter:{filter_text[:30]}")
-
-                    # Format output
-                    if data_info:
-                        logger.info(f"  - {name}: {' | '.join(data_info)}")
-                    else:
-                        logger.info(f"  - {name}")
-        else:
-            logger.info(f"No {object_type} objects found matching criteria")
-
-        # Save to file if requested
-        if output:
-            with open(output, "w") as f:
-                json.dump(objects, f, indent=2)
-            logger.info(f"Objects saved to {output}")
+                    typer.echo(line)
 
     except Exception as e:
         logger.error(f"Error listing objects: {e}")

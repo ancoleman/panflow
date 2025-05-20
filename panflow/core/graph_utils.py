@@ -1,34 +1,43 @@
 """
-Graph utilities for PAN-OS configurations.
+Graph utilities for PANFlow.
 
-This module provides utilities for representing and querying PAN-OS configurations
-as a graph data structure. It allows for complex queries and relationship traversal
-of configuration objects.
+This module provides functions to build and work with a graph representation of a PAN-OS configuration.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Set, Tuple, Union
 import networkx as nx
+from typing import Dict, Any, Optional, List
 from lxml import etree
-from panflow.core.xml.base import get_xpath_element_value
+
+# Initialize logger
+logger = logging.getLogger("panflow")
 
 
-# Set up logging
-logger = logging.getLogger(__name__)
+def get_xpath_element_value(elem, xpath):
+    """Get the text value from an XPath."""
+    elements = elem.xpath(xpath)
+    if elements and hasattr(elements[0], "text"):
+        return elements[0].text
+    return None
 
 
 class ConfigGraph:
-    """
-    Graph representation of a PAN-OS configuration.
+    """Graph representation of a PAN-OS configuration."""
 
-    This class builds and maintains a directed graph of configuration objects
-    where nodes represent objects and edges represent relationships between them.
-    """
-
-    def __init__(self):
-        """Initialize an empty configuration graph."""
+    def __init__(self, device_type=None, context_type=None, **context_kwargs):
+        """
+        Initialize a ConfigGraph.
+        
+        Args:
+            device_type: Type of device ("firewall" or "panorama")
+            context_type: Type of context ("shared", "device_group", "vsys")
+            **context_kwargs: Additional context parameters (device_group, vsys, etc.)
+        """
         self.graph = nx.DiGraph()
         self.root_node = None
+        self.device_type = device_type
+        self.context_type = context_type
+        self.context_kwargs = context_kwargs
 
     def build_from_xml(self, xml_root: etree._Element):
         """
@@ -40,6 +49,14 @@ class ConfigGraph:
         self.graph.clear()
         self.root_node = "config_root"
         self.graph.add_node(self.root_node, type="root", xml=xml_root)
+        
+        # Store context info in the root node for reference
+        if self.device_type:
+            self.graph.nodes[self.root_node]["device_type"] = self.device_type
+        if self.context_type:
+            self.graph.nodes[self.root_node]["context_type"] = self.context_type
+        for key, value in self.context_kwargs.items():
+            self.graph.nodes[self.root_node][key] = value
 
         # Process address objects
         self._process_address_objects(xml_root)
@@ -65,8 +82,24 @@ class ConfigGraph:
 
     def _process_address_objects(self, xml_root: etree._Element):
         """Process all address objects in the configuration."""
-        # Find all address objects in the config
+        # Find all address objects in the config, respecting context
+        from panflow.core.xpath_resolver import get_object_xpath
+        
         address_xpath = ".//address/entry"
+        if self.device_type and self.context_type:
+            try:
+                # Get context-aware xpath for addresses
+                address_xpath = get_object_xpath(
+                    "address", 
+                    self.device_type, 
+                    self.context_type, 
+                    "10.1",  # Use a default version if not provided
+                    **self.context_kwargs
+                )
+                logger.debug(f"Using context-specific address xpath: {address_xpath}")
+            except Exception as e:
+                logger.warning(f"Failed to get context-specific xpath: {e}. Using default.")
+                
         for addr in xml_root.xpath(address_xpath):
             name = addr.get("name")
             if not name:
@@ -91,8 +124,24 @@ class ConfigGraph:
 
     def _process_address_groups(self, xml_root: etree._Element):
         """Process all address groups and their members."""
-        # Find all address groups in the config
+        # Find all address groups in the config, respecting context
+        from panflow.core.xpath_resolver import get_object_xpath
+        
         group_xpath = ".//address-group/entry"
+        if self.device_type and self.context_type:
+            try:
+                # Get context-aware xpath for address groups
+                group_xpath = get_object_xpath(
+                    "address-group", 
+                    self.device_type, 
+                    self.context_type, 
+                    "10.1",  # Use a default version if not provided
+                    **self.context_kwargs
+                )
+                logger.debug(f"Using context-specific address-group xpath: {group_xpath}")
+            except Exception as e:
+                logger.warning(f"Failed to get context-specific xpath: {e}. Using default.")
+                
         for group in xml_root.xpath(group_xpath):
             name = group.get("name")
             if not name:
@@ -126,8 +175,24 @@ class ConfigGraph:
 
     def _process_service_objects(self, xml_root: etree._Element):
         """Process all service objects in the configuration."""
-        # Find all service objects
+        # Find all service objects, respecting context
+        from panflow.core.xpath_resolver import get_object_xpath
+        
         service_xpath = ".//service/entry"
+        if self.device_type and self.context_type:
+            try:
+                # Get context-aware xpath for services
+                service_xpath = get_object_xpath(
+                    "service", 
+                    self.device_type, 
+                    self.context_type, 
+                    "10.1",  # Use a default version if not provided
+                    **self.context_kwargs
+                )
+                logger.debug(f"Using context-specific service xpath: {service_xpath}")
+            except Exception as e:
+                logger.warning(f"Failed to get context-specific xpath: {e}. Using default.")
+                
         for svc in xml_root.xpath(service_xpath):
             name = svc.get("name")
             if not name:
@@ -152,8 +217,24 @@ class ConfigGraph:
 
     def _process_service_groups(self, xml_root: etree._Element):
         """Process all service groups and their members."""
-        # Find all service groups
+        # Find all service groups, respecting context
+        from panflow.core.xpath_resolver import get_object_xpath
+        
         group_xpath = ".//service-group/entry"
+        if self.device_type and self.context_type:
+            try:
+                # Get context-aware xpath for service groups
+                group_xpath = get_object_xpath(
+                    "service-group", 
+                    self.device_type, 
+                    self.context_type, 
+                    "10.1",  # Use a default version if not provided
+                    **self.context_kwargs
+                )
+                logger.debug(f"Using context-specific service-group xpath: {group_xpath}")
+            except Exception as e:
+                logger.warning(f"Failed to get context-specific xpath: {e}. Using default.")
+                
         for group in xml_root.xpath(group_xpath):
             name = group.get("name")
             if not name:
@@ -187,63 +268,232 @@ class ConfigGraph:
 
     def _process_security_rules(self, xml_root: etree._Element):
         """Process all security rules and their object references."""
-        # Find all security rules
+        # Find all security rules, respecting context
+        from panflow.core.xpath_resolver import get_policy_xpath
+        
+        # Start with a default path
         rules_xpath = ".//security/rules/entry"
-        for rule in xml_root.xpath(rules_xpath):
+        
+        # Special handling for Panorama device groups
+        device_group = None
+        if self.device_type == "panorama" and self.context_type == "device_group":
+            device_group = self.context_kwargs.get("device_group")
+            logger.debug(f"Processing security rules for device group: {device_group}")
+        
+        if self.device_type and self.context_type:
+            try:
+                # For Panorama, use the correct policy type based on context
+                policy_type = "security_pre_rules" if self.device_type == "panorama" else "security_rules"
+                
+                # Get context-aware xpath for security rules
+                rules_xpath = get_policy_xpath(
+                    policy_type, 
+                    self.device_type, 
+                    self.context_type, 
+                    "10.1",  # Use a default version if not provided
+                    **self.context_kwargs
+                )
+                
+                # Add extensive debug logging
+                logger.debug(f"Device type: {self.device_type}, Context type: {self.context_type}")
+                logger.debug(f"Context kwargs: {self.context_kwargs}")
+                logger.debug(f"Using policy type: {policy_type}")
+                logger.debug(f"Generated xpath: {rules_xpath}")
+                logger.debug(f"Using context-specific security rules xpath: {rules_xpath}")
+            except Exception as e:
+                logger.warning(f"Failed to get context-specific xpath: {e}. Using default.")
+        
+        # For Panorama, process each device group separately if no specific context is provided
+        if self.device_type == "panorama" and device_group is None and self.context_type == "shared":
+            # Find all device groups
+            device_groups = xml_root.xpath("/config/devices/entry/device-group/entry")
+            for dg in device_groups:
+                dg_name = dg.get("name")
+                if not dg_name:
+                    continue
+                
+                # Process security rules in this device group
+                self._process_device_group_rules(dg, dg_name)
+        else:
+            # Process rules in the specified context
+            # The XPath returns the 'rules' element, not the 'entry' elements
+            # We need to append '/entry' to get the actual rule entries
+            rule_entries_xpath = f"{rules_xpath}/entry"
+            logger.debug(f"Looking for security rule entries with xpath: {rule_entries_xpath}")
+            
+            for rule in xml_root.xpath(rule_entries_xpath):
+                name = rule.get("name")
+                if not name:
+                    logger.debug(f"Security rule has no name attribute: {etree.tostring(rule)[:100]}")
+                    continue
+
+                rule_id = f"security-rule:{name}"
+                
+                # Add the rule node with device group information if applicable
+                props = {
+                    "type": "security-rule", 
+                    "labels": ["security_rule"],  # Add security_rule label for easier querying
+                    "name": name, 
+                    "xml": rule
+                }
+                
+                # Include device group information for Panorama
+                if device_group:
+                    props["device_group"] = device_group
+                
+                self.graph.add_node(rule_id, **props)
+                self.graph.add_edge(self.root_node, rule_id, relation="contains")
+                
+                # Process rule properties and references
+                self._process_rule_properties(rule, rule_id)
+    
+    def _process_device_group_rules(self, device_group_elem, device_group_name):
+        """Process security rules for a specific device group in Panorama."""
+        # Find pre-rulebase security rules
+        rules = device_group_elem.xpath("./pre-rulebase/security/rules/entry")
+        
+        for rule in rules:
             name = rule.get("name")
             if not name:
                 continue
-
+            
             rule_id = f"security-rule:{name}"
-
-            # Add the rule node
-            self.graph.add_node(rule_id, type="security-rule", name=name, xml=rule)
+            
+            # Add the rule node with device group information
+            self.graph.add_node(
+                rule_id, 
+                type="security-rule", 
+                name=name, 
+                device_group=device_group_name,
+                xml=rule
+            )
             self.graph.add_edge(self.root_node, rule_id, relation="contains")
-
-            # Process additional rule properties
-            from_zone = rule.xpath("./from/member")
-            if from_zone and from_zone[0].text:
-                self.graph.nodes[rule_id]["from"] = from_zone[0].text
-
-            to_zone = rule.xpath("./to/member")
-            if to_zone and to_zone[0].text:
-                self.graph.nodes[rule_id]["to"] = to_zone[0].text
-
-            action = get_xpath_element_value(rule, "./action")
-            if action:
-                self.graph.nodes[rule_id]["action"] = action
-
-            # Process source addresses
-            self._process_rule_references(rule, rule_id, "source/member", "address", "uses-source")
-
-            # Process destination addresses
-            self._process_rule_references(
-                rule, rule_id, "destination/member", "address", "uses-destination"
+            
+            # Process rule properties and references
+            self._process_rule_properties(rule, rule_id)
+        
+        # Also find post-rulebase security rules
+        post_rules = device_group_elem.xpath("./post-rulebase/security/rules/entry")
+        
+        for rule in post_rules:
+            name = rule.get("name")
+            if not name:
+                continue
+            
+            rule_id = f"security-rule:{name}"
+            
+            # Add the rule node with device group information
+            self.graph.add_node(
+                rule_id, 
+                type="security-rule", 
+                name=name, 
+                device_group=device_group_name,
+                is_post_rule=True,
+                xml=rule
             )
+            self.graph.add_edge(self.root_node, rule_id, relation="contains")
+            
+            # Process rule properties and references
+            self._process_rule_properties(rule, rule_id)
+            
+    def _process_rule_properties(self, rule, rule_id):
+        """Process properties and references for a security rule."""
+        # Process additional rule properties
+        from_zone = rule.xpath("./from/member")
+        if from_zone and from_zone[0].text:
+            self.graph.nodes[rule_id]["from"] = from_zone[0].text
 
-            # Process service references
-            self._process_rule_references(
-                rule, rule_id, "service/member", "service", "uses-service"
-            )
+        to_zone = rule.xpath("./to/member")
+        if to_zone and to_zone[0].text:
+            self.graph.nodes[rule_id]["to"] = to_zone[0].text
 
-            # Process application references
-            self._process_rule_references(
-                rule, rule_id, "application/member", "application", "uses-application"
-            )
+        action = get_xpath_element_value(rule, "./action")
+        if action:
+            self.graph.nodes[rule_id]["action"] = action
+            
+        # Process disabled status
+        disabled = get_xpath_element_value(rule, "./disabled")
+        if disabled:
+            self.graph.nodes[rule_id]["disabled"] = disabled
+
+        # Process log settings if present
+        log_setting = get_xpath_element_value(rule, "./log-setting")
+        if log_setting:
+            self.graph.nodes[rule_id]["log_setting"] = log_setting
+
+        # Process source addresses
+        self._process_rule_references(rule, rule_id, "source/member", "address", "uses-source")
+
+        # Process destination addresses
+        self._process_rule_references(
+            rule, rule_id, "destination/member", "address", "uses-destination"
+        )
+
+        # Process service references
+        self._process_rule_references(
+            rule, rule_id, "service/member", "service", "uses-service"
+        )
+
+        # Process application references
+        self._process_rule_references(
+            rule, rule_id, "application/member", "application", "uses-application"
+        )
 
     def _process_nat_rules(self, xml_root: etree._Element):
         """Process all NAT rules and their object references."""
-        # Find all NAT rules
+        # Find all NAT rules, respecting context
+        from panflow.core.xpath_resolver import get_policy_xpath
+        
+        # Start with a default path
         rules_xpath = ".//nat/rules/entry"
-        for rule in xml_root.xpath(rules_xpath):
+        
+        # Special handling for Panorama device groups
+        device_group = None
+        if self.device_type == "panorama" and self.context_type == "device_group":
+            device_group = self.context_kwargs.get("device_group")
+            logger.debug(f"Processing NAT rules for device group: {device_group}")
+        
+        if self.device_type and self.context_type:
+            try:
+                # Get context-aware xpath for NAT rules
+                rules_xpath = get_policy_xpath(
+                    "nat_rules", 
+                    self.device_type, 
+                    self.context_type, 
+                    "10.1",  # Use a default version if not provided
+                    **self.context_kwargs
+                )
+                logger.debug(f"Using context-specific NAT rules xpath: {rules_xpath}")
+            except Exception as e:
+                logger.warning(f"Failed to get context-specific xpath: {e}. Using default.")
+        
+        # Process rules in the specified context
+        # The XPath returns the 'rules' element, not the 'entry' elements
+        # We need to append '/entry' to get the actual rule entries
+        rule_entries_xpath = f"{rules_xpath}/entry"
+        logger.debug(f"Looking for rule entries with xpath: {rule_entries_xpath}")
+        
+        for rule in xml_root.xpath(rule_entries_xpath):
             name = rule.get("name")
             if not name:
+                logger.debug(f"Rule has no name attribute: {etree.tostring(rule)[:100]}")
                 continue
 
             rule_id = f"nat-rule:{name}"
-
-            # Add the rule node
-            self.graph.add_node(rule_id, type="nat-rule", name=name, xml=rule)
+            
+            # Add the rule node with device group information if applicable
+            props = {
+                "type": "nat-rule", 
+                "labels": ["nat_rule"],  # Add nat_rule label for easier querying
+                "name": name, 
+                "xml": rule
+            }
+            
+            # Include device group information for Panorama
+            if device_group:
+                props["device_group"] = device_group
+            
+            self.graph.add_node(rule_id, **props)
             self.graph.add_edge(self.root_node, rule_id, relation="contains")
 
             # Process source addresses
@@ -256,6 +506,74 @@ class ConfigGraph:
 
             # Process service references
             self._process_rule_references(rule, rule_id, "service", "service", "uses-service")
+            
+        # For Panorama, also process NAT rules in device groups if not already targeting a specific group
+        if self.device_type == "panorama" and device_group is None and self.context_type == "shared":
+            # Find all device groups
+            device_groups = xml_root.xpath("/config/devices/entry/device-group/entry")
+            for dg in device_groups:
+                dg_name = dg.get("name")
+                if not dg_name:
+                    continue
+                
+                # Process pre-rulebase NAT rules
+                pre_rules = dg.xpath("./pre-rulebase/nat/rules/entry")
+                for rule in pre_rules:
+                    name = rule.get("name")
+                    if not name:
+                        continue
+                    
+                    rule_id = f"nat-rule:{name}"
+                    
+                    self.graph.add_node(
+                        rule_id, 
+                        type="nat-rule", 
+                        name=name, 
+                        device_group=dg_name,
+                        xml=rule
+                    )
+                    self.graph.add_edge(self.root_node, rule_id, relation="contains")
+                    
+                    # Process source addresses
+                    self._process_rule_references(rule, rule_id, "source/member", "address", "uses-source")
+
+                    # Process destination addresses
+                    self._process_rule_references(
+                        rule, rule_id, "destination/member", "address", "uses-destination"
+                    )
+
+                    # Process service references
+                    self._process_rule_references(rule, rule_id, "service", "service", "uses-service")
+                
+                # Process post-rulebase NAT rules
+                post_rules = dg.xpath("./post-rulebase/nat/rules/entry")
+                for rule in post_rules:
+                    name = rule.get("name")
+                    if not name:
+                        continue
+                    
+                    rule_id = f"nat-rule:{name}"
+                    
+                    self.graph.add_node(
+                        rule_id, 
+                        type="nat-rule", 
+                        name=name, 
+                        device_group=dg_name,
+                        is_post_rule=True,
+                        xml=rule
+                    )
+                    self.graph.add_edge(self.root_node, rule_id, relation="contains")
+                    
+                    # Process source addresses
+                    self._process_rule_references(rule, rule_id, "source/member", "address", "uses-source")
+
+                    # Process destination addresses
+                    self._process_rule_references(
+                        rule, rule_id, "destination/member", "address", "uses-destination"
+                    )
+
+                    # Process service references
+                    self._process_rule_references(rule, rule_id, "service", "service", "uses-service")
 
     def _process_rule_references(
         self, rule: etree._Element, rule_id: str, xpath: str, ref_type: str, relation: str
@@ -384,66 +702,4 @@ class ConfigGraph:
         if "xml" in data:
             del data["xml"]
 
-        # Add the node ID
-        data["id"] = node_id
-
-        # Add edge information
-        edges_out = []
-        for succ in self.graph.successors(node_id):
-            edge_data = self.graph.get_edge_data(node_id, succ)
-            edge_type = edge_data.get("relation", "unknown")
-            edges_out.append({"target": succ, "type": edge_type})
-
-        if edges_out:
-            data["edges_out"] = edges_out
-
-        edges_in = []
-        for pred in self.graph.predecessors(node_id):
-            edge_data = self.graph.get_edge_data(pred, node_id)
-            edge_type = edge_data.get("relation", "unknown")
-            edges_in.append({"source": pred, "type": edge_type})
-
-        if edges_in:
-            data["edges_in"] = edges_in
-
         return data
-
-    def get_unused_objects(self, object_type: str = None) -> List[Dict]:
-        """
-        Find all objects of the specified type that are not referenced by any rules.
-
-        Args:
-            object_type: Optional type of objects to check ("address", "service", etc.)
-                         If None, checks all object types
-
-        Returns:
-            List of unused objects
-        """
-        unused = []
-
-        for node_id, data in self.graph.nodes(data=True):
-            # Skip non-object nodes and the root node
-            if node_id == self.root_node:
-                continue
-
-            node_type = data.get("type", "")
-
-            # If object_type is specified, filter by it
-            if object_type and node_type != object_type:
-                continue
-
-            # Skip rule nodes
-            if "rule" in node_type:
-                continue
-
-            # Check if this node has any predecessors other than the root
-            has_refs = False
-            for pred in self.graph.predecessors(node_id):
-                if pred != self.root_node and "rule" in self.graph.nodes[pred].get("type", ""):
-                    has_refs = True
-                    break
-
-            if not has_refs:
-                unused.append(self._node_to_dict(node_id))
-
-        return unused

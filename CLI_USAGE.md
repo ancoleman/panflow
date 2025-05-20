@@ -1041,10 +1041,23 @@ python cli.py object bulk-delete --config config.xml --type address --query-filt
 Apply the same changes to multiple policies matching specific criteria or graph query:
 
 ```bash
-python cli.py policy bulk-update --config CONFIG_FILE --type POLICY_TYPE --criteria CRITERIA_FILE --operations OPERATIONS_FILE --output OUTPUT_FILE [options]
+python cli.py policy bulk-update --config CONFIG_FILE --type POLICY_TYPE [--criteria CRITERIA_FILE] [--query-filter QUERY] --operations OPERATIONS_FILE --output OUTPUT_FILE [options]
 ```
 
-This command allows you to apply a set of operations to all policies that match the specified criteria. This is especially useful for tasks like:
+Options:
+- `--config`, `-c`: Path to XML configuration file (**required**)
+- `--type`, `-t`: Type of policy to update (**required**)
+- `--operations`: Path to JSON file with operations to apply (**required**)
+- `--output`, `-o`: Output file for updated configuration (**required**)
+- `--criteria`: Path to JSON file with criteria for selecting policies
+- `--query-filter`, `-q`: Graph query filter to select policies
+- `--device-type`: Device type (firewall or panorama)
+- `--context`: Context (shared, device_group, vsys)
+- `--device-group`: Device group name (for Panorama device_group context)
+- `--vsys`: VSYS name (for firewall vsys context)
+- `--dry-run`: Show what would be updated without making changes
+
+This command allows you to apply a set of operations to all policies that match the specified criteria or query filter. This is especially useful for tasks like:
 
 - Adding a log forwarding profile to multiple rules
 - Adding a security profile group to multiple rules
@@ -1072,6 +1085,23 @@ Example operations file (operations.json):
   }
 }
 ```
+
+#### Device Group Context with Query Filters
+
+When using Panorama configurations, you can combine device group context with graph query filters to precisely target policies:
+
+```bash
+# Update all security rules in a specific device group
+python cli.py policy bulk-update --config panorama.xml --device-type panorama --context device_group --device-group DG1 --type security_pre_rules --operations operations.json --query-filter "MATCH (r:security-rule) RETURN r.name" --output updated.xml
+
+# Update only disabled security rules in a device group
+python cli.py policy bulk-update --config panorama.xml --device-type panorama --context device_group --device-group DG1 --type security_pre_rules --operations operations.json --query-filter "MATCH (r:security-rule) WHERE r.disabled == 'yes' RETURN r.name" --output updated.xml
+
+# Update rules that use a specific service in a device group
+python cli.py policy bulk-update --config panorama.xml --device-type panorama --context device_group --device-group DG1 --type security_pre_rules --operations operations.json --query-filter "MATCH (r:security-rule)-[:uses-service]->(s:service) WHERE s.dst_port == '3389' RETURN r.name" --output updated.xml
+```
+
+The system will automatically filter the query results to match only policies in the specified device group, even for complex queries.
 
 ## Deduplication
 

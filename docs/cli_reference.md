@@ -35,7 +35,9 @@ panflow object list --config CONFIG --type TYPE [options]
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
 - `--type, -t TEXT`: Type of object to list (address, service, etc.) (required)
-- `--output, -o TEXT`: Output file for results (JSON format)
+- `--output, -o TEXT`: Output file for results
+- `--format, -f TEXT`: Output format (json, table, text, csv, yaml, html) (default: json)
+- `--query-filter, -q TEXT`: Graph query filter to select objects
 - `--device-type, -d TEXT`: Device type (firewall or panorama) (default: firewall)
 - `--context TEXT`: Context (shared, device_group, vsys, template) (default: shared)
 - `--device-group TEXT`: Device group name (for Panorama device_group context)
@@ -128,12 +130,35 @@ panflow policy list --config CONFIG --type TYPE [options]
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
 - `--type, -t TEXT`: Type of policy to list (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (required)
-- `--output, -o TEXT`: Output file for results (JSON format)
+- `--output, -o TEXT`: Output file for results
+- `--format, -f TEXT`: Output format (json, table, text, csv, yaml, html) (default: json)
+- `--query-filter, -q TEXT`: Graph query filter to select policies
 - `--device-type, -d TEXT`: Device type (firewall or panorama) (default: firewall)
 - `--context TEXT`: Context (shared, device_group, vsys) (default: shared)
 - `--device-group TEXT`: Device group name (for Panorama device_group context)
 - `--vsys TEXT`: VSYS name (for firewall vsys context) (default: vsys1)
 - `--version TEXT`: PAN-OS version (auto-detected if not specified)
+
+### Filter Policies
+
+Filter policies based on criteria or graph query:
+
+```bash
+panflow policy filter --config CONFIG --type TYPE [--criteria CRITERIA] [--query-filter QUERY] [options]
+```
+
+Options:
+- `--config, -c TEXT`: Path to XML configuration file (required)
+- `--type, -t TEXT`: Type of policy to filter (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, etc.) (required)
+- `--criteria TEXT`: JSON file with filter criteria
+- `--query-filter, -q TEXT`: Graph query filter to select policies
+- `--output, -o TEXT`: Output file for results
+- `--format, -f TEXT`: Output format (json, table, text, csv, yaml, html) (default: json)
+- `--device-type, -d TEXT`: Device type (firewall or panorama) (default: firewall)
+- `--context TEXT`: Context (shared, device_group, vsys) (default: shared)
+- `--device-group TEXT`: Device group name
+- `--vsys TEXT`: VSYS name (default: vsys1)
+- `--version TEXT`: PAN-OS version
 
 ### Bulk Update Policies
 
@@ -146,14 +171,17 @@ panflow policy bulk-update --config CONFIG --type TYPE --criteria CRITERIA --ope
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
 - `--type, -t TEXT`: Type of policy to update (security_rules, security_pre_rules, security_post_rules, nat_rules, nat_pre_rules, nat_post_rules, qos_rules, decryption_rules, authentication_rules, dos_rules, tunnel_inspection_rules, application_override_rules) (required)
-- `--criteria TEXT`: JSON file with filter criteria (required)
+- `--criteria TEXT`: JSON file with filter criteria
 - `--operations TEXT`: JSON file with update operations (required)
+- `--query-filter, -q TEXT`: Graph query filter to select policies
 - `--output, -o TEXT`: Output file for updated configuration (required)
+- `--format, -f TEXT`: Output format for dry run (json, table, text, csv, yaml, html) (default: json)
 - `--device-type, -d TEXT`: Device type (firewall or panorama) (default: firewall)
 - `--context TEXT`: Context (shared, device_group, vsys) (default: shared)
 - `--device-group TEXT`: Device group name
 - `--vsys TEXT`: VSYS name (default: vsys1)
 - `--version TEXT`: PAN-OS version
+- `--dry-run`: Preview changes without modifying the target configuration
 
 ## Group Management Commands
 

@@ -1,0 +1,24 @@
+#!/bin/bash
+# PANFlow CLI wrapper with autocompletion support
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+REPO_DIR="$( cd "$SCRIPT_DIR/.." &> /dev/null && pwd )"
+
+# Check if it's a completion request
+if [[ "$1" == "completion" && "$2" == "--install" ]]; then
+    # For completion installation, run the original script
+    cd "$REPO_DIR"
+    python cli.py completion --install "$3" "$4" "$5"
+    exit $?
+fi
+
+# For normal commands, run either:
+# 1. The optimized standalone executable if available and not a completion command
+# 2. The original Python script as fallback
+if [[ -x "$REPO_DIR/dist/panflow" && "$1" != "completion" ]]; then
+    exec "$REPO_DIR/dist/panflow" "$@"
+else
+    cd "$REPO_DIR"
+    exec python cli.py "$@"
+fi

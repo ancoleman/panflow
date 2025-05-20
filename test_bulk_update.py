@@ -1,104 +1,108 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-Test script for bulk policy operations in NLQ.
+Test script for bulk update policies with device group context and query filter.
 
-This script tests bulk policy operations through natural language queries.
+This script tests the fix for the issue with device group context in graph queries.
 """
 
-import os
 import argparse
-import logging
+import os
 import sys
+import logging
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("panflow_test")
-
-# Import the NLQ processor
-try:
-    from panflow.nlq import NLQProcessor
-except ImportError:
-    logger.error("Could not import PANFlow. Make sure it's installed.")
-    sys.exit(1)
-
-def test_bulk_update_policies(config_file, output_file, operation_type):
-    """
-    Test bulk policy update operations using natural language queries.
-    
-    Args:
-        config_file: Path to the configuration file
-        output_file: Path to save the output file
-        operation_type: Type of operation to test (add_tag, enable, disable, set_action, etc.)
-    """
-    processor = NLQProcessor(use_ai=False)  # Use pattern-based processing for consistent results
-    
-    # Define test queries for different operations
-    queries = {
-        "add_tag": f"add tag 'test-tag' to all policies",
-        "enable": f"enable all policies",
-        "disable": f"disable all policies",
-        "set_action": f"set action to deny for all policies",
-        "enable_logging": f"enable logging for all policies",
-        "disable_logging": f"disable logging for all policies",
-    }
-    
-    if operation_type not in queries:
-        logger.error(f"Unknown operation type: {operation_type}")
-        logger.info(f"Available operations: {', '.join(queries.keys())}")
-        return
-    
-    # Process the query
-    query = queries[operation_type]
-    logger.info(f"Testing operation: {operation_type}")
-    logger.info(f"Query: {query}")
-    
-    result = processor.process(query, config_file, output_file)
-    
-    # Check result
-    if result["success"]:
-        logger.info("Operation succeeded.")
-        
-        # Extract operation details from result
-        if "result" in result and isinstance(result["result"], dict):
-            result_data = result["result"]
-            
-            # Check for updated policies
-            if "updated_policies" in result_data:
-                updated_count = len(result_data["updated_policies"])
-                logger.info(f"Updated {updated_count} policies")
-                
-                # Show the first 5 policies for verification
-                policies_to_show = min(5, updated_count)
-                if policies_to_show > 0:
-                    logger.info(f"First {policies_to_show} updated policies:")
-                    policies = result_data["updated_policies"][:policies_to_show]
-                    for policy in policies:
-                        if isinstance(policy, dict):
-                            policy_name = policy.get("name", str(policy))
-                            logger.info(f"  - {policy_name}")
-                        else:
-                            logger.info(f"  - {policy}")
-            else:
-                logger.warning("No updated_policies found in result.")
-        else:
-            logger.warning("No detailed result data returned.")
-    else:
-        logger.error(f"Operation failed: {result.get('message', 'Unknown error')}")
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 def main():
-    """Main entry point for the test script."""
-    parser = argparse.ArgumentParser(description="Test bulk policy operations")
-    parser.add_argument("--config", required=True, help="Path to the configuration file")
-    parser.add_argument("--output", required=True, help="Path to save the output file")
-    parser.add_argument("--operation", required=True, 
-                        choices=["add_tag", "enable", "disable", "set_action", "enable_logging", "disable_logging"],
-                        help="Type of operation to test")
-    
+    """Run the test for bulk update policies with device group context and query filter."""
+    parser = argparse.ArgumentParser(description="Test bulk update policies with device group context")
+    parser.add_argument("--config", default="test_files/comprehensive_test.xml", help="Path to config file")
+    parser.add_argument("--operations", default="test_files/operations.json", help="Path to operations file")
     args = parser.parse_args()
+
+    # Check if files exist
+    if not os.path.exists(args.config):
+        logger.error(f"Config file not found: {args.config}")
+        return 1
     
-    logger.info(f"Starting test with config: {args.config}, output: {args.output}")
-    test_bulk_update_policies(args.config, args.output, args.operation)
-    logger.info("Test completed.")
+    if not os.path.exists(args.operations):
+        logger.error(f"Operations file not found: {args.operations}")
+        return 1
+
+    # Test different device groups and query filters
+    test_cases = [
+        {
+            "name": "Device Group 1 with all rules query",
+            "cmd": f"python cli.py policy bulk-update --config {args.config} --device-type panorama --context device_group --device-group test-dg-1 --operations {args.operations} --type security_pre_rules --output test_files/output_dg1_all.xml --query-filter \"MATCH (r:security-rule) RETURN r.name\"",
+            "expected_success": True,
+        },
+        {
+            "name": "Device Group 2 with all rules query",
+            "cmd": f"python cli.py policy bulk-update --config {args.config} --device-type panorama --context device_group --device-group test-dg-2 --operations {args.operations} --type security_pre_rules --output test_files/output_dg2_all.xml --query-filter \"MATCH (r:security-rule) RETURN r.name\"",
+            "expected_success": True,
+        },
+        {
+            "name": "Device Group 1 with disabled rules query",
+            "cmd": f"python cli.py policy bulk-update --config {args.config} --device-type panorama --context device_group --device-group test-dg-1 --operations {args.operations} --type security_pre_rules --output test_files/output_dg1_disabled.xml --query-filter \"MATCH (r:security-rule) WHERE r.disabled == 'yes' RETURN r.name\"",
+            "expected_success": True,
+        },
+        {
+            "name": "Device Group 2 with disabled rules query",
+            "cmd": f"python cli.py policy bulk-update --config {args.config} --device-type panorama --context device_group --device-group test-dg-2 --operations {args.operations} --type security_pre_rules --output test_files/output_dg2_disabled.xml --query-filter \"MATCH (r:security-rule) WHERE r.disabled == 'yes' RETURN r.name\"",
+            "expected_success": True,
+        },
+    ]
+
+    success = True
+    for test_case in test_cases:
+        logger.info(f"Running test: {test_case['name']}")
+        exit_code = os.system(test_case["cmd"])
+        
+        if (exit_code == 0) == test_case["expected_success"]:
+            logger.info(f"✅ Test passed: {test_case['name']}")
+        else:
+            logger.error(f"❌ Test failed: {test_case['name']}")
+            logger.error(f"Command: {test_case['cmd']}")
+            logger.error(f"Exit code: {exit_code}")
+            success = False
+
+    # Test NLQ operations to make sure they still work
+    nlq_test = {
+        "name": "NLQ query for disabled rules",
+        "cmd": f"python cli.py nlq query \"show all disabled security rules\" --config {args.config}",
+        "expected_success": True,
+    }
+    
+    logger.info(f"Running test: {nlq_test['name']}")
+    exit_code = os.system(nlq_test["cmd"])
+    
+    if (exit_code == 0) == nlq_test["expected_success"]:
+        logger.info(f"✅ Test passed: {nlq_test['name']}")
+    else:
+        logger.error(f"❌ Test failed: {nlq_test['name']}")
+        logger.error(f"Command: {nlq_test['cmd']}")
+        logger.error(f"Exit code: {exit_code}")
+        success = False
+
+    # Test policy listing with query filter
+    list_test = {
+        "name": "List policies with query filter",
+        "cmd": f"python cli.py policy list --config {args.config} --type security_pre_rules --context device_group --device-group test-dg-1 --query-filter \"MATCH (r:security-rule) RETURN r.name\"",
+        "expected_success": True,
+    }
+    
+    logger.info(f"Running test: {list_test['name']}")
+    exit_code = os.system(list_test["cmd"])
+    
+    if (exit_code == 0) == list_test["expected_success"]:
+        logger.info(f"✅ Test passed: {list_test['name']}")
+    else:
+        logger.error(f"❌ Test failed: {list_test['name']}")
+        logger.error(f"Command: {list_test['cmd']}")
+        logger.error(f"Exit code: {exit_code}")
+        success = False
+
+    return 0 if success else 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

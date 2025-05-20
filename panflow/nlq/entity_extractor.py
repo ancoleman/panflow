@@ -82,34 +82,45 @@ class EntityExtractor:
         self.bulk_operations = {
             # More specific operations first
             "enable_logging": [
-                r"enable\s+log(?:ging|s)(?:\s+.*)?$",
-                r"turn\s+on\s+log(?:ging|s)(?:\s+.*)?$",
-                r"add\s+log(?:ging|s)(?:\s+.*)?$"
+                r"enable\s+log(?:ging|s)(?:\s+.*)?",
+                r"turn\s+on\s+log(?:ging|s)(?:\s+.*)?",
+                r"add\s+log(?:ging|s)(?:\s+.*)?",
+                r"set\s+log(?:ging|s)(?:\s+.*)?to\s+(?:on|yes|true)",
+                r"log\s+(?:all|every|each)(?:\s+.*)?policy|rule"
             ],
             "disable_logging": [
-                r"disable\s+log(?:ging|s)(?:\s+.*)?$",
-                r"turn\s+off\s+log(?:ging|s)(?:\s+.*)?$",
-                r"remove\s+log(?:ging|s)(?:\s+.*)?$"
+                r"disable\s+log(?:ging|s)(?:\s+.*)?",
+                r"turn\s+off\s+log(?:ging|s)(?:\s+.*)?",
+                r"remove\s+log(?:ging|s)(?:\s+.*)?",
+                r"set\s+log(?:ging|s)(?:\s+.*)?to\s+(?:off|no|false)",
+                r"stop\s+log(?:ging|s)(?:\s+.*)?"
             ],
             "add_tag": [
                 r"add\s+tags?\s+['\"]?([^'\"]+)['\"]?",
                 r"set\s+tags?\s+['\"]?([^'\"]+)['\"]?",
                 r"apply\s+tags?\s+['\"]?([^'\"]+)['\"]?",
-                r"tag\s+with\s+['\"]?([^'\"]+)['\"]?"
+                r"tag\s+with\s+['\"]?([^'\"]+)['\"]?",
+                r"add\s+the\s+tags?\s+['\"]?([^'\"]+)['\"]?",
+                r"label\s+with\s+['\"]?([^'\"]+)['\"]?"
             ],
             "set_action": [
                 r"(?:set|change|update|modify)\s+action\s+to\s+([a-z]+)",
                 r"make\s+(?:action|rule)\s+([a-z]+)",
-                r"set\s+to\s+([a-z]+)"
+                r"set\s+to\s+([a-z]+)",
+                r"change\s+to\s+([a-z]+)",
+                r"make\s+all\s+.*?(?:policies|rules)\s+([a-z]+)",
+                r"set\s+all\s+.*?(?:policies|rules)\s+to\s+([a-z]+)"
             ],
             # General operations last
             "enable": [
                 r"enable\s+.*?(?:policy|policies|rule|rules)",
-                r"activate\s+.*?(?:policy|policies|rule|rules)"
+                r"activate\s+.*?(?:policy|policies|rule|rules)",
+                r"turn\s+on\s+.*?(?:policy|policies|rule|rules)"
             ],
             "disable": [
                 r"disable\s+.*?(?:policy|policies|rule|rules)",
-                r"deactivate\s+.*?(?:policy|policies|rule|rules)"
+                r"deactivate\s+.*?(?:policy|policies|rule|rules)",
+                r"turn\s+off\s+.*?(?:policy|policies|rule|rules)"
             ]
         }
 
@@ -310,7 +321,41 @@ class EntityExtractor:
         # Add debug logging
         logger.debug(f"Extracting bulk operation from query: '{query}'")
 
-        # Check for each operation type
+        # First check for specific tag value patterns that might not be caught by the standard patterns
+        # Look for tag patterns like "tag all policies as test-tag" or "add tag test-tag to all policies"
+        tag_patterns = [
+            r"tag\s+(?:all|every|each).*?(?:as|with)\s+['\"]?([a-zA-Z0-9_\-]+)['\"]?",
+            r"tag\s+['\"]?([a-zA-Z0-9_\-]+)['\"]?",
+            r"add\s+(?:the\s+)?tags?\s+['\"]?([a-zA-Z0-9_\-]+)['\"]?",
+            r"with\s+(?:the\s+)?tags?\s+['\"]?([a-zA-Z0-9_\-]+)['\"]?"
+        ]
+
+        for pattern in tag_patterns:
+            match = re.search(pattern, query)
+            if match and match.group(1):
+                tag_value = match.group(1)
+                logger.debug(f"Found tag value using specific pattern: {tag_value}")
+                result["operation"] = "add_tag"
+                result["value"] = tag_value
+                return result
+
+        # Look for action patterns that might not be caught by standard patterns
+        action_patterns = [
+            r"(?:set|make|change)\s+(?:all|every|each).*?(?:to|action)\s+([a-z]+)",
+            r"(?:action|rule)\s+should\s+be\s+([a-z]+)"
+        ]
+
+        for pattern in action_patterns:
+            match = re.search(pattern, query)
+            if match and match.group(1):
+                action_value = match.group(1).lower()
+                if action_value in ["allow", "deny", "drop", "reset", "accept"]:
+                    logger.debug(f"Found action value using specific pattern: {action_value}")
+                    result["operation"] = "set_action"
+                    result["value"] = action_value
+                    return result
+
+        # Check for each operation type using standard patterns
         for operation_type, patterns in self.bulk_operations.items():
             for pattern in patterns:
                 logger.debug(f"Trying pattern for {operation_type}: '{pattern}'")
@@ -327,8 +372,32 @@ class EntityExtractor:
                                 logger.debug(f"Extracted tag value: {result['value']}")
                             elif operation_type == "set_action":
                                 action = match.group(1).lower()
+                                # Normalize action values
+                                if action in ["deny", "block", "drop"]:
+                                    action = "deny"
+                                elif action in ["allow", "accept", "permit"]:
+                                    action = "allow"
                                 result["value"] = action
                                 logger.debug(f"Extracted action value: {result['value']}")
+                        else:
+                            # For tag operations, try to find the tag elsewhere in the query
+                            if operation_type == "add_tag":
+                                # Look for quoted strings or words after "tag"
+                                tag_match = re.search(r"tag\s+(?:with\s+)?['\"]([^'\"]+)['\"]", query)
+                                if tag_match:
+                                    result["value"] = tag_match.group(1)
+                                    logger.debug(f"Extracted tag value from alternate pattern: {result['value']}")
+                                else:
+                                    # Default tag if we can't find one
+                                    result["value"] = "auto-tag"
+                                    logger.debug(f"Using default tag value: {result['value']}")
+                            # For action operations, default to allow if not specified
+                            elif operation_type == "set_action":
+                                if "deny" in query or "block" in query or "drop" in query:
+                                    result["value"] = "deny"
+                                else:
+                                    result["value"] = "allow"
+                                logger.debug(f"Using default action value: {result['value']}")
                     elif operation_type in ["enable", "disable", "enable_logging", "disable_logging"]:
                         # These operations just need a "yes" value
                         result["value"] = "yes"

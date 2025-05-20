@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.3.1] - 2024-05-22
+
+### Fixed
+- Fixed bulk update policies with device group context and query filter
+  - Enhanced the _get_policies_from_query method in bulk_operations.py to properly handle device group context
+  - Added direct XML lookup fallback for finding policies when graph queries fail
+  - Implemented graph reuse to avoid building the same graph multiple times
+  - Added comprehensive test suite for device group context with queries
+  - Fixed query modification to correctly filter by device group
+  - Added support for both pre-rulebase and post-rulebase security rules
+
 ## [0.3.0] - 2024-05-12
 
 ### Added
@@ -261,7 +272,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.2...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.1...HEAD
+[0.3.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.0...v0.3.1
 [0.2.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.1...v0.2.2
 [0.2.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.0...v0.2.1
 [0.2.0]: https://code.pan.run/gcs-automation/panflow/compare/v0.1.4...v0.2.0

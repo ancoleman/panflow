@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "panflow"
-version = "0.3.0"
+version = "0.3.1"
 description = "A comprehensive set of utilities for working with PAN-OS XML configurations"
 authors = ["Anton Coleman <acoleman@paloaltonetworks.com>"]
 license = "MIT"

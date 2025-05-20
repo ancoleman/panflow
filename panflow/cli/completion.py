@@ -185,6 +185,15 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
     shell = shell or detect_shell()
     script = generate_completion_script(shell)
 
+    # Get the executable path - handle both packaged and non-packaged cases
+    executable_path = get_executable_path()
+
+    # Update the completion script to use the correct executable path
+    if "sys.argv[0]" in script:
+        script = script.replace("sys.argv[0]", f'"{executable_path}"')
+    if "{app_name}" in script:
+        script = script.replace("{app_name}", "panflow")
+
     # Determine the appropriate location for the completion script
     if custom_path:
         completion_path = custom_path
@@ -194,9 +203,13 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
             # Different locations based on OS
             if platform.system() == "Darwin":  # macOS
                 # Try to find Homebrew's bash-completion directory first
-                if Path("/usr/local/etc/bash_completion.d").exists():
+                if Path("/usr/local/etc/bash_completion.d").exists() and os.access(
+                    "/usr/local/etc/bash_completion.d", os.W_OK
+                ):
                     completion_path = Path("/usr/local/etc/bash_completion.d/panflow")
-                elif Path("/opt/homebrew/etc/bash_completion.d").exists():
+                elif Path("/opt/homebrew/etc/bash_completion.d").exists() and os.access(
+                    "/opt/homebrew/etc/bash_completion.d", os.W_OK
+                ):
                     completion_path = Path("/opt/homebrew/etc/bash_completion.d/panflow")
                 else:
                     # Fall back to user's directory
@@ -204,14 +217,20 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
                     os.makedirs(home / ".bash_completion.d", exist_ok=True)
 
                     # Add line to .bash_profile if not already there
-                    bash_profile = home / ".bash_profile"
-                    bash_completion_line = f'[ -f "$HOME/.bash_completion.d/panflow" ] && . "$HOME/.bash_completion.d/panflow"'
-                    if bash_profile.exists():
-                        with open(bash_profile, "r") as f:
-                            content = f.read()
-                        if bash_completion_line not in content:
-                            with open(bash_profile, "a") as f:
-                                f.write(f"\n# PANFlow completion\n{bash_completion_line}\n")
+                    for profile in [".bash_profile", ".profile", ".bashrc"]:
+                        bash_profile = home / profile
+                        if bash_profile.exists():
+                            bash_completion_line = f'[ -f "$HOME/.bash_completion.d/panflow" ] && . "$HOME/.bash_completion.d/panflow"'
+                            try:
+                                with open(bash_profile, "r") as f:
+                                    content = f.read()
+                                if bash_completion_line not in content:
+                                    with open(bash_profile, "a") as f:
+                                        f.write(f"\n# PANFlow completion\n{bash_completion_line}\n")
+                                    typer.echo(f"Added completion sourcing to {bash_profile}")
+                                break
+                            except Exception as e:
+                                typer.echo(f"Warning: Could not update {profile}: {e}")
             else:  # Linux and others
                 if Path("/etc/bash_completion.d").exists() and os.access(
                     "/etc/bash_completion.d", os.W_OK
@@ -226,9 +245,13 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
         elif shell == "zsh":
             if platform.system() == "Darwin":  # macOS
                 # Try Homebrew's zsh site-functions
-                if Path("/usr/local/share/zsh/site-functions").exists():
+                if Path("/usr/local/share/zsh/site-functions").exists() and os.access(
+                    "/usr/local/share/zsh/site-functions", os.W_OK
+                ):
                     completion_path = Path("/usr/local/share/zsh/site-functions/_panflow")
-                elif Path("/opt/homebrew/share/zsh/site-functions").exists():
+                elif Path("/opt/homebrew/share/zsh/site-functions").exists() and os.access(
+                    "/opt/homebrew/share/zsh/site-functions", os.W_OK
+                ):
                     completion_path = Path("/opt/homebrew/share/zsh/site-functions/_panflow")
                 else:
                     # Fall back to user's directory
@@ -237,19 +260,24 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
 
                     # Add line to .zshrc if not already there
                     zshrc = home / ".zshrc"
-                    zsh_completion_line = f"fpath=($HOME/.zsh/completions $fpath)"
-                    zsh_compinit_line = "autoload -Uz compinit && compinit"
                     if zshrc.exists():
-                        with open(zshrc, "r") as f:
-                            content = f.read()
-                        to_append = ""
-                        if zsh_completion_line not in content:
-                            to_append += f"\n# PANFlow completion\n{zsh_completion_line}\n"
-                        if zsh_compinit_line not in content:
-                            to_append += f"{zsh_compinit_line}\n"
-                        if to_append:
-                            with open(zshrc, "a") as f:
-                                f.write(to_append)
+                        try:
+                            zsh_completion_line = f"fpath=($HOME/.zsh/completions $fpath)"
+                            zsh_compinit_line = "autoload -Uz compinit && compinit"
+
+                            with open(zshrc, "r") as f:
+                                content = f.read()
+                            to_append = ""
+                            if zsh_completion_line not in content:
+                                to_append += f"\n# PANFlow completion\n{zsh_completion_line}\n"
+                            if zsh_compinit_line not in content and "compinit" not in content:
+                                to_append += f"{zsh_compinit_line}\n"
+                            if to_append:
+                                with open(zshrc, "a") as f:
+                                    f.write(to_append)
+                                typer.echo(f"Added completion configuration to {zshrc}")
+                        except Exception as e:
+                            typer.echo(f"Warning: Could not update .zshrc: {e}")
             else:  # Linux and others
                 if Path("/usr/share/zsh/site-functions").exists() and os.access(
                     "/usr/share/zsh/site-functions", os.W_OK
@@ -262,19 +290,24 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
 
                     # Add line to .zshrc if not already there
                     zshrc = home / ".zshrc"
-                    zsh_completion_line = f"fpath=($HOME/.zsh/completions $fpath)"
-                    zsh_compinit_line = "autoload -Uz compinit && compinit"
                     if zshrc.exists():
-                        with open(zshrc, "r") as f:
-                            content = f.read()
-                        to_append = ""
-                        if zsh_completion_line not in content:
-                            to_append += f"\n# PANFlow completion\n{zsh_completion_line}\n"
-                        if zsh_compinit_line not in content:
-                            to_append += f"{zsh_compinit_line}\n"
-                        if to_append:
-                            with open(zshrc, "a") as f:
-                                f.write(to_append)
+                        try:
+                            zsh_completion_line = f"fpath=($HOME/.zsh/completions $fpath)"
+                            zsh_compinit_line = "autoload -Uz compinit && compinit"
+
+                            with open(zshrc, "r") as f:
+                                content = f.read()
+                            to_append = ""
+                            if zsh_completion_line not in content:
+                                to_append += f"\n# PANFlow completion\n{zsh_completion_line}\n"
+                            if zsh_compinit_line not in content and "compinit" not in content:
+                                to_append += f"{zsh_compinit_line}\n"
+                            if to_append:
+                                with open(zshrc, "a") as f:
+                                    f.write(to_append)
+                                typer.echo(f"Added completion configuration to {zshrc}")
+                        except Exception as e:
+                            typer.echo(f"Warning: Could not update .zshrc: {e}")
         elif shell == "fish":
             # Fish completions go in a standard location
             fish_dir = home / ".config" / "fish" / "completions"
@@ -285,7 +318,19 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
             raise typer.Exit(1)
 
     # Make sure the parent directory exists
-    os.makedirs(completion_path.parent, exist_ok=True)
+    try:
+        os.makedirs(completion_path.parent, exist_ok=True)
+    except PermissionError:
+        typer.echo(f"Error: Permission denied when creating directory {completion_path.parent}")
+        suggestion_path = home / ".local" / "share" / f"panflow_{shell}_completion"
+        if shell == "zsh":
+            suggestion_path = home / ".zsh" / "completions" / "_panflow"
+        elif shell == "fish":
+            suggestion_path = home / ".config" / "fish" / "completions" / "panflow.fish"
+
+        typer.echo(f"Try using a custom path in your home directory:")
+        typer.echo(f"panflow completion --install --shell {shell} --path {suggestion_path}")
+        raise typer.Exit(1)
 
     # Write the completion script
     try:
@@ -295,13 +340,34 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
 
         # Additional instructions
         if shell == "bash":
-            typer.echo("You may need to restart your shell or source the completion script:")
+            typer.echo("\nYou may need to restart your shell or source the completion script:")
             typer.echo(f"source {completion_path}")
+
+            # For macOS, suggest adding to profile if not already done
+            if platform.system() == "Darwin" and str(completion_path).startswith(str(home)):
+                profiles = [".bash_profile", ".profile", ".bashrc"]
+                profile_exists = False
+                for profile in profiles:
+                    if (home / profile).exists():
+                        profile_exists = True
+                        typer.echo(f"\nTo load completions on startup, add this line to your {profile}:")
+                        typer.echo(f"[[ -f {completion_path} ]] && source {completion_path}")
+                        break
+                if not profile_exists:
+                    typer.echo("\nTo load completions on startup, create a .bash_profile file with:")
+                    typer.echo(f"[[ -f {completion_path} ]] && source {completion_path}")
+
         elif shell == "zsh":
-            typer.echo("You may need to restart your shell or reload completions:")
+            typer.echo("\nYou may need to restart your shell or reload completions:")
             typer.echo("autoload -Uz compinit && compinit")
+
+            # For macOS/Linux, suggest user directory if using system dir
+            if not str(completion_path).startswith(str(home)):
+                typer.echo("\nIf you prefer to not modify system directories, you can also use:")
+                typer.echo(f"panflow completion --install --shell zsh --path ~/.zsh/completions/_panflow")
+
         elif shell == "fish":
-            typer.echo("Completion should be available immediately in fish.")
+            typer.echo("\nCompletion should be available immediately in fish.")
 
         return completion_path
     except IOError as e:
@@ -309,11 +375,36 @@ def install_completion(shell: Optional[str] = None, custom_path: Optional[Path] 
 
         # Suggest alternative with sudo if permission denied
         if isinstance(e, PermissionError):
-            typer.echo("Try running with sudo or use a custom path:")
-            typer.echo(f"sudo panflow completion --install --shell {shell}")
-            typer.echo("or")
-            typer.echo(
-                f"panflow completion --install --shell {shell} --path /path/to/custom/location"
-            )
+            typer.echo("\nTry one of these alternatives:")
+            typer.echo("1. Run with sudo:")
+            typer.echo(f"   sudo panflow completion --install --shell {shell}")
+            typer.echo("2. Use a custom path in your home directory:")
+            if shell == "bash":
+                custom_suggestion = f"~/.bash_completion.d/panflow"
+            elif shell == "zsh":
+                custom_suggestion = f"~/.zsh/completions/_panflow"
+            elif shell == "fish":
+                custom_suggestion = f"~/.config/fish/completions/panflow.fish"
+            typer.echo(f"   panflow completion --install --shell {shell} --path {custom_suggestion}")
 
         raise typer.Exit(1)
+
+
+def get_executable_path():
+    """
+    Get the path to the executable, handling both packaged and non-packaged cases.
+    """
+    # Check if we're running in a packaged application
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        # Get the actual executable path
+        executable = sys.executable
+        return executable
+    else:
+        # Check if we can find the panflow command in PATH
+        panflow_path = shutil.which("panflow")
+        if panflow_path:
+            return panflow_path
+        else:
+            # Fall back to the current script
+            return sys.argv[0]

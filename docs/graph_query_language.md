@@ -169,7 +169,35 @@ To see examples of PQL queries:
 panflow query example
 ```
 
+### Using with Device Group Context
+
+When querying Panorama configurations, you can specify device group context to limit the query to policies within that device group:
+
+```
+panflow query execute -c panorama.xml --device-type panorama --context device_group --device-group DG1 -q "MATCH (r:security-rule) RETURN r.name, r.action"
+```
+
+The CLI will automatically modify the query to filter for policies in the specified device group.
+
 ## Example Queries
+
+### Device Group Specific Queries
+
+#### Find all policies in a device group
+
+```
+MATCH (r:security-rule)
+WHERE r.device_group == "DG1"
+RETURN r.name, r.action
+```
+
+#### Find disabled policies in a device group
+
+```
+MATCH (r:security-rule)
+WHERE r.device_group == "DG1" AND r.disabled == "yes"
+RETURN r.name
+```
 
 ### Find all address objects
 

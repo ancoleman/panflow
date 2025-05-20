@@ -55,12 +55,11 @@ def completion(
         # Install completion for a specific shell:
         panflow completion --install --shell bash
     """
-    # Handle shell completion requests
-    if complete_args is not None:
-        # This is a request from the shell for completions
-        # We would parse the args and provide completions here
-        # For now, just return empty to avoid errors
-        return ""
+    # Special handling for __complete argument which is used by the Typer completion system
+    if complete_args == "__complete" or complete_args is not None and "__complete" in sys.argv:
+        # The shell is requesting completions - let Typer handle this directly
+        # This is crucial for the packaged app to work with shell completion
+        return
 
     if show:
         show_completion(shell)
