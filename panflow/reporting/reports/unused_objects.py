@@ -225,7 +225,23 @@ def generate_unused_objects_report_data(
     unused_objects = []
     for obj_name in objects:
         if obj_name not in used_objects:
-            unused_objects.append({"name": obj_name, "properties": objects[obj_name]})
+            # Add context information to each object
+            obj_data = {
+                "name": obj_name, 
+                "properties": objects[obj_name],
+                # Add context information
+                "context_type": context_type
+            }
+            
+            # Add specific context details based on type
+            if context_type == "device_group" and "device_group" in kwargs:
+                obj_data["context_name"] = kwargs["device_group"]
+            elif context_type == "vsys" and "vsys" in kwargs:
+                obj_data["context_name"] = kwargs["vsys"]
+            elif context_type == "shared":
+                obj_data["context_name"] = "Shared"
+            
+            unused_objects.append(obj_data)
 
     report_data["unused_objects"] = unused_objects
     logger.info(

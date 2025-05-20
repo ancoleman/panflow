@@ -557,6 +557,17 @@ def format_object_for_display(obj):
         if len(desc) > 25:  # Truncate long descriptions
             desc = desc[:25] + "..."
         obj_info.append(f"desc:'{desc}'")
+    
+    # Add context information if available
+    if "context" in obj:
+        obj_info.append(f"context:{obj['context']}")
+    elif "context_name" in obj:
+        if "context_type" in obj and obj["context_type"] == "device_group":
+            obj_info.append(f"context:Device Group: {obj['context_name']}")
+        elif "context_type" in obj and obj["context_type"] == "vsys":
+            obj_info.append(f"context:VSYS: {obj['context_name']}")
+        else:
+            obj_info.append(f"context:{obj['context_name']}")
 
     # Format for display
     if obj_info:

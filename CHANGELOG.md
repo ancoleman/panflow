@@ -10,6 +10,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.3.2] - 2025-05-20
+
+### Added
+- Added `--report-file` parameter to NLQ commands to separate configuration output and report output
+  - Allows saving reports (in various formats) separate from modified configurations
+  - Supported in all NLQ output formats (JSON, CSV, YAML, HTML, table, text)
+  - Added documentation and examples in help text
+  - Compatible with existing `--output` parameter for configuration changes
+
+### Fixed
+- Improved HTML output formatting for NLQ commands
+  - Fixed duplication of info fields in report headers 
+  - Enhanced display of unused objects with proper table formatting
+  - Improved formatting of NLQ results with nested tables instead of raw JSON
+  - Better organization of data in HTML reports
+- Fixed CSV output handling to properly close files and display appropriate messages
+- Enhanced intent recognition for "show me unused address objects" query
+- Added context information (Shared/Device Group) to object reports in all formats (HTML, Text, Table, CSV, YAML)
+  - Added context display to HTML tables with a dedicated column
+  - Added context information to text output for each object
+  - Added context column to table format for better visibility
+  - Added context column to CSV output for data export capabilities
+  - Preserved context metadata in YAML format for programmatic access
+
 ## [0.3.1] - 2025-05-22
 
 ### Fixed
@@ -272,7 +296,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.1...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.2...HEAD
+[0.3.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.1...v0.3.2
 [0.3.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.0...v0.3.1
 [0.2.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.1...v0.2.2
 [0.2.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.0...v0.2.1

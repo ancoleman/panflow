@@ -169,6 +169,14 @@ class CommandMapper:
         if command is None:
             raise ValueError(f"No command mapping for intent: {intent}")
 
+        # Special case handling for queries about unused objects
+        if intent == "list_objects" and "original_query" in entities:
+            query = entities.get("original_query", "").lower()
+            if "unused" in query and "object" in query:
+                logger.info(f"Query contains 'unused objects', converting intent from {intent} to list_unused_objects")
+                command = "list_unused_objects"
+                intent = "list_unused_objects"
+        
         # Start building the command arguments
         command_args = {
             "command": command,

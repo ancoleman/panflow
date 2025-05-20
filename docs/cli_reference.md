@@ -14,6 +14,45 @@ These options can be used with any command:
 --help                Show help message and exit
 ```
 
+## Output Formats
+
+Most PANFlow commands support multiple output formats using the `--format` option. The following formats are available:
+
+| Format | Description |
+|--------|-------------|
+| `json` | JSON format (default for most commands). Structured data suitable for parsing. |
+| `table` | Human-readable table format with columns and rows. Best for terminal viewing. |
+| `text` | Simple text output with minimal formatting. |
+| `csv` | Comma-separated values format, suitable for importing into spreadsheets. |
+| `yaml` | YAML format, a human-readable structured data format. |
+| `html` | HTML report format with styling and additional context. Suitable for saving and sharing. |
+
+### HTML Format
+
+The HTML format generates rich, styled reports that include:
+
+- Descriptive titles based on the report type
+- Report information section with query context, configuration path, etc.
+- Properly styled tables with attractive formatting
+- Responsive design that works well on different devices
+- Timestamp showing when the report was generated
+
+For HTML reports, it's recommended to save the report to a file. There are two ways to do this depending on the command:
+
+1. Most commands use the `--output` option to save the report to a file:
+
+```bash
+python cli.py query execute --config config.xml --query "MATCH (a:address) RETURN a.name" --format html --output report.html
+```
+
+2. Commands that modify configuration (like NLQ and some other commands) use the `--report-file` option to save the report, leaving `--output` for the modified configuration:
+
+```bash
+python cli.py nlq query "cleanup unused objects" --config firewall.xml --output modified.xml --format html --report-file report.html
+```
+
+For more details on HTML report customization, see the [HTML Formatter Usage Guide](html_formatter_usage.md).
+
 ## Command Structure
 
 PANFlow commands are organized in a hierarchical structure:
@@ -509,10 +548,11 @@ panflow nlq query QUERY [options]
 
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
-- `--output, -o TEXT`: Output file for updates (required for cleanup/modify operations, not needed for view-only queries)
+- `--output, -o TEXT`: Output file for modified configurations (required for cleanup/modify operations)
+- `--report-file, -r TEXT`: Output file for reports/results (use with --format to specify format)
 - `--dry-run`: Preview changes without modifying the configuration
 - `--interactive, -i`: Interactive mode
-- `--format, -f TEXT`: Output format (text, json) (default: text)
+- `--format, -f TEXT`: Output format (text, json, table, csv, yaml, html) (default: text)
 - `--verbose, -v`: Show verbose output
 - `--ai/--no-ai`: Use AI for processing if available (default: use AI)
 - `--ai-provider TEXT`: AI provider to use (openai, anthropic)
@@ -526,9 +566,10 @@ panflow nlq interactive [options]
 
 Options:
 - `--config, -c TEXT`: Path to XML configuration file (required)
-- `--output, -o TEXT`: Output file for updates
+- `--output, -o TEXT`: Output file for modified configurations
+- `--report-file, -r TEXT`: Output file for reports/results (use with --format to specify format)
 - `--dry-run`: Preview changes without modifying the configuration
-- `--format, -f TEXT`: Output format (text, json) (default: text)
+- `--format, -f TEXT`: Output format (text, json, table, csv, yaml, html) (default: text)
 - `--verbose, -v`: Show verbose output
 - `--ai/--no-ai`: Use AI for processing if available (default: use AI)
 - `--ai-provider TEXT`: AI provider to use (openai, anthropic)
@@ -569,4 +610,10 @@ panflow nlq interactive --config firewall.xml
 
 # Start an interactive session with dry-run mode enabled
 panflow nlq interactive --config firewall.xml --dry-run
+
+# Generate an HTML report of unused address objects
+panflow nlq query "show me unused address objects" --config firewall.xml --format html --report-file unused_objects.html
+
+# Cleanup unused objects and save both the modified config and a report
+panflow nlq query "cleanup unused objects" --config firewall.xml --output cleaned.xml --format html --report-file cleanup_report.html
 ```

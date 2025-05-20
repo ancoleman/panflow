@@ -108,7 +108,26 @@ def generate_duplicate_objects_report_data(
     duplicates = {}
     for value_key, names in objects_by_value.items():
         if len(names) > 1:
-            duplicates[value_key] = names
+            # Include context information for each duplicate object
+            objects_with_context = []
+            for name in names:
+                # Create object data with context information
+                obj_data = {
+                    "name": name,
+                    "context_type": context_type
+                }
+                
+                # Add specific context details based on type
+                if context_type == "device_group" and "device_group" in kwargs:
+                    obj_data["context_name"] = kwargs["device_group"]
+                elif context_type == "vsys" and "vsys" in kwargs:
+                    obj_data["context_name"] = kwargs["vsys"]
+                elif context_type == "shared":
+                    obj_data["context_name"] = "Shared"
+                
+                objects_with_context.append(obj_data)
+            
+            duplicates[value_key] = objects_with_context
 
     report_data["duplicate_objects"] = duplicates
     total_duplicates = sum(len(names) - 1 for names in duplicates.values())

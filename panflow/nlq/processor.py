@@ -142,6 +142,9 @@ class NLQProcessor:
 
                     # Add the original query to entities for context
                     entities["original_query"] = query
+                    
+                    # Log the recognized intent
+                    logger.info(f"AI recognized intent: {intent} with confidence {confidence:.2f}")
 
                     # Map to command arguments
                     logger.info(
@@ -186,7 +189,7 @@ class NLQProcessor:
         # Fall back to pattern-based processing
         # Identify the intent
         intent, confidence = self.intent_parser.parse(query)
-        logger.debug(f"Pattern-based intent detection: {intent} (confidence: {confidence:.2f})")
+        logger.info(f"Pattern-based intent detection: {intent} (confidence: {confidence:.2f})")
 
         # If this is a cleanup intent but seems to be a view query based on keywords, adjust the intent
         if intent and intent.startswith("cleanup_") and is_view_query:
@@ -686,13 +689,62 @@ class NLQProcessor:
                 **context_kwargs,
             )
 
-            # Return a simplified result
-            unused_count = len(report.get("unused_objects", []))
+            # Format the unused objects for display
+            unused_objects_data = report.get("unused_objects", [])
+            formatted_objects = []
+            
+            for obj_data in unused_objects_data:
+                obj_name = obj_data.get("name", "")
+                props = obj_data.get("properties", {})
+                
+                # Create a formatted object with name, properties and context
+                formatted_obj = {"name": obj_name}
+                
+                # Extract common properties
+                for key, value in props.items():
+                    formatted_obj[key] = value
+                
+                # Add context information if available
+                if "context_type" in obj_data:
+                    formatted_obj["context_type"] = obj_data["context_type"]
+                if "context_name" in obj_data:
+                    formatted_obj["context_name"] = obj_data["context_name"]
+                    
+                # Add a display-friendly context field for formatting
+                if "context_name" in obj_data:
+                    if obj_data.get("context_type") == "device_group":
+                        formatted_obj["context"] = f"Device Group: {obj_data['context_name']}"
+                    elif obj_data.get("context_type") == "vsys":
+                        formatted_obj["context"] = f"VSYS: {obj_data['context_name']}"
+                    else:
+                        formatted_obj["context"] = obj_data["context_name"]
+                elif "context_type" in obj_data and obj_data["context_type"] == "shared":
+                    formatted_obj["context"] = "Shared"
+                else:
+                    formatted_obj["context"] = "Unknown"
+                
+                formatted_objects.append(formatted_obj)
+            
+            # Try to add formatted_objects_text using the common formatter
+            try:
+                from panflow.cli.common import format_objects_list
+                formatted_lines = format_objects_list(formatted_objects, include_header=False)
+                # Extract just the object info without the prefix
+                formatted_objects_text = [line[4:] for line in formatted_lines]
+            except ImportError:
+                # Fallback if import fails
+                formatted_objects_text = None
+
+            # Return a comprehensive result including the full object data
+            unused_count = len(unused_objects_data)
             logger.info(f"Found {unused_count} unused {object_type} objects")
             return {
                 "message": f"Found {unused_count} unused {object_type} objects",
                 "count": unused_count,
-                "unused_objects": [obj["name"] for obj in report.get("unused_objects", [])],
+                "object_type": object_type,
+                "objects": formatted_objects,  # Include full objects with properties
+                "formatted_objects": formatted_objects_text,  # Include formatted text representation
+                "unused_objects": True,  # Flag to indicate these are unused objects
             }
 
         # For viewing disabled policies (no cleanup)

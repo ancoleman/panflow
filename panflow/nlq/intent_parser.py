@@ -41,6 +41,12 @@ class IntentParser:
                 r"(list|show|find|display|get).*?(unused|not used|unreferenced).*(?:object|group)",
                 r"what.*?(unused|not used|unreferenced).*(?:object|group)",
                 r"(show me|find me|identify).*?(unused|not used|unreferenced).*(?:object|group)",
+                r"show.*?me.*?(unused|not used|unreferenced).*(?:object|group)",
+                # Add very specific patterns for common queries
+                r"show\s+me\s+unused\s+address\s+objects",
+                r"show\s+me\s+unused\s+service\s+objects",
+                r"unused\s+address\s+objects",
+                r"unused\s+objects",
             ],
             "list_disabled_policies": [
                 r"(list|show|find|display|get).*?(disabled|inactive).*(?:policies|rules|policy|rule|security)",
@@ -121,6 +127,11 @@ class IntentParser:
         Returns:
             The matched intent or None
         """
+        # Log the normalized query for debugging
+        logger.debug(f"Checking exact match for normalized query: '{query}'")
+        
+        # Further normalize: collapse multiple spaces into one
+        normalized_query = re.sub(r'\s+', ' ', query).strip()
         # Expanded exact matches with more examples
         exact_matches = {
             # Cleanup operations
@@ -163,11 +174,13 @@ class IntentParser:
             "find unused objects": "list_unused_objects",
             "display unused objects": "list_unused_objects",
             "show me all unused address objects": "list_unused_objects",
+            "show me unused address objects": "list_unused_objects",
             "find unused service objects": "list_unused_objects",
             "show me all unused address groups": "list_unused_objects",
             "list all unused service groups": "list_unused_objects",
             "show unused address groups": "list_unused_objects",
             "show unused service groups": "list_unused_objects",
+            "show me unused service objects": "list_unused_objects",
             "what unused objects do i have": "list_unused_objects",
             # Policy view operations
             "show disabled policies": "list_disabled_policies",
@@ -249,7 +262,17 @@ class IntentParser:
             "disable logging for security policies": "bulk_update_policies",
         }
 
-        return exact_matches.get(query)
+        # Try with our normalized query first
+        match = exact_matches.get(normalized_query)
+        
+        # If that fails, try with the original query
+        if match is None:
+            match = exact_matches.get(query)
+            
+        if match:
+            logger.debug(f"Found exact match: '{match}' for query '{query}'")
+            
+        return match
 
     def _calculate_intent_score(self, query: str, patterns: List[str]) -> float:
         """
@@ -262,6 +285,11 @@ class IntentParser:
         Returns:
             Score between 0.0 and 1.0
         """
+        # Special boost for queries containing unused objects keywords
+        contains_unused = False
+        if "unused" in query and "object" in query:
+            contains_unused = True
+            
         for pattern in patterns:
             match = re.search(pattern, query)
             if match:
@@ -269,8 +297,16 @@ class IntentParser:
                 match_length = match.end() - match.start()
                 query_length = len(query)
                 coverage = match_length / query_length
-
-                # Higher score for patterns that cover more of the query
-                return min(0.6 + (coverage * 0.4), 1.0)
+                
+                # Base score
+                base_score = min(0.6 + (coverage * 0.4), 1.0)
+                
+                # Add a boost for unused objects patterns
+                if contains_unused and "unused" in pattern and "object" in pattern:
+                    # Apply a boost but still cap at 1.0
+                    base_score = min(base_score + 0.2, 1.0)
+                    logger.debug(f"Boosted score for 'unused objects' pattern: {pattern}, score: {base_score:.2f}")
+                
+                return base_score
 
         return 0.0

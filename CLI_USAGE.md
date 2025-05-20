@@ -1255,6 +1255,12 @@ python cli.py nlq query "cleanup unused address objects" --config firewall.xml -
 
 # Use dry run mode via natural language
 python cli.py nlq query "cleanup unused address objects but don't make any changes" --config firewall.xml
+
+# Save report output in HTML format
+python cli.py nlq query "show me unused address objects" --config firewall.xml --format html --report-file report.html
+
+# Save both configuration changes and report output
+python cli.py nlq query "cleanup unused objects" --config firewall.xml --output cleaned.xml --format html --report-file report.html
 ```
 
 ### Interactive Mode
@@ -1263,11 +1269,34 @@ python cli.py nlq query "cleanup unused address objects but don't make any chang
 # Start an interactive session
 python cli.py nlq interactive --config firewall.xml
 
+# Start an interactive session with HTML report output
+python cli.py nlq interactive --config firewall.xml --format html --report-file reports/session.html
+
 # Example interaction
 PANFlow> show me all unused address objects
 PANFlow> cleanup disabled security policies
 PANFlow> find duplicate address objects
 PANFlow> exit
+```
+
+### Command Options
+
+```bash
+python cli.py nlq query [OPTIONS] QUERY
+
+Options:
+  QUERY                           Natural language query text  [required]
+  -c, --config TEXT               Configuration file path  [required]
+  -o, --output TEXT               Output file for modified configuration (for cleanup operations)
+  -r, --report-file TEXT          Output file for report/results (use with --format)
+  --dry-run                       Preview changes without making modifications
+  -i, --interactive               Interactive mode
+  -f, --format TEXT               Output format (text, json, table, csv, yaml, html)  [default: text]
+  -v, --verbose                   Show verbose output
+  --ai/--no-ai                    Use AI for processing if available  [default: ai]
+  --ai-provider TEXT              AI provider to use (openai, anthropic)
+  --ai-model TEXT                 AI model to use
+  --help                          Show this message and exit.
 ```
 
 ### NLQ Help and Examples

@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build Commands
 - Install: `poetry install`
-- Run CLI: `poetry run panflow`
+- Run CLI: `python cli.py` (use this rather than `poetry run panflow` until binary issues are resolved)
 - Lint: `poetry run black .`
 - Type Check: `poetry run mypy .`
 - Tests: `poetry run pytest`
@@ -36,7 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Output formatting: Support multiple output formats (JSON, table, CSV, YAML, HTML, text) via the `--format` parameter
 
 ## Consolidated XML Package
-As of June 2024, we've consolidated XML-related functionality into a dedicated package:
+As of June 2025, we've consolidated XML-related functionality into a dedicated package:
 - Import from `panflow.core.xml` instead of individual modules
 - The old modules (`xml_utils.py`, `xml_builder.py`, etc.) are deprecated but maintained for compatibility
 - All new XML functionality should be added to the appropriate submodule in `panflow.core.xml/`
@@ -44,7 +44,19 @@ As of June 2024, we've consolidated XML-related functionality into a dedicated p
 
 ## Historical Development Notes
 
-### 2024-06 - CLI Command Pattern Migration and Format Standardization
+### 2025-05 - NLQ HTML Formatting and Output Improvements
+- Added `--report-file` parameter to NLQ commands to separate configuration output (--output) from reporting output
+- Enhanced HTML formatting of NLQ reports:
+  - Fixed duplication in report headers
+  - Improved display of data with proper nested tables
+  - Replaced raw JSON with human-readable formatted tables
+  - Better organization of data in HTML reports
+- Fixed CSV output handling to properly close files and show appropriate messages
+- Improved command documentation with clear examples of using --report-file parameter
+- Enhanced intent recognition patterns for specific query types like "show me unused address objects"
+- Ensured consistent behavior across all output formats (HTML, CSV, JSON, YAML, table, text)
+
+### 2025-06 - CLI Command Pattern Migration and Format Standardization
 - Migrated all CLI commands to use the standardized command pattern
 - Implemented command_base.py with common functionality for all commands:
   - CommandBase class with utility methods for config loading, error handling, output formatting
@@ -107,7 +119,7 @@ PANFlow has strong technical foundations but would benefit from focused enhancem
 
 - **CLI Compatibility Issue**: There is a compatibility issue between the command pattern and Typer's type handling. Custom types like PANFlowConfig are not supported by Typer, which prevents direct execution of migrated commands. See [CLI Compatibility Issue](docs/cli_compatibility_issue.md) for details and planned solutions.
 
-### 2024-06 - XML Functionality Consolidation
+### 2025-06 - XML Functionality Consolidation
 - Consolidated XML-related modules into a cohesive package: `panflow.core.xml`
 - Organized functions and classes into logical submodules:
   - `base.py`: Core XML parsing and utility functions
@@ -122,7 +134,7 @@ PANFlow has strong technical foundations but would benefit from focused enhancem
 - Eliminated circular dependencies between XML-related modules
 - Implemented CLI command tests to ensure XML consolidation doesn't break functionality
 
-### 2024-05 - Major Query System Integration, Format Standardization, and Device Type Autodetection
+### 2025-05 - Major Query System Integration, Format Standardization, and Device Type Autodetection
 - Implemented graph-based query language for PAN-OS XML configurations
 - Added `query` command for interactive exploration using graph patterns
 - Refactored CLI commands to support `--query-filter` parameter for direct graph queries
@@ -144,25 +156,25 @@ PANFlow has strong technical foundations but would benefit from focused enhancem
   - Added detailed debug logging for detection process
   - Ensured high-confidence results through multiple detection markers
 
-### 2024-04 - Deduplication Engine Enhancement
+### 2025-04 - Deduplication Engine Enhancement
 - Added multi-strategy support to deduplication engine (first, shortest, longest, alphabetical)
 - Implemented detailed impact analysis reports for deduplication operations
 - Added dry-run option for safe execution of deduplication
 - Added pattern filtering and include/exclude list support
 
-### 2024-03 - Config Merge Framework
+### 2025-03 - Config Merge Framework
 - Implemented policy and object merging between configurations
 - Added support for conflict resolution strategies
 - Created object dependency resolution and reference tracking
 - Added multi-context merge operations for Panorama configurations
 
-### 2024-02 - Bulk Operations System
+### 2025-02 - Bulk Operations System
 - Created bulk update capability for policies
 - Implemented criteria-based selection for objects and policies
 - Added operations framework for applying changes at scale
 - Developed reference integrity checking for bulk operations
 
-### 2024-01 - Core Framework
+### 2025-01 - Core Framework
 - Implemented version-aware XPath resolution system
 - Created context-aware configuration navigation
 - Developed XML manipulation utility functions

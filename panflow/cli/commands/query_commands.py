@@ -247,13 +247,53 @@ def _display_results(
 
     Args:
         results: Query results
-        output_format: Output format (table, json, csv)
+        output_format: Output format (table, json, csv, html, yaml, text)
         output_file: Optional output file path
     """
     if not results:
         console.print("[yellow]No results found[/yellow]")
         return
-
+    
+    # For HTML, YAML, and JSON formats, use CommandBase.format_output
+    if output_format.lower() in ["html", "yaml"]:
+        # Import here to avoid circular imports
+        from ..command_base import CommandBase
+        
+        # Convert Path to string if needed
+        output_file_str = str(output_file) if output_file else None
+        
+        # Extract query information if available from function name
+        query_text = None
+        if sys._getframe().f_back and hasattr(sys._getframe().f_back, 'f_locals'):
+            locals_dict = sys._getframe().f_back.f_locals
+            if 'query' in locals_dict:
+                query_text = locals_dict['query']
+        
+        # Determine configuration file path if available
+        config_file = None
+        if sys._getframe().f_back and hasattr(sys._getframe().f_back, 'f_locals'):
+            locals_dict = sys._getframe().f_back.f_locals
+            if 'config_file' in locals_dict:
+                config_file = str(locals_dict['config_file'])
+                
+        # Use the common formatter with enhanced context
+        CommandBase.format_output(
+            data=results,
+            output_format=output_format,
+            output_file=output_file_str, 
+            table_title="PANFlow Query Results",
+            report_type="Address Objects Query" if results and 'a.name' in results[0] else "Query Results",
+            query_text=query_text,
+            config_file=config_file
+        )
+        
+        # Log that results were saved
+        if output_file:
+            console.print(f"Results saved to {output_file}")
+        
+        return
+    
+    # Continue with existing formats
     if output_format == "json":
         output = json.dumps(results, indent=2)
         if output_file:
@@ -296,7 +336,7 @@ def _display_results(
         # Get columns from first result
         columns = list(results[0].keys())
 
-        table = Table()
+        table = Table(title="PANFlow Query Results")
         for column in columns:
             table.add_column(column, style="cyan")
 

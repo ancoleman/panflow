@@ -7,6 +7,7 @@ This module provides CLI commands for natural language interaction with PANFlow.
 import logging
 import os
 import json
+import datetime
 from typing import Optional, List, Dict, Any
 import typer
 
@@ -34,7 +35,13 @@ def process_query(
         None,
         "--output",
         "-o",
-        help="Output file for updates (required for cleanup/modify operations, not needed for view-only queries)",
+        help="Output file for updated configuration (required for cleanup/modify operations)",
+    ),
+    report_file: Optional[str] = typer.Option(
+        None,
+        "--report-file",
+        "-r",
+        help="Output file for report/results (use with --format to specify format)",
     ),
     dry_run: bool = ConfigOptions.dry_run(),
     interactive: bool = typer.Option(False, "--interactive", "-i", help="Interactive mode"),
@@ -51,6 +58,9 @@ def process_query(
     """
     Process a natural language query against the configuration.
 
+    The output file (--output) is for saving modified configurations, while
+    the report file (--report-file) is for saving query results in various formats.
+
     Examples:
 
         # Find unused address objects in dry run mode
@@ -61,6 +71,12 @@ def process_query(
 
         # Show a report of unused service objects
         python cli.py nlq query "show me all unused service objects" --config panorama.xml
+
+        # Generate an HTML report of unused objects
+        python cli.py nlq query "show me unused address objects" --format html --report-file unused_report.html
+
+        # Clean up unused objects and save both modified config and HTML report
+        python cli.py nlq query "cleanup unused objects" --config fw.xml --output cleaned.xml --format html --report-file report.html
 
         # Force using pattern-based processing instead of AI
         python cli.py nlq query "find duplicate address objects" --no-ai
@@ -111,14 +127,25 @@ def process_query(
         # Display the results based on format
         if format.lower() == "json":
             # JSON format
-            typer.echo(json.dumps(result, indent=2))
+            output_json = json.dumps(result, indent=2)
+            if report_file:
+                with open(report_file, "w") as f:
+                    f.write(output_json)
+                typer.echo(f"Report saved to {report_file}")
+            else:
+                typer.echo(output_json)
         elif format.lower() == "csv":
             # CSV format
             import csv
             import io
 
-            output_stream = io.StringIO()
-            csv_writer = csv.writer(output_stream)
+            # Determine if we're writing to a file or a string buffer
+            if report_file:
+                output_file = open(report_file, "w", newline="")
+                csv_writer = csv.writer(output_file)
+            else:
+                output_stream = io.StringIO()
+                csv_writer = csv.writer(output_stream)
 
             # Write basic information
             csv_writer.writerow(["Intent", result["intent"]])
@@ -130,8 +157,77 @@ def process_query(
             if "result" in result and result["result"] and isinstance(result["result"], dict):
                 result_data = result["result"]
 
+                # For object listings
+                if "objects" in result_data and isinstance(result_data["objects"], list):
+                    objects = result_data.get("objects", [])
+                    if objects:
+                        # Check if these are unused objects specifically
+                        if "unused_objects" in result_data:
+                            obj_desc = "Unused"
+                        else:
+                            obj_desc = ""
+                            
+                        # Get object type if available
+                        object_type = ""
+                        if "object_type" in result_data:
+                            object_type = f" {result_data['object_type']}"
+                            
+                        # Add header
+                        csv_writer.writerow([])
+                        csv_writer.writerow([f"{obj_desc}{object_type} Objects ({len(objects)})".strip()])
+                        
+                        # Check for context information
+                        has_context = any("context" in obj for obj in objects) or any("context_name" in obj for obj in objects)
+                        
+                        # Create column headers based on object structure
+                        headers = ["Name"]
+                        if any("ip-netmask" in obj for obj in objects):
+                            headers.append("IP Address")
+                        elif any("fqdn" in obj for obj in objects):
+                            headers.append("FQDN")
+                        elif any("ip-range" in obj for obj in objects):
+                            headers.append("IP Range")
+                        
+                        # Add Context column if available
+                        if has_context:
+                            headers.append("Context")
+                            
+                        csv_writer.writerow(headers)
+                        
+                        # Add objects
+                        for obj in objects:
+                            if isinstance(obj, dict):
+                                row = [obj.get("name", "")]
+                                
+                                # Add IP information
+                                if "IP Address" in headers:
+                                    row.append(obj.get("ip-netmask", ""))
+                                elif "FQDN" in headers:
+                                    row.append(obj.get("fqdn", ""))
+                                elif "IP Range" in headers:
+                                    row.append(obj.get("ip-range", ""))
+                                    
+                                # Add context information if available
+                                if has_context:
+                                    if "context" in obj:
+                                        row.append(obj["context"])
+                                    elif "context_name" in obj and "context_type" in obj:
+                                        if obj["context_type"] == "device_group":
+                                            row.append(f"Device Group: {obj['context_name']}")
+                                        elif obj["context_type"] == "vsys":
+                                            row.append(f"VSYS: {obj['context_name']}")
+                                        else:
+                                            row.append(obj.get("context_name", ""))
+                                    else:
+                                        row.append("")
+                                        
+                                csv_writer.writerow(row)
+                            else:
+                                # Simple string object
+                                csv_writer.writerow([str(obj)])
+                
                 # For cleanup operations (objects)
-                if "cleaned_objects" in result_data and isinstance(
+                elif "cleaned_objects" in result_data and isinstance(
                     result_data["cleaned_objects"], list
                 ):
                     if result_data["cleaned_objects"]:
@@ -225,8 +321,111 @@ def process_query(
                             csv_writer.writerow(
                                 ["Configuration saved to:", result_data["output_file"]]
                             )
+                
+                # For object listings
+                elif "objects" in result_data and isinstance(result_data["objects"], list):
+                    objects = result_data.get("objects", [])
+                    if objects:
+                        csv_writer.writerow([])  # Empty row as separator
+                        
+                        # Determine object type and description
+                        obj_desc = "unused" if "unused_objects" in result_data else ""
+                        object_type = result_data.get("object_type", "")
+                        
+                        # Create title based on search type
+                        if result_data.get("is_duplicate_search"):
+                            header = f"Duplicated {object_type} Objects ({len(objects)})"
+                            if result_data.get("unique_values"):
+                                header += f" across {result_data.get('unique_values')} unique values"
+                        else:
+                            header = f"{obj_desc} {object_type} Objects ({len(objects)})".strip().capitalize()
+                            
+                        csv_writer.writerow([header])
+                        
+                        # Check if objects have detailed information
+                        if objects and isinstance(objects[0], dict):
+                            # Determine which columns are needed based on the data
+                            columns = ["Name"]
+                            
+                            # Check if we have context information available
+                            has_context = any("context" in obj for obj in objects) or any("context_name" in obj for obj in objects)
+                            
+                            for field in ["ip-netmask", "ip-range", "fqdn", "protocol", "port", "description"]:
+                                if any(field in obj for obj in objects):
+                                    columns.append(field.capitalize())
+                            
+                            # Add context column if available
+                            if has_context:
+                                columns.append("Context")
+                                    
+                            # Write header row
+                            csv_writer.writerow(columns)
+                            
+                            # Write object data
+                            for obj in objects:
+                                row_data = [obj.get("name", "unnamed")]
+                                
+                                # Process standard fields
+                                for field in columns[1:-1] if has_context else columns[1:]:  # Skip the name column and context (if present)
+                                    field_key = field.lower()
+                                    row_data.append(str(obj.get(field_key, "")))
+                                
+                                # Add context information if available
+                                if has_context and "Context" in columns:
+                                    if "context" in obj:
+                                        row_data.append(str(obj.get("context", "")))
+                                    elif "context_name" in obj:
+                                        if "context_type" in obj and obj["context_type"] == "device_group":
+                                            row_data.append(f"Device Group: {obj['context_name']}")
+                                        elif "context_type" in obj and obj["context_type"] == "vsys":
+                                            row_data.append(f"VSYS: {obj['context_name']}")
+                                        else:
+                                            row_data.append(str(obj.get("context_name", "")))
+                                    else:
+                                        row_data.append("")
+                                    
+                                csv_writer.writerow(row_data)
+                        else:
+                            # Simple objects list
+                            # Check if we have context information available in the simpler objects
+                            has_context = any(isinstance(obj, dict) and ("context" in obj or "context_name" in obj) for obj in objects)
+                            
+                            if has_context:
+                                csv_writer.writerow(["Name", "Context"])
+                                for obj in objects:
+                                    if isinstance(obj, str):
+                                        csv_writer.writerow([obj, ""])
+                                    elif isinstance(obj, dict):
+                                        obj_name = obj.get("name", str(obj))
+                                        # Format context information
+                                        context_str = ""
+                                        if "context" in obj:
+                                            context_str = str(obj.get("context", ""))
+                                        elif "context_name" in obj:
+                                            if "context_type" in obj and obj["context_type"] == "device_group":
+                                                context_str = f"Device Group: {obj['context_name']}"
+                                            elif "context_type" in obj and obj["context_type"] == "vsys":
+                                                context_str = f"VSYS: {obj['context_name']}"
+                                            else:
+                                                context_str = str(obj.get("context_name", ""))
+                                        csv_writer.writerow([obj_name, context_str])
+                                    else:
+                                        csv_writer.writerow([str(obj), ""])
+                            else:
+                                # No context information available
+                                csv_writer.writerow(["Name"])
+                                for obj in objects:
+                                    if isinstance(obj, str):
+                                        csv_writer.writerow([obj])
+                                    else:
+                                        csv_writer.writerow([str(obj)])
 
-            typer.echo(output_stream.getvalue())
+            if report_file:
+                output_file.close()
+                typer.echo(f"Report saved to {report_file}")
+            else:
+                typer.echo(output_stream.getvalue())
+                output_stream.close()
 
         elif format.lower() == "yaml":
             # YAML format
@@ -258,223 +457,168 @@ def process_query(
 
                 # Output the YAML
                 yaml_output = yaml.dump(yaml_data, sort_keys=False, default_flow_style=False)
-                typer.echo(yaml_output)
+                if report_file:
+                    with open(report_file, "w") as f:
+                        f.write(yaml_output)
+                    typer.echo(f"Report saved to {report_file}")
+                else:
+                    typer.echo(yaml_output)
 
             except ImportError:
                 typer.echo("Error: PyYAML not installed. Install with 'pip install pyyaml'")
                 raise typer.Exit(1)
 
         elif format.lower() == "html":
-            # HTML format
-            html = "<html><head><style>"
-            html += "body{font-family:Arial,sans-serif;margin:20px;max-width:1200px;margin:0 auto;padding:20px;}"
-            html += "table{border-collapse:collapse;width:100%;margin-bottom:20px;box-shadow:0 2px 3px rgba(0,0,0,0.1);}"
-            html += "th,td{text-align:left;padding:10px;border:1px solid #ddd}"
-            html += "tr:nth-child(even){background-color:#f8f8f8}"
-            html += "tr:hover{background-color:#f1f7fa}"
-            html += "th{background-color:#4CAF50;color:white}"
-            html += "h1{color:#2c3e50;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid #eee;}"
-            html += "h2{color:#3498db;margin-top:30px;margin-bottom:15px;padding-bottom:5px;border-bottom:1px solid #eee;}"
-            html += "h3{color:#555;margin-top:25px;margin-bottom:10px;}"
-            html += ".section{margin-top:30px;background-color:#fff;padding:15px;border-radius:5px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}"
-            html += ".success{color:#27ae60;font-weight:bold}.error{color:#e74c3c;font-weight:bold}"
-            html += ".value-col{color:#2980b9;font-weight:bold;}"
-            html += ".details-col{max-width:300px;word-wrap:break-word;}"
-            html += ".note{background-color:#fef9e7;padding:10px;border-left:4px solid #f39c12;margin:10px 0;}"
-            html += "</style></head><body>"
-
-            # Basic information
-            html += "<h1>Natural Language Query Result</h1>"
-            html += "<table>"
-            html += "<tr><th>Field</th><th>Value</th></tr>"
-            html += f"<tr><td>Intent</td><td>{result['intent']}</td></tr>"
-            html += f"<tr><td>Success</td><td><span class=\"{'success' if result['success'] else 'error'}\">{result['success']}</span></td></tr>"
-            html += f"<tr><td>Processing</td><td>{result.get('processing', 'pattern')}</td></tr>"
-            html += f"<tr><td>Message</td><td>{result.get('message', 'Command executed successfully')}</td></tr>"
-            html += "</table>"
-
-            # If we have result objects, create tables for them
+            # HTML format using CommandBase formatter
+            from ..command_base import CommandBase
+            
+            # Create a structured dataset for HTML report
+            report_data = {
+                "nlq_info": {
+                    "intent": result['intent'],
+                    "success": result['success'],
+                    "processing": result.get('processing', 'pattern'),
+                    "message": result.get('message', 'Command executed successfully')
+                }
+            }
+            
+            # Add result data if available
             if "result" in result and result["result"] and isinstance(result["result"], dict):
                 result_data = result["result"]
-
-                # For duplicate findings - need to handle this case first
+                
+                # Process result data for better report formatting
                 if "duplicates" in result_data:
+                    # Format duplicates in a more structured way for HTML display
                     dup_data = result_data["duplicates"]
+                    formatted_dup_data = []
+                    
                     dup_count = result_data.get("count", 0)
                     unique_values = result_data.get("unique_values", 0)
                     object_type = result_data.get("object_type", "")
-
-                    if dup_count > 0:
-                        html += f'<div class="section">'
-
-                        # Check if this is the "all" object type (combined results)
-                        if object_type.lower() == "all":
-                            html += f"<h2>Duplicate Objects ({dup_count} across {unique_values} values)</h2>"
-                            html += "<table><tr><th>Object Type</th><th>Value/Pattern</th><th>Objects</th></tr>"
-
-                            # Add rows for each duplicated value - in "all" mode, keys are prefixed with the object type
-                            for value, objects in dup_data.items():
-                                # Skip internal fields
-                                if value.startswith('_'):
-                                    continue
-
-                                # Extract object type from the key prefix
-                                type_parts = value.split(":", 1)
-                                obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
-                                actual_value = type_parts[1] if len(type_parts) > 1 else value
-
-                                # Format the list of objects - handle both strings and tuples
-                                obj_list = []
-                                for obj in objects:
-                                    if isinstance(obj, tuple):
-                                        obj_list.append(obj[0])  # Assume the first item is the name
-                                    else:
-                                        obj_list.append(str(obj))
-
-                                objects_str = ", ".join(obj_list)
-
-                                html += f"<tr><td class=\"type-col\">{obj_type}</td><td class=\"value-col\">{actual_value}</td><td class=\"details-col\">{objects_str}</td></tr>"
-                        else:
-                            # Normal single object type display
-                            html += f"<h2>Duplicate {object_type} Objects ({dup_count} across {unique_values} values)</h2>"
-                            html += "<table><tr><th>Value/Pattern</th><th>Objects</th></tr>"
-
-                            # Add rows for each duplicated value
-                            for value, objects in dup_data.items():
-                                # Skip internal fields
-                                if value.startswith('_'):
-                                    continue
-
-                                # Format the list of objects - handle both strings and tuples
-                                obj_list = []
-                                for obj in objects:
-                                    if isinstance(obj, tuple):
-                                        obj_list.append(obj[0])  # Assume the first item is the name
-                                    else:
-                                        obj_list.append(str(obj))
-
-                                objects_str = ", ".join(obj_list)
-
-                                html += f"<tr><td class=\"value-col\">{value}</td><td class=\"details-col\">{objects_str}</td></tr>"
-
-                        html += "</table>"
-                        html += "</div>"
-
-                # For object listings that have duplicates info
-                elif "objects" in result_data and isinstance(result_data["objects"], list) and result_data.get("is_duplicate_search", False):
+                    
+                    # Check if this is the "all" object type (combined results)
+                    if object_type.lower() == "all":
+                        for value, objects in dup_data.items():
+                            if value.startswith('_'):  # Skip internal fields
+                                continue
+                                
+                            # Extract object type from the key prefix
+                            type_parts = value.split(":", 1)
+                            obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
+                            actual_value = type_parts[1] if len(type_parts) > 1 else value
+                            
+                            # Format objects list
+                            obj_list = []
+                            for obj in objects:
+                                if isinstance(obj, tuple):
+                                    obj_list.append(obj[0])  # Assume the first item is the name
+                                else:
+                                    obj_list.append(str(obj))
+                                    
+                            formatted_dup_data.append({
+                                "object_type": obj_type,
+                                "value": actual_value,
+                                "objects": obj_list
+                            })
+                    else:
+                        # Single object type format
+                        for value, objects in dup_data.items():
+                            if value.startswith('_'):  # Skip internal fields
+                                continue
+                                
+                            # Format objects list
+                            obj_list = []
+                            for obj in objects:
+                                if isinstance(obj, tuple):
+                                    obj_list.append(obj[0])  # Assume the first item is the name
+                                else:
+                                    obj_list.append(str(obj))
+                                    
+                            formatted_dup_data.append({
+                                "value": value,
+                                "objects": obj_list
+                            })
+                    
+                    # Replace duplicates with formatted version
+                    report_data["duplicates"] = {
+                        "object_type": object_type,
+                        "count": dup_count,
+                        "unique_values": unique_values,
+                        "items": formatted_dup_data
+                    }
+                
+                # Format the result data appropriately for better display
+                # If this is an unused objects report, format it specially
+                if result["intent"] == "list_unused_objects":
+                    # Format unused objects in a cleaner way
                     objects = result_data.get("objects", [])
-                    if objects:
-                        # Determine object type and count
-                        object_type = result_data.get("object_type", "")
-                        count = len(objects)
+                    report_data["unused_address_objects"] = objects
+                    
+                    # Don't include raw result data to avoid duplication
+                else:
+                    # Add formatted result data for other types
+                    report_data["result"] = result_data
+                
+            # Determine report type based on intent
+            if result['intent'].startswith('list_'):
+                if "unused_objects" in result['intent']:
+                    report_type = "Unused Objects Report"
+                elif "disabled_policies" in result['intent']:
+                    report_type = "Disabled Policies Report"
+                elif "duplicate" in result['intent']:
+                    report_type = "Duplicate Objects Report"
+                else:
+                    report_type = "Object Listing Report"
+            elif result['intent'].startswith('cleanup_'):
+                report_type = "Cleanup Operation Report"
+            elif result['intent'].startswith('bulk_update_'):
+                report_type = "Policy Update Report" 
+            else:
+                report_type = "Natural Language Query Report"
+                
+            # Additional info to include in the report
+            additional_info = {
+                # No additional info here - the query and config will be added via query_text and config_file parameters
+            }
+            
+            # Use CommandBase.format_output to generate HTML
+            CommandBase.format_output(
+                data=report_data,
+                output_format="html",
+                output_file=report_file,
+                table_title="PANFlow NLQ Results",
+                report_type=report_type,
+                query_text=query,
+                config_file=config,
+                additional_info=additional_info
+            )
+            
+            if report_file:
+                typer.echo(f"HTML report saved to {report_file}")
+            else:
+                # When no report file is specified, print a simple text summary to the console
+                # This is a text-only summary when HTML output is requested but no file was specified
+                typer.echo(f"Query: {query}")
+                typer.echo(f"Intent: {result['intent']}")
+                typer.echo(f"Success: {result['success']}")
+                
+                if "result" in result and result["result"] and isinstance(result["result"], dict):
+                    result_data = result["result"]
+                    
+                    # Show appropriate summary based on the data type
+                    if "duplicates" in result_data:
+                        dup_count = result_data.get("count", 0)
                         unique_values = result_data.get("unique_values", 0)
-
-                        # Create title based on search type
-                        title = f"Duplicated {object_type} Objects ({count})"
-                        if unique_values:
-                            title += f" across {unique_values} unique values"
-
-                        html += f'<div class="section">'
-                        html += f"<h2>{title}</h2>"
-
-                        # Create the table
-                        html += "<table><tr><th>Name</th><th>Details</th></tr>"
-
-                        for obj in objects:
-                            name = obj.get("name", "unnamed") if isinstance(obj, dict) else str(obj)
-
-                            # Extract details
-                            details = ""
-                            if isinstance(obj, dict):
-                                details_parts = []
-                                for field in ["ip-netmask", "ip-range", "fqdn", "protocol"]:
-                                    if field in obj:
-                                        details_parts.append(f"{field}: {obj[field]}")
-                                details = " | ".join(details_parts)
-
-                            html += f"<tr><td class=\"value-col\">{name}</td><td class=\"details-col\">{details}</td></tr>"
-
-                        html += "</table>"
-                        html += "</div>"
-
-                # For cleanup operations (objects)
-                elif "cleaned_objects" in result_data and isinstance(
-                    result_data["cleaned_objects"], list
-                ):
-                    if result_data["cleaned_objects"]:
-                        html += f'<div class="section">'
-                        html += f"<h2>Removed Objects ({len(result_data['cleaned_objects'])})</h2>"
-                        html += "<table><tr><th>Name</th></tr>"
-
-                        for obj in result_data["cleaned_objects"]:
-                            html += f"<tr><td>{obj}</td></tr>"
-
-                        html += "</table>"
-
-                        if "output_file" in result_data:
-                            html += f"<p>Configuration saved to: <strong>{result_data['output_file']}</strong></p>"
-
-                        html += "</div>"
-
-                # For bulk update policy operations
-                elif "updated_policies" in result_data and isinstance(
-                    result_data["updated_policies"], list
-                ):
-                    if result_data["updated_policies"]:
-                        # Get operation details
-                        operation = result_data.get("operation", "updated")
-                        value = result_data.get("value", "")
-                        dry_run = result_data.get("dry_run", False)
-
-                        # Format title based on operation type
-                        operation_desc = {
-                            "enable": "Enabled",
-                            "disable": "Disabled",
-                            "add_tag": f"Added Tag '{value}' to",
-                            "set_action": f"Set Action '{value}' for",
-                            "enable_logging": "Enabled Logging for",
-                            "disable_logging": "Disabled Logging for",
-                        }.get(operation, "Updated")
-
-                        if dry_run:
-                            title = f"Would {operation_desc} {len(result_data['updated_policies'])} Policies (Dry Run)"
-                        else:
-                            title = f"{operation_desc} {len(result_data['updated_policies'])} Policies"
-
-                        html += f'<div class="section">'
-                        html += f"<h2>{title}</h2>"
-
-                        if "policy_type" in result_data and result_data.get("policy_type") != "all":
-                            html += f"<p>Policy Type: <strong>{result_data['policy_type']}</strong></p>"
-
-                        html += "<table><tr><th>Name</th>"
-                        # Add policy type column if it might be present
-                        if result_data.get("policy_type") == "all":
-                            html += "<th>Policy Type</th>"
-                        html += "</tr>"
-
-                        for policy in result_data["updated_policies"]:
-                            if isinstance(policy, dict) and "name" in policy:
-                                policy_name = policy["name"]
-                                if "policy_type" in policy and result_data.get("policy_type") == "all":
-                                    html += f"<tr><td>{policy_name}</td><td>{policy['policy_type']}</td></tr>"
-                                else:
-                                    html += f"<tr><td>{policy_name}</td></tr>"
-                            else:
-                                if result_data.get("policy_type") == "all":
-                                    html += f"<tr><td>{policy}</td><td></td></tr>"
-                                else:
-                                    html += f"<tr><td>{policy}</td></tr>"
-
-                        html += "</table>"
-
-                        if "output_file" in result_data:
-                            html += f"<p>Configuration saved to: <strong>{result_data['output_file']}</strong></p>"
-
-                        html += "</div>"
-
-            html += "</body></html>"
-            typer.echo(html)
+                        object_type = result_data.get("object_type", "")
+                        typer.echo(f"Found {dup_count} duplicate {object_type} objects across {unique_values} values")
+                    elif "cleaned_objects" in result_data:
+                        count = len(result_data["cleaned_objects"])
+                        typer.echo(f"Removed {count} objects")
+                    elif "updated_policies" in result_data:
+                        count = len(result_data["updated_policies"])
+                        typer.echo(f"Updated {count} policies")
+                    
+                typer.echo("Use --report-file to save the HTML report to a file")
 
         elif format.lower() == "table":
             # Table format
@@ -706,6 +850,9 @@ def process_query(
                         # Add additional columns based on first object
                         if objects and isinstance(objects[0], dict):
                             detail_columns = []
+                            # Check if we have context information available
+                            has_context = any("context" in obj for obj in objects) or any("context_name" in obj for obj in objects)
+                            
                             for field in [
                                 "ip-netmask",
                                 "ip-range",
@@ -717,11 +864,30 @@ def process_query(
                                 if any(field in obj for obj in objects):
                                     objects_table.add_column(field)
                                     detail_columns.append(field)
+                                    
+                            # Add context column if available
+                            if has_context:
+                                objects_table.add_column("Context")
+                                detail_columns.append("context")
 
                             for obj in objects:
                                 values = [obj.get("name", "unnamed")]
                                 for col in detail_columns:
-                                    values.append(str(obj.get(col, "")))
+                                    if col == "context":
+                                        # Format context information
+                                        if "context" in obj:
+                                            values.append(str(obj.get("context", "")))
+                                        elif "context_name" in obj:
+                                            if "context_type" in obj and obj["context_type"] == "device_group":
+                                                values.append(f"Device Group: {obj['context_name']}")
+                                            elif "context_type" in obj and obj["context_type"] == "vsys":
+                                                values.append(f"VSYS: {obj['context_name']}")
+                                            else:
+                                                values.append(str(obj.get("context_name", "")))
+                                        else:
+                                            values.append("")
+                                    else:
+                                        values.append(str(obj.get(col, "")))
                                 objects_table.add_row(*values)
                         else:
                             # Simple objects list
@@ -975,6 +1141,18 @@ def process_query(
                                             ]:
                                                 if field in obj:
                                                     details.append(f"{field}:{obj[field]}")
+                                                    
+                                            # Add context information if available
+                                            if "context" in obj:
+                                                details.append(f"context:{obj['context']}")
+                                            elif "context_name" in obj:
+                                                if "context_type" in obj and obj["context_type"] == "device_group":
+                                                    details.append(f"context:Device Group: {obj['context_name']}")
+                                                elif "context_type" in obj and obj["context_type"] == "vsys":
+                                                    details.append(f"context:VSYS: {obj['context_name']}")
+                                                else:
+                                                    details.append(f"context:{obj['context_name']}")
+                                                
                                             if details:
                                                 typer.echo(f"  - {name}: {' | '.join(details)}")
                                             else:
@@ -1133,13 +1311,21 @@ def show_help():
 
     typer.echo("\nOptions:")
     typer.echo("  --config      : Specify the input configuration file")
-    typer.echo("  --output      : Specify the output file for modified configurations")
+    typer.echo("  --output      : Specify the output file for modified configurations (for cleanup operations)")
+    typer.echo("  --report-file : Specify the output file for report/results (separate from config changes)")
     typer.echo("  --dry-run     : Preview changes without modifying the configuration")
     typer.echo("  --format      : Output format (text, json, table, csv, yaml, html)")
     typer.echo("  --verbose     : Show detailed information about the query processing")
     typer.echo("  --ai/--no-ai  : Enable or disable AI processing (if available)")
     typer.echo("  --ai-provider : AI provider to use (openai, anthropic)")
     typer.echo("  --ai-model    : AI model to use (e.g., gpt-3.5-turbo, claude-3-haiku)")
+    
+    typer.echo("\nOutput and Reports:")
+    typer.echo("  For queries that modify configuration (cleanup operations):")
+    typer.echo("    - Use --output to save the modified configuration")
+    typer.echo("    - Use --report-file to save a separate report of changes")
+    typer.echo("  For query-only operations (listing, finding duplicates, etc.):")
+    typer.echo("    - Use --report-file to save the results in your chosen format")
 
     typer.echo("\nAI Integration:")
     typer.echo("  For AI-powered natural language processing, set the appropriate API key:")
@@ -1158,6 +1344,12 @@ def show_help():
 def interactive_mode(
     config: str = ConfigOptions.config_file(),
     output: Optional[str] = ConfigOptions.output_file(),
+    report_file: Optional[str] = typer.Option(
+        None,
+        "--report-file",
+        "-r",
+        help="Output file for report/results (use with --format to specify format)",
+    ),
     dry_run: bool = ConfigOptions.dry_run(),
     format: str = typer.Option(
         "text", "--format", "-f", help="Output format (text, json, table, csv, yaml, html)"
@@ -1183,6 +1375,12 @@ def interactive_mode(
         # Start an interactive session with JSON output format
         python cli.py nlq interactive --format json
 
+        # Start an interactive session with HTML reports saved to a file
+        python cli.py nlq interactive --format html --report-file reports/session_results.html
+
+        # Start an interactive session with config modifications and HTML reporting
+        python cli.py nlq interactive --config firewall.xml --output modifications.xml --report-file reports/changes.html --format html
+
         # Start an interactive session without AI processing
         python cli.py nlq interactive --no-ai
 
@@ -1201,9 +1399,13 @@ def interactive_mode(
     typer.echo("PANFlow Natural Language Query Interactive Mode")
     typer.echo("Type 'exit' or 'quit' to end the session, 'help' for help.")
     typer.echo(f"Using configuration file: {config}")
+    
+    # Display selected output paths
     if output:
-        typer.echo(f"Output will be saved to: {output}")
-
+        typer.echo(f"Configuration modifications will be saved to: {output}")
+    if report_file:
+        typer.echo(f"Reports will be saved to: {report_file} (Format: {format})")
+    
     # Show AI status
     if use_ai:
         if processor.ai_available():
@@ -1268,7 +1470,228 @@ def interactive_mode(
 
             # Display the results based on format
             if format.lower() == "json":
-                typer.echo(json.dumps(result, indent=2))
+                output_json = json.dumps(result, indent=2)
+                if report_file:
+                    with open(report_file, "w") as f:
+                        f.write(output_json)
+                    typer.echo(f"Report saved to {report_file}")
+                else:
+                    typer.echo(output_json)
+            elif format.lower() == "html":
+                # HTML format using CommandBase formatter
+                from ..command_base import CommandBase
+                
+                # Create a structured dataset for HTML report
+                report_data = {
+                    "nlq_info": {
+                        "intent": result['intent'],
+                        "success": result['success'],
+                        "processing": result.get('processing', 'pattern'),
+                        "message": result.get('message', 'Command executed successfully')
+                    }
+                }
+                
+                # Add result data if available
+                if "result" in result and result["result"] and isinstance(result["result"], dict):
+                    result_data = result["result"]
+                    report_data["result"] = result_data
+                    
+                # Determine report type based on intent
+                if result['intent'].startswith('list_'):
+                    if "unused_objects" in result['intent']:
+                        report_type = "Unused Objects Report"
+                    elif "disabled_policies" in result['intent']:
+                        report_type = "Disabled Policies Report"
+                    elif "duplicate" in result['intent']:
+                        report_type = "Duplicate Objects Report"
+                    else:
+                        report_type = "Object Listing Report"
+                elif result['intent'].startswith('cleanup_'):
+                    report_type = "Cleanup Operation Report"
+                elif result['intent'].startswith('bulk_update_'):
+                    report_type = "Policy Update Report" 
+                else:
+                    report_type = "Natural Language Query Report"
+                    
+                # Additional info to include in the report
+                additional_info = {
+                    "Query": query,
+                    "Configuration": config,
+                    "Interactive Mode": "Yes",
+                    "Session Time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
+                # Use CommandBase.format_output to generate HTML
+                CommandBase.format_output(
+                    data=report_data,
+                    output_format="html",
+                    output_file=report_file,
+                    table_title="PANFlow Interactive NLQ Results",
+                    report_type=report_type,
+                    query_text=query,
+                    config_file=config,
+                    additional_info=additional_info
+                )
+                
+                if report_file:
+                    typer.echo(f"HTML report saved to {report_file}")
+                else:
+                    # Text summary for console
+                    typer.echo(f"Query: {query}")
+                    typer.echo(f"Intent: {result['intent']}")
+                    typer.echo(f"Success: {result['success']}")
+                    typer.echo("Use --report-file to save the HTML report to a file")
+            elif format.lower() == "yaml":
+                try:
+                    import yaml
+                    yaml_output = yaml.dump(result, sort_keys=False, default_flow_style=False)
+                    if report_file:
+                        with open(report_file, "w") as f:
+                            f.write(yaml_output)
+                        typer.echo(f"Report saved to {report_file}")
+                    else:
+                        typer.echo(yaml_output)
+                except ImportError:
+                    typer.echo("Error: PyYAML not installed. Install with 'pip install pyyaml'")
+            elif format.lower() == "csv":
+                # Basic CSV output for interactive mode
+                import csv
+                import io
+                
+                # Determine if we're writing to a file or a string buffer
+                if report_file:
+                    output_file = open(report_file, "w", newline="")
+                    csv_writer = csv.writer(output_file)
+                else:
+                    output_stream = io.StringIO()
+                    csv_writer = csv.writer(output_stream)
+                
+                # Write basic information
+                csv_writer.writerow(["Intent", result["intent"]])
+                csv_writer.writerow(["Success", str(result["success"])])
+                csv_writer.writerow(["Processing", result.get("processing", "pattern")])
+                csv_writer.writerow(["Message", result.get("message", "Command executed successfully")])
+                
+                # If we have result objects, add them to CSV
+                if "result" in result and result["result"] and isinstance(result["result"], dict):
+                    result_data = result["result"]
+                    
+                    # Special handling for objects with context information
+                    if "objects" in result_data and isinstance(result_data["objects"], list):
+                        objects = result_data.get("objects", [])
+                        if objects:
+                            csv_writer.writerow([])  # Empty row as separator
+                            
+                            # Determine object type and description
+                            obj_desc = "unused" if "unused_objects" in result_data else ""
+                            object_type = result_data.get("object_type", "")
+                            
+                            # Create title based on search type
+                            if result_data.get("is_duplicate_search"):
+                                header = f"Duplicated {object_type} Objects ({len(objects)})"
+                                if result_data.get("unique_values"):
+                                    header += f" across {result_data.get('unique_values')} unique values"
+                            else:
+                                header = f"{obj_desc} {object_type} Objects ({len(objects)})".strip().capitalize()
+                                
+                            csv_writer.writerow([header])
+                            
+                            # Check if objects have detailed information
+                            if objects and isinstance(objects[0], dict):
+                                # Determine which columns are needed based on the data
+                                columns = ["Name"]
+                                
+                                # Check if we have context information available
+                                has_context = any("context" in obj for obj in objects) or any("context_name" in obj for obj in objects)
+                                
+                                for field in ["ip-netmask", "ip-range", "fqdn", "protocol", "port", "description"]:
+                                    if any(field in obj for obj in objects):
+                                        columns.append(field.capitalize())
+                                
+                                # Add context column if available
+                                if has_context:
+                                    columns.append("Context")
+                                        
+                                # Write header row
+                                csv_writer.writerow(columns)
+                                
+                                # Write object data
+                                for obj in objects:
+                                    row_data = [obj.get("name", "unnamed")]
+                                    
+                                    # Process standard fields
+                                    for field in columns[1:-1] if has_context else columns[1:]:  # Skip the name column and context (if present)
+                                        field_key = field.lower()
+                                        row_data.append(str(obj.get(field_key, "")))
+                                    
+                                    # Add context information if available
+                                    if has_context and "Context" in columns:
+                                        if "context" in obj:
+                                            row_data.append(str(obj.get("context", "")))
+                                        elif "context_name" in obj:
+                                            if "context_type" in obj and obj["context_type"] == "device_group":
+                                                row_data.append(f"Device Group: {obj['context_name']}")
+                                            elif "context_type" in obj and obj["context_type"] == "vsys":
+                                                row_data.append(f"VSYS: {obj['context_name']}")
+                                            else:
+                                                row_data.append(str(obj.get("context_name", "")))
+                                        else:
+                                            row_data.append("")
+                                        
+                                    csv_writer.writerow(row_data)
+                            else:
+                                # Simple objects list with possible context info
+                                has_context = any(isinstance(obj, dict) and ("context" in obj or "context_name" in obj) for obj in objects)
+                                
+                                if has_context:
+                                    csv_writer.writerow(["Name", "Context"])
+                                    for obj in objects:
+                                        if isinstance(obj, str):
+                                            csv_writer.writerow([obj, ""])
+                                        elif isinstance(obj, dict):
+                                            obj_name = obj.get("name", str(obj))
+                                            # Format context information
+                                            context_str = ""
+                                            if "context" in obj:
+                                                context_str = str(obj.get("context", ""))
+                                            elif "context_name" in obj:
+                                                if "context_type" in obj and obj["context_type"] == "device_group":
+                                                    context_str = f"Device Group: {obj['context_name']}"
+                                                elif "context_type" in obj and obj["context_type"] == "vsys":
+                                                    context_str = f"VSYS: {obj['context_name']}"
+                                                else:
+                                                    context_str = str(obj.get("context_name", ""))
+                                            csv_writer.writerow([obj_name, context_str])
+                                        else:
+                                            csv_writer.writerow([str(obj), ""])
+                                else:
+                                    # Simple list without context
+                                    csv_writer.writerow(["Name"])
+                                    for obj in objects:
+                                        if isinstance(obj, str):
+                                            csv_writer.writerow([obj])
+                                        else:
+                                            csv_writer.writerow([str(obj)])
+                    else:
+                        # Handle other result types
+                        for key, value in result_data.items():
+                            if isinstance(value, list) and len(value) > 0:
+                                csv_writer.writerow([])
+                                csv_writer.writerow([f"{key} ({len(value)}):"])
+                                for item in value:
+                                    if isinstance(item, dict):
+                                        csv_writer.writerow([json.dumps(item)])
+                                    else:
+                                        csv_writer.writerow([str(item)])
+                            elif not isinstance(value, dict):
+                                csv_writer.writerow([key, str(value)])
+                
+                if report_file:
+                    output_file.close()
+                    typer.echo(f"Report saved to {report_file}")
+                else:
+                    typer.echo(output_stream.getvalue())
+                    output_stream.close()
             else:
                 # Print debug info about result
                 if verbose:
@@ -1441,6 +1864,18 @@ def interactive_mode(
                                                 ]:
                                                     if field in obj:
                                                         details.append(f"{field}:{obj[field]}")
+                                                        
+                                                # Add context information if available
+                                                if "context" in obj:
+                                                    details.append(f"context:{obj['context']}")
+                                                elif "context_name" in obj:
+                                                    if "context_type" in obj and obj["context_type"] == "device_group":
+                                                        details.append(f"context:Device Group: {obj['context_name']}")
+                                                    elif "context_type" in obj and obj["context_type"] == "vsys":
+                                                        details.append(f"context:VSYS: {obj['context_name']}")
+                                                    else:
+                                                        details.append(f"context:{obj['context_name']}")
+                                                        
                                                 if details:
                                                     typer.echo(f"  - {name}: {' | '.join(details)}")
                                                 else:

@@ -106,6 +106,31 @@ class TestCommandBase:
             lines = f.readlines()
             assert len(lines) == 3  # Header + 2 data rows
             assert '"name","type","value"' in lines[0]
+            
+    def test_format_output_html(self, temp_output_file):
+        """Test HTML output formatting."""
+        cmd = CommandBase()
+        test_data = [
+            {"name": "obj1", "type": "address", "value": "1.1.1.1"},
+            {"name": "obj2", "type": "address", "value": "2.2.2.2"},
+        ]
+
+        # Test with output file
+        cmd.format_output(test_data, "html", temp_output_file, table_title="Test HTML Report")
+        assert os.path.exists(temp_output_file)
+
+        with open(temp_output_file, "r") as f:
+            content = f.read()
+            # Check for essential HTML elements
+            assert "<!DOCTYPE html>" in content
+            assert "<html lang=\"en\">" in content
+            assert "<title>Test HTML Report</title>" in content
+            assert "<h1>Test HTML Report</h1>" in content
+            assert "<table>" in content
+            assert "<th>name</th>" in content
+            assert "<td>obj1</td>" in content
+            assert "<td>obj2</td>" in content
+            assert "Report generated on" in content
 
     def test_handle_error_panflow_error(self):
         """Test error handling with PANFlowError."""
