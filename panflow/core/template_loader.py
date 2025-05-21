@@ -8,7 +8,7 @@ for the various report formats.
 import os
 import json
 from typing import Dict, Any, Optional, List, Union
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, select_autoescape, PackageLoader, ChoiceLoader
 
 # Import logging utilities
 from ..core.logging_utils import logger, log, log_structured
@@ -92,17 +92,18 @@ class TemplateLoader:
             Rendered template as a string
         """
         try:
+            # Add timestamp to all templates by default
+            import datetime
+            if 'timestamp' not in context:
+                context['timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
             template = self.env.get_template(template_name)
             return template.render(**context)
         except Exception as e:
-            log_structured(
-                "Error rendering template",
-                "error",
-                template_name=template_name,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                template_dir=self.template_dir,
-                custom_templates_dir=getattr(self, "custom_templates_dir", None),
+            # Use simple logging instead of structured logging to avoid potential extra_data conflicts
+            logger.error(
+                f"Error rendering template '{template_name}': {str(e)}, "
+                f"type: {type(e).__name__}, template_dir: {self.template_dir}"
             )
             # Fallback to a simple template with error message
             return f"""<!DOCTYPE html>
@@ -143,6 +144,45 @@ class TemplateLoader:
         """
         context = {"analysis": analysis}
         return self.render_template("reports/object_usage.html", context)
+        
+    def render_unused_objects_report(self, report_data: Dict[str, Any], report_info: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Render the unused objects report.
+
+        Args:
+            report_data: The report data containing unused objects
+            report_info: Optional additional report information
+
+        Returns:
+            Rendered HTML report as a string
+        """
+        context = {
+            "unused_objects": report_data.get("unused_objects", []),
+            "report_info": report_info or {}
+        }
+        return self.render_template("reports/unused_objects.html", context)
+        
+    def render_duplicate_objects_report(self, report_data: Dict[str, Any], report_info: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Render the duplicate objects report.
+
+        Args:
+            report_data: The report data containing duplicate objects
+            report_info: Optional additional report information
+
+        Returns:
+            Rendered HTML report as a string
+        """
+        duplicates = report_data.get("duplicate_objects", {})
+        total_duplicates = sum(len(objs) - 1 for objs in duplicates.values() if not isinstance(objs, dict) and not str(objs).startswith('_'))
+        
+        context = {
+            "duplicate_objects": duplicates,
+            "total_count": total_duplicates,
+            "unique_values": len([k for k in duplicates.keys() if not str(k).startswith('_')]),
+            "report_info": report_info or {}
+        }
+        return self.render_template("reports/duplicate_objects.html", context)
 
     def render_custom_report(self, report: Dict[str, Any]) -> str:
         """

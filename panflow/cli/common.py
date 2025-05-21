@@ -576,7 +576,7 @@ def format_object_for_display(obj):
         return name
 
 
-def format_objects_list(objects, include_header=True, object_type=None, count=None):
+def format_objects_list(objects, include_header=True, object_type=None, count=None, grouped=False):
     """
     Create a consistently formatted list of objects for display.
 
@@ -585,6 +585,7 @@ def format_objects_list(objects, include_header=True, object_type=None, count=No
         include_header: Whether to include a header line
         object_type: Optional object type for the header
         count: Optional count override
+        grouped: Whether objects should be grouped by value (for duplicates)
 
     Returns:
         list: List of strings for display
@@ -597,12 +598,82 @@ def format_objects_list(objects, include_header=True, object_type=None, count=No
         object_type_str = f" {object_type}" if object_type else ""
         result.append(f"Found {count}{object_type_str} objects:")
 
-    # Format each object
-    for obj in objects:
-        formatted = format_object_for_display(obj)
-        result.append(f"  - {formatted}")
+    # Check if we need to group objects (for duplicates)
+    if grouped and isinstance(objects, list) and len(objects) > 0:
+        # For grouped display, assume objects are already grouped
+        for obj in objects:
+            formatted = format_object_for_display(obj)
+            result.append(f"  - {formatted}")
+    elif grouped and isinstance(objects, dict):
+        # If objects is a dictionary of duplicate groups
+        for value, group_objects in objects.items():
+            if value.startswith('_'):  # Skip internal fields
+                continue
+                
+            # Format the value key
+            if ':' in value:
+                parts = value.split(':', 1)
+                value_display = f"{parts[0].capitalize()}: {parts[1]}"
+            else:
+                value_display = value
+                
+            result.append(f"Group: {value_display} ({len(group_objects)} objects)")
+            
+            # Format each object in the group with proper indentation
+            for obj in group_objects:
+                name = obj.get('name', 'unnamed')
+                
+                # Add context information if available
+                context = ""
+                if 'context' in obj:
+                    context = f" - {obj['context']}"
+                elif 'context_type' in obj:
+                    if obj['context_type'] == 'device_group' and 'context_name' in obj:
+                        context = f" - Device Group: {obj['context_name']}"
+                    elif obj['context_type'] == 'vsys' and 'context_name' in obj:
+                        context = f" - VSYS: {obj['context_name']}"
+                    elif obj['context_type'] == 'shared':
+                        context = " - Shared"
+                        
+                result.append(f"    * {name}{context}")
+            
+            # Add an extra line between groups for readability
+            result.append("")
+    else:
+        # Regular non-grouped format
+        for obj in objects:
+            formatted = format_object_for_display(obj)
+            result.append(f"  - {formatted}")
 
     return result
+
+def format_duplicate_objects_list(duplicates, include_header=True, object_type=None):
+    """
+    Create a consistently formatted list of duplicate objects for display,
+    grouped by their values.
+
+    Args:
+        duplicates: Dictionary mapping values to lists of duplicate objects
+        include_header: Whether to include a header line
+        object_type: Optional object type for the header
+
+    Returns:
+        list: List of strings for display
+    """
+    result = []
+    
+    # Count total duplicates and unique values
+    total_duplicates = sum(len(objects) - 1 for objects in duplicates.values() 
+                          if not isinstance(objects, dict) and not str(objects).startswith('_'))
+    unique_values = len([k for k in duplicates.keys() if not str(k).startswith('_')])
+    
+    # Add header if requested
+    if include_header:
+        object_type_str = f" {object_type}" if object_type else ""
+        result.append(f"Found {total_duplicates} duplicate{object_type_str} objects across {unique_values} unique values:")
+    
+    # Format each group of duplicates
+    return result + format_objects_list(duplicates, include_header=False, grouped=True)
 
 
 def format_policies_list(policies, include_header=True, policy_type=None, count=None):

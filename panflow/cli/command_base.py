@@ -266,306 +266,131 @@ class CommandBase:
                 
         elif output_format.lower() == "html":
             try:
-                # Generate a properly formatted HTML report with styling
+                # Import the TemplateLoader for template-based HTML rendering
+                from ..core.template_loader import TemplateLoader
                 import datetime
                 
-                # Get timestamp for the report
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Create a template loader
+                template_loader = TemplateLoader()
                 
-                # Determine title and subtitle
-                if report_type:
-                    main_title = f"PANFlow {report_type}"
-                else:
-                    main_title = table_title or 'PANFlow Report'
+                # Prepare report information section
+                report_info = {}
                 
-                # Build additional information section
-                info_section = ""
-                if query_text or config_file or additional_info:
-                    info_section = """<div class="report-info">
-    <h2>Report Information</h2>
-    <table class="info-table">
-"""
-                    # Add query information if available (but skip if it's already in additional_info)
-                    query_added = False
-                    if additional_info and "Query" in additional_info:
-                        query_added = True
-                    
-                    if query_text and not query_added:
-                        info_section += f"""        <tr>
-            <td class="info-key">Query</td>
-            <td class="info-value"><pre>{query_text}</pre></td>
-        </tr>
-"""
-                    
-                    # Add config file information if available (but skip if it's already in additional_info)
-                    config_added = False
-                    if additional_info and "Configuration" in additional_info:
-                        config_added = True
-                    
-                    if config_file and not config_added:
-                        info_section += f"""        <tr>
-            <td class="info-key">Configuration</td>
-            <td class="info-value">{config_file}</td>
-        </tr>
-"""
-                    
-                    # Add any additional information but skip Query/Configuration that we've already added
-                    if additional_info:
-                        for key, value in additional_info.items():
-                            # Skip query and config if already added
-                            if (key == "Query" and query_added) or (key == "Configuration" and config_added):
-                                continue
-                            info_section += f"""        <tr>
-            <td class="info-key">{key}</td>
-            <td class="info-value">{value}</td>
-        </tr>
-"""
-                    
-                    info_section += """    </table>
-</div>"""
+                # Add query information if available
+                if query_text:
+                    report_info["Query"] = query_text
                 
-                # Start building HTML content with consistent styling
-                html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{main_title}</title>
-    <style>
-        body {{\n            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f8f9fa;
-        }}
-        h1, h2, h3 {{
-            color: #2c3e50;
-        }}
-        h1 {{
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }}
-        h2 {{
-            margin-top: 20px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #ddd;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }}
-        th, td {{
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }}
-        th {{
-            background-color: #3498db;
-            color: white;
-        }}
-        tr:nth-child(even) {{
-            background-color: #f2f2f2;
-        }}
-        tr:hover {{
-            background-color: #f1f7fa;
-        }}
-        .timestamp {{
-            color: #7f8c8d;
-            font-style: italic;
-            margin-top: 40px;
-            text-align: center;
-        }}
-        .key {{
-            font-weight: bold;
-        }}
-        .value-col {{
-            color: #2980b9;
-            font-weight: bold;
-        }}
-        .details-col {{
-            max-width: 300px;
-            word-wrap: break-word;
-        }}
-        .container {{
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            padding: 20px;
-            margin-bottom: 30px;
-        }}
-        .note {{
-            background-color: #fef9e7;
-            padding: 10px;
-            border-left: 4px solid #f39c12;
-            margin: 10px 0;
-        }}
-        .report-info {{
-            background-color: #edf7ff;
-            border-radius: 8px;
-            padding: 10px 20px;
-            margin-bottom: 20px;
-        }}
-        .info-table {{
-            border: none;
-            box-shadow: none;
-        }}
-        .info-table td {{
-            padding: 5px 10px;
-        }}
-        .info-key {{
-            font-weight: bold;
-            width: 150px;
-        }}
-        .info-value {{
-            font-family: monospace;
-        }}
-        .info-value pre {{
-            margin: 0;
-            background-color: #f5f5f5;
-            padding: 5px 10px;
-            border-radius: 3px;
-            overflow-x: auto;
-        }}
-    </style>
-</head>
-<body>
-    <h1>{main_title}</h1>
-    {info_section}
-    <div class="container">
-"""
+                # Add config file information if available
+                if config_file:
+                    report_info["Configuration"] = config_file
                 
-                # Format the content based on data type
-                if isinstance(data, list) and data:
-                    # Table for list data
+                # Add any additional information
+                if additional_info:
+                    report_info.update(additional_info)
+                
+                # Determine the report type
+                if isinstance(data, dict):
+                    # Special handling for specific report types
+                    if "unused_objects" in data:
+                        # This is an unused objects report
+                        html_content = template_loader.render_unused_objects_report(data, report_info)
+                    elif "duplicate_objects" in data:
+                        # This is a duplicate objects report
+                        html_content = template_loader.render_duplicate_objects_report(data, report_info)
+                    elif "nlq_info" in data:
+                        # This is an NLQ report
+                        # Prepare a title based on report type
+                        nlq_info = data.get("nlq_info", {})
+                        intent = nlq_info.get("intent", "")
+                        
+                        if "unused_address_objects" in data:
+                            # It's an unused objects report
+                            html_content = template_loader.render_unused_objects_report(
+                                {"unused_objects": data.get("unused_address_objects", [])},
+                                report_info
+                            )
+                        elif "duplicates" in data:
+                            # It's a duplicates report
+                            duplicates_data = {
+                                "duplicate_objects": data.get("duplicates", {}).get("items", {})
+                            }
+                            html_content = template_loader.render_duplicate_objects_report(
+                                duplicates_data,
+                                report_info
+                            )
+                        else:
+                            # Generic NLQ report
+                            html_content = template_loader.render_template(
+                                "reports/components/base_template.html",
+                                {
+                                    "report_title": "Natural Language Query Results",
+                                    "content": f"<pre>{json.dumps(data, indent=2)}</pre>",
+                                    "report_info": report_info,
+                                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                }
+                            )
+                    else:
+                        # Generic dictionary data
+                        html_content = template_loader.render_template(
+                            "reports/components/base_template.html",
+                            {
+                                "report_title": report_type or table_title or "PANFlow Report",
+                                "content": json.dumps(data, indent=2),
+                                "report_info": report_info,
+                                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            }
+                        )
+                elif isinstance(data, list) and data:
+                    # List data - render as table
+                    table_html = "<table>\n<thead>\n<tr>\n"
+                    
                     if isinstance(data[0], dict):
                         # Get columns from the first item
                         columns = list(data[0].keys())
                         
-                        # Create table with headers
-                        html_content += "<table>\n<thead>\n<tr>\n"
+                        # Create table headers
                         for column in columns:
-                            html_content += f"<th>{column}</th>\n"
-                        html_content += "</tr>\n</thead>\n<tbody>\n"
+                            table_html += f"<th>{column}</th>\n"
+                        
+                        table_html += "</tr>\n</thead>\n<tbody>\n"
                         
                         # Add rows
                         for item in data:
-                            html_content += "<tr>\n"
+                            table_html += "<tr>\n"
                             for column in columns:
                                 value = item.get(column, "")
-                                html_content += f"<td>{value}</td>\n"
-                            html_content += "</tr>\n"
-                        
-                        html_content += "</tbody>\n</table>\n"
+                                table_html += f"<td>{value}</td>\n"
+                            table_html += "</tr>\n"
                     else:
                         # Simple list
-                        html_content += "<table>\n<thead>\n<tr>\n<th>Value</th>\n</tr>\n</thead>\n<tbody>\n"
+                        table_html += "<th>Value</th>\n</tr>\n</thead>\n<tbody>\n"
+                        
                         for item in data:
-                            html_content += f"<tr>\n<td>{item}</td>\n</tr>\n"
-                        html_content += "</tbody>\n</table>\n"
-                
-                elif isinstance(data, dict):
-                    # Table for dictionary data
-                    html_content += "<table>\n<thead>\n<tr>\n"
-                    html_content += "<th>Key</th>\n<th>Value</th>\n"
-                    html_content += "</tr>\n</thead>\n<tbody>\n"
+                            table_html += f"<tr>\n<td>{item}</td>\n</tr>\n"
                     
-                    for key, value in data.items():
-                        html_content += "<tr>\n"
-                        html_content += f"<td class='key'>{key}</td>\n"
-                        
-                        # Special handling for better HTML formatting
-                        if key == "nlq_info" and isinstance(value, dict):
-                            # Format NLQ info in a more readable way
-                            nlq_html = "<table class='info-table'>\n"
-                            for info_key, info_val in value.items():
-                                nlq_html += f"<tr><td class='info-key'>{info_key}</td><td class='info-value'>{info_val}</td></tr>\n"
-                            nlq_html += "</table>"
-                            html_content += f"<td>{nlq_html}</td>\n"
-                        elif key == "unused_address_objects" and isinstance(value, list):
-                            # Format unused objects as a nice table
-                            if value:
-                                obj_html = "<table class='info-table'>\n"
-                                obj_html += "<tr><th>Name</th><th>IP Address</th><th>Context</th></tr>\n"
-                                for obj in value:
-                                    name = obj.get("name", "")
-                                    ip = obj.get("ip-netmask", obj.get("ip-range", obj.get("fqdn", "")))
-                                    context = obj.get("context", "Unknown")
-                                    obj_html += f"<tr><td>{name}</td><td>{ip}</td><td>{context}</td></tr>\n"
-                                obj_html += "</table>"
-                                html_content += f"<td>{obj_html}</td>\n"
-                            else:
-                                html_content += "<td>No unused objects found</td>\n"
-                        elif key == "duplicates" and isinstance(value, dict):
-                            # Format duplicates as a nice table
-                            items = value.get("items", [])
-                            if items:
-                                dup_html = f"<p>Found {value.get('count', 0)} duplicate {value.get('object_type', '')} objects</p>\n"
-                                dup_html += "<table class='info-table'>\n"
-                                if "object_type" in items[0]:
-                                    dup_html += "<tr><th>Object Type</th><th>Value</th><th>Objects</th></tr>\n"
-                                    for item in items:
-                                        obj_type = item.get("object_type", "")
-                                        val = item.get("value", "")
-                                        objects = ", ".join(item.get("objects", []))
-                                        dup_html += f"<tr><td>{obj_type}</td><td>{val}</td><td>{objects}</td></tr>\n"
-                                else:
-                                    dup_html += "<tr><th>Value</th><th>Objects</th></tr>\n"
-                                    for item in items:
-                                        val = item.get("value", "")
-                                        objects = ", ".join(item.get("objects", []))
-                                        dup_html += f"<tr><td>{val}</td><td>{objects}</td></tr>\n"
-                                dup_html += "</table>"
-                                html_content += f"<td>{dup_html}</td>\n"
-                            else:
-                                html_content += "<td>No duplicates found</td>\n"
-                        # Format other nested structures
-                        elif isinstance(value, (dict, list)):
-                            # Check if we can render this better
-                            if isinstance(value, list) and value and isinstance(value[0], dict):
-                                # It's a list of objects, make a table
-                                list_html = "<table class='info-table'>\n"
-                                # Get headers from first item
-                                headers = list(value[0].keys())
-                                list_html += "<tr>"
-                                for header in headers:
-                                    list_html += f"<th>{header}</th>"
-                                list_html += "</tr>\n"
-                                # Add rows
-                                for item in value:
-                                    list_html += "<tr>"
-                                    for header in headers:
-                                        list_html += f"<td>{item.get(header, '')}</td>"
-                                    list_html += "</tr>\n"
-                                list_html += "</table>"
-                                html_content += f"<td>{list_html}</td>\n"
-                            else:
-                                # Just use JSON format
-                                json_value = json.dumps(value, indent=2)
-                                html_content += f"<td><pre>{json_value}</pre></td>\n"
-                        else:
-                            html_content += f"<td>{value}</td>\n"
-                        
-                        html_content += "</tr>\n"
+                    table_html += "</tbody>\n</table>\n"
                     
-                    html_content += "</tbody>\n</table>\n"
-                
+                    # Render with base template
+                    html_content = template_loader.render_template(
+                        "reports/components/base_template.html",
+                        {
+                            "report_title": report_type or table_title or "PANFlow Report",
+                            "content": table_html,
+                            "report_info": report_info,
+                            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                    )
                 else:
-                    # Simple string or other value
-                    html_content += f"<p>{data}</p>\n"
-                
-                # Add timestamp and close tags
-                html_content += f"""    </div>
-    <div class="timestamp">
-        Report generated on {timestamp}
-    </div>
-</body>
-</html>
-"""
+                    # Simple data
+                    html_content = template_loader.render_template(
+                        "reports/components/base_template.html",
+                        {
+                            "report_title": report_type or table_title or "PANFlow Report",
+                            "content": f"<p>{data}</p>",
+                            "report_info": report_info,
+                            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                    )
                 
                 # Save to file or display
                 if output_file:

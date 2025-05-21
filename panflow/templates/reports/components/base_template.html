@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PANFlow Report{% endblock %}</title>
+    <style>
+        {% include "css/reports.css" %}
+    </style>
+    {% block extra_styles %}{% endblock %}
+</head>
+<body>
+    <h1>{% block report_title %}PANFlow Report{% endblock %}</h1>
+    
+    {% if report_info %}
+    <div class="report-info">
+        <h2>Report Information</h2>
+        <table class="info-table">
+            {% for key, value in report_info.items() %}
+            <tr>
+                <td class="info-key">{{ key }}</td>
+                <td class="info-value">
+                    {% if key == "Query" %}
+                    <pre>{{ value }}</pre>
+                    {% else %}
+                    {{ value }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+    
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <div class="timestamp">
+        Report generated on {{ timestamp }}
+    </div>
+</body>
+</html>

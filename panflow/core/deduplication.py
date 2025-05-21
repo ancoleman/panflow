@@ -133,7 +133,7 @@ class DeduplicationEngine:
 
         Returns:
             Tuple of (duplicates, references):
-                - duplicates: Dictionary mapping values to lists of (name, element) tuples
+                - duplicates: Dictionary mapping values to lists of (name, element, context) tuples
                 - references: Dictionary mapping object names to lists of references
         """
         logger.info("Finding duplicate address objects")
@@ -156,6 +156,13 @@ class DeduplicationEngine:
 
         # Group by value
         by_value = {}
+
+        # Create context info dictionary
+        context_info = {"type": self.context_type}
+        if "device_group" in self.context_kwargs:
+            context_info["device_group"] = self.context_kwargs["device_group"]
+        if "vsys" in self.context_kwargs:
+            context_info["vsys"] = self.context_kwargs["vsys"]
 
         logger.debug("Grouping address objects by value")
         for addr in addresses:
@@ -185,7 +192,9 @@ class DeduplicationEngine:
                 if value_key:
                     if value_key not in by_value:
                         by_value[value_key] = []
-                    by_value[value_key].append((name, addr))
+                    
+                    # Store object with context information
+                    by_value[value_key].append((name, addr, dict(context_info)))
                 else:
                     logger.warning(f"Address object '{name}' has no recognizable value, skipping")
 
@@ -204,7 +213,7 @@ class DeduplicationEngine:
                 f"Found {duplicate_count} duplicate objects across {unique_values_count} unique values"
             )
             for value, objects in duplicates.items():
-                names = [name for name, _ in objects]
+                names = [name for name, _, _ in objects]
                 logger.debug(f"Duplicates with value '{value}': {', '.join(names)}")
         else:
             logger.info("No duplicate address objects found")
@@ -849,7 +858,11 @@ class DeduplicationEngine:
             # Determine which object to keep
             try:
                 primary = self._select_primary_object(objects, primary_name_strategy)
-                primary_name, primary_elem = primary
+                if len(primary) == 3:
+                    primary_name, primary_elem, primary_context = primary
+                else:
+                    primary_name, primary_elem = primary
+                    primary_context = None
 
                 # Skip if we've already processed this primary
                 if primary_name in processed_objects:
@@ -863,7 +876,13 @@ class DeduplicationEngine:
                 logger.info(f"Selected primary object '{primary_name}' for value {value_key}")
 
                 # Process each duplicate
-                for name, obj in objects:
+                for obj_tuple in objects:
+                    if len(obj_tuple) == 3:
+                        name, obj, context = obj_tuple
+                    else:
+                        name, obj = obj_tuple
+                        context = None
+                        
                     # Skip the primary object
                     if name == primary_name:
                         continue
@@ -876,7 +895,8 @@ class DeduplicationEngine:
                         continue
 
                     processed_objects.add(name)
-                    logger.debug(f"Processing duplicate: {name}")
+                    context_str = f" (context: {context['type']})" if context else ""
+                    logger.debug(f"Processing duplicate: {name}{context_str}")
 
                     # Update references to this object
                     if name in references:
@@ -1377,11 +1397,11 @@ class DeduplicationEngine:
         Select the primary object to keep based on the specified strategy.
 
         Args:
-            objects: List of (name, element) tuples
+            objects: List of tuples (name, element) or (name, element, context)
             strategy: Selection strategy ('first', 'shortest', etc.)
 
         Returns:
-            Tuple of (name, element) for the selected primary object
+            Tuple of (name, element) or (name, element, context) for the selected primary object
         """
         logger.debug(f"Selecting primary object using strategy: {strategy}")
 
@@ -1389,6 +1409,39 @@ class DeduplicationEngine:
             logger.error("No objects provided for primary selection")
             raise ValueError("No objects provided")
 
+        # Check if objects have context information (tuples of length 3)
+        has_context = len(objects[0]) >= 3
+        
+        # Special case for context-aware selection
+        if strategy == "context_priority" and has_context:
+            # Prioritize shared context first, then device groups by hierarchy level
+            logger.debug("Using 'context_priority' strategy - prioritizing by context level")
+            
+            # First check for shared context
+            shared_objects = [obj for obj in objects if obj[2].get('type') == 'shared']
+            if shared_objects:
+                return shared_objects[0]
+                
+            # If no shared objects, select objects from device groups
+            device_group_objects = [obj for obj in objects if obj[2].get('type') == 'device_group']
+            if device_group_objects:
+                # Sort by level if available
+                if any('level' in obj[2] for obj in device_group_objects):
+                    sorted_dg_objects = sorted(device_group_objects, key=lambda x: x[2].get('level', 999))
+                    return sorted_dg_objects[0]
+                else:
+                    # If no levels, just return the first device group object
+                    return device_group_objects[0]
+            
+            # Fall back to vsys objects
+            vsys_objects = [obj for obj in objects if obj[2].get('type') == 'vsys']
+            if vsys_objects:
+                return vsys_objects[0]
+                
+            # If no context-based selection works, fall back to first object
+            return objects[0]
+            
+        # Standard strategies
         if strategy == "first":
             logger.debug("Using 'first' strategy - selecting first object")
             return objects[0]

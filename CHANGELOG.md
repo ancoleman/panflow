@@ -10,6 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.3.3] - 2025-05-25
+
+### Added
+- Major reporting system enhancements
+  - Implemented template-based HTML report generation system
+  - Created reusable components for consistent report styling
+  - Added CSS-based styling separate from Python code
+  - Enhanced UI with responsive design for better mobile/tablet viewing
+  
+### Changed
+- Completely refactored HTML output generation
+  - Moved all inline HTML generation to Jinja2 templates
+  - Created separate template files for different report types
+  - Added proper template inheritance for consistent look and feel
+  - Improved HTML structure with semantic elements and better organization
+
+### Enhanced
+- Extended context awareness in NLQ duplicate objects reporting
+  - Added context tracking for duplicate objects detection
+  - Preserved context through NLQ processing pipeline
+  - Enhanced HTML, CSV, and JSON outputs to show object context
+  - Implemented consistent context formatting across all output formats
+- Improved duplicate objects visualization
+  - Objects with the same values are now grouped together
+  - Added value headers with object counts for each group
+  - Enhanced visual presentation with card-like UI for each group
+  - Improved table output with per-value grouping and context information
+
 ## [0.3.2] - 2025-05-20
 
 ### Added

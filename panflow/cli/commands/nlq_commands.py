@@ -469,135 +469,241 @@ def process_query(
                 raise typer.Exit(1)
 
         elif format.lower() == "html":
-            # HTML format using CommandBase formatter
-            from ..command_base import CommandBase
+            # Import the template loader for HTML rendering
+            from ...core.template_loader import TemplateLoader
+            
+            # Create a template loader
+            template_loader = TemplateLoader()
             
             # Create a structured dataset for HTML report
-            report_data = {
-                "nlq_info": {
-                    "intent": result['intent'],
-                    "success": result['success'],
-                    "processing": result.get('processing', 'pattern'),
-                    "message": result.get('message', 'Command executed successfully')
-                }
+            report_info = {
+                "Query": query,
+                "Configuration": config,
+                "Intent": result['intent'],
+                "Success": str(result['success']),
+                "Processing Method": result.get('processing', 'pattern')
             }
             
             # Add result data if available
             if "result" in result and result["result"] and isinstance(result["result"], dict):
                 result_data = result["result"]
                 
-                # Process result data for better report formatting
-                if "duplicates" in result_data:
-                    # Format duplicates in a more structured way for HTML display
-                    dup_data = result_data["duplicates"]
-                    formatted_dup_data = []
+                # Determine report type and render appropriate template based on intent
+                if result["intent"] == "list_unused_objects":
+                    # Unused objects report
+                    unused_objects = result_data.get("objects", [])
                     
-                    dup_count = result_data.get("count", 0)
-                    unique_values = result_data.get("unique_values", 0)
+                    # Add log to see the structure of the unused objects for debugging
+                    logger.debug(f"Rendering unused objects report with {len(unused_objects)} objects")
+                    if unused_objects and len(unused_objects) > 0:
+                        logger.debug(f"Sample object structure: {unused_objects[0]}")
+                        
+                    html_content = template_loader.render_unused_objects_report(
+                        {"unused_objects": unused_objects},
+                        report_info
+                    )
+                    report_type = "Unused Objects Report"
+                
+                # Handle list_objects with show_duplicates=True (duplicate objects)
+                elif result["intent"] == "list_objects" and result_data.get("is_duplicate_search") == True:
+                    # This is "show me duplicated objects" type of query
+                    object_type = result_data.get("object_type", "")
+                    objects = result_data.get("objects", {})
+                    
+                    # We need to reformat these objects into the duplicate format
+                    # First, we need to group objects by their value
+                    value_to_objects = {}
+                    
+                    # Check if we already have formatted duplicates
+                    if "formatted_duplicates" in result_data:
+                        # Use the pre-formatted duplicates with context
+                        formatted_dups = result_data.get("formatted_duplicates", {})
+                    # Try to extract the duplicates data from the result if no formatted duplicates available
+                    elif "duplicates" in result_data:
+                        # Convert raw duplicates to the expected format
+                        dup_data = result_data.get("duplicates", {})
+                        formatted_dups = {}
+                        
+                        for value, objects_list in dup_data.items():
+                            formatted_objects = []
+                            for obj in objects_list:
+                                if isinstance(obj, tuple) and len(obj) >= 2:
+                                    obj_name = obj[0]
+                                    obj_data = {"name": obj_name}
+                                    
+                                    # Add context if available
+                                    if len(obj) > 2 and isinstance(obj[2], dict):
+                                        obj_context = obj[2]
+                                        obj_data["context_type"] = obj_context.get("type", "unknown")
+                                        if "device_group" in obj_context:
+                                            obj_data["context_name"] = obj_context["device_group"]
+                                        elif "vsys" in obj_context:
+                                            obj_data["context_name"] = obj_context["vsys"]
+                                            
+                                    formatted_objects.append(obj_data)
+                                else:
+                                    # Simple string object
+                                    formatted_objects.append({"name": str(obj)})
+                                    
+                            # Skip empty lists
+                            if formatted_objects:
+                                formatted_dups[value] = formatted_objects
+                        
+                    # Get report data with formatted duplicates
+                    report_data = {"duplicate_objects": formatted_dups}
+                    
+                    # Render using duplicate objects template
+                    html_content = template_loader.render_duplicate_objects_report(
+                        report_data,
+                        report_info
+                    )
+                    report_type = "Duplicate Objects Report"
+                
+                elif "duplicate" in result["intent"] and ("duplicates" in result_data or "formatted_duplicates" in result_data):
+                    # Duplicate objects report
                     object_type = result_data.get("object_type", "")
                     
-                    # Check if this is the "all" object type (combined results)
-                    if object_type.lower() == "all":
-                        for value, objects in dup_data.items():
-                            if value.startswith('_'):  # Skip internal fields
-                                continue
-                                
-                            # Extract object type from the key prefix
-                            type_parts = value.split(":", 1)
-                            obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
-                            actual_value = type_parts[1] if len(type_parts) > 1 else value
-                            
-                            # Format objects list
-                            obj_list = []
-                            for obj in objects:
-                                if isinstance(obj, tuple):
-                                    obj_list.append(obj[0])  # Assume the first item is the name
-                                else:
-                                    obj_list.append(str(obj))
-                                    
-                            formatted_dup_data.append({
-                                "object_type": obj_type,
-                                "value": actual_value,
-                                "objects": obj_list
-                            })
+                    # Check if we have pre-formatted duplicates with context
+                    if "formatted_duplicates" in result_data:
+                        # Use the pre-formatted duplicates with context
+                        formatted_dups = result_data.get("formatted_duplicates", {})
                     else:
-                        # Single object type format
-                        for value, objects in dup_data.items():
-                            if value.startswith('_'):  # Skip internal fields
-                                continue
-                                
-                            # Format objects list
-                            obj_list = []
-                            for obj in objects:
-                                if isinstance(obj, tuple):
-                                    obj_list.append(obj[0])  # Assume the first item is the name
-                                else:
-                                    obj_list.append(str(obj))
+                        # Fall back to manually formatting the duplicates
+                        dup_data = result_data.get("duplicates", {})
+                        formatted_dups = {}
+                        
+                        # Check if this is the "all" object type (combined results)
+                        if object_type.lower() == "all":
+                            for value, objects in dup_data.items():
+                                if value.startswith('_'):  # Skip internal fields
+                                    continue
                                     
-                            formatted_dup_data.append({
-                                "value": value,
-                                "objects": obj_list
-                            })
+                                # Extract object type from the key prefix
+                                type_parts = value.split(":", 1)
+                                obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
+                                actual_value = type_parts[1] if len(type_parts) > 1 else value
+                                
+                                # Format key to include object type
+                                formatted_key = f"{obj_type}:{actual_value}"
+                                
+                                # Format objects list with context if available
+                                formatted_objects = []
+                                for obj in objects:
+                                    if isinstance(obj, dict):
+                                        # Object already has context information
+                                        formatted_objects.append(obj)
+                                    elif isinstance(obj, tuple) and len(obj) >= 2:
+                                        # Convert tuple to dict with context
+                                        obj_data = {"name": obj[0]}
+                                        if len(obj) > 2:
+                                            # Add context from tuple
+                                            obj_data["context_type"] = obj[2].get("type", "unknown")
+                                            if "device_group" in obj[2]:
+                                                obj_data["context_name"] = obj[2]["device_group"]
+                                            elif "vsys" in obj[2]:
+                                                obj_data["context_name"] = obj[2]["vsys"]
+                                        formatted_objects.append(obj_data)
+                                    else:
+                                        # Simple string object
+                                        formatted_objects.append({"name": str(obj)})
+                                        
+                                formatted_dups[formatted_key] = formatted_objects
+                        else:
+                            # Single object type format
+                            for value, objects in dup_data.items():
+                                if value.startswith('_'):  # Skip internal fields
+                                    continue
+                                    
+                                # Format objects list with context
+                                formatted_objects = []
+                                for obj in objects:
+                                    if isinstance(obj, dict):
+                                        # Object already has context information
+                                        formatted_objects.append(obj)
+                                    elif isinstance(obj, tuple) and len(obj) >= 2:
+                                        # Convert tuple to dict with context
+                                        obj_data = {"name": obj[0]}
+                                        if len(obj) > 2:
+                                            # Add context from tuple
+                                            obj_data["context_type"] = obj[2].get("type", "unknown")
+                                            if "device_group" in obj[2]:
+                                                obj_data["context_name"] = obj[2]["device_group"]
+                                            elif "vsys" in obj[2]:
+                                                obj_data["context_name"] = obj[2]["vsys"]
+                                        formatted_objects.append(obj_data)
+                                    else:
+                                        # Simple string object
+                                        formatted_objects.append({"name": str(obj)})
+                                        
+                                formatted_dups[value] = formatted_objects
                     
-                    # Replace duplicates with formatted version
-                    report_data["duplicates"] = {
-                        "object_type": object_type,
-                        "count": dup_count,
-                        "unique_values": unique_values,
-                        "items": formatted_dup_data
-                    }
-                
-                # Format the result data appropriately for better display
-                # If this is an unused objects report, format it specially
-                if result["intent"] == "list_unused_objects":
-                    # Format unused objects in a cleaner way
-                    objects = result_data.get("objects", [])
-                    report_data["unused_address_objects"] = objects
+                    # Get report data with formatted duplicates
+                    report_data = {"duplicate_objects": formatted_dups}
                     
-                    # Don't include raw result data to avoid duplication
-                else:
-                    # Add formatted result data for other types
-                    report_data["result"] = result_data
-                
-            # Determine report type based on intent
-            if result['intent'].startswith('list_'):
-                if "unused_objects" in result['intent']:
-                    report_type = "Unused Objects Report"
-                elif "disabled_policies" in result['intent']:
-                    report_type = "Disabled Policies Report"
-                elif "duplicate" in result['intent']:
+                    # Render using duplicate objects template
+                    html_content = template_loader.render_duplicate_objects_report(
+                        report_data,
+                        report_info
+                    )
                     report_type = "Duplicate Objects Report"
-                else:
-                    report_type = "Object Listing Report"
-            elif result['intent'].startswith('cleanup_'):
-                report_type = "Cleanup Operation Report"
-            elif result['intent'].startswith('bulk_update_'):
-                report_type = "Policy Update Report" 
-            else:
-                report_type = "Natural Language Query Report"
                 
-            # Additional info to include in the report
-            additional_info = {
-                # No additional info here - the query and config will be added via query_text and config_file parameters
-            }
+                elif result["intent"].startswith("cleanup_"):
+                    # Cleanup operation report
+                    if "cleaned_objects" in result_data:
+                        # Convert list of object names to object dictionaries for the template
+                        cleaned_objects = []
+                        for obj_name in result_data.get("cleaned_objects", []):
+                            cleaned_objects.append({"name": obj_name})
+                        
+                        # Render using unused objects template (reusing it for cleanup)
+                        html_content = template_loader.render_unused_objects_report(
+                            {"unused_objects": cleaned_objects},
+                            report_info
+                        )
+                        report_type = "Cleanup Operation Report"
+                    else:
+                        # Generic cleanup report
+                        html_content = template_loader.render_template(
+                            "reports/components/base_template.html",
+                            {
+                                "report_title": "Cleanup Operation Report",
+                                "content": f"<pre>{json.dumps(result_data, indent=2)}</pre>",
+                                "report_info": report_info
+                            }
+                        )
+                        report_type = "Cleanup Operation Report"
+                
+                else:
+                    # Generic NLQ report using base template
+                    html_content = template_loader.render_template(
+                        "reports/components/base_template.html",
+                        {
+                            "report_title": "Natural Language Query Results",
+                            "content": f"<pre>{json.dumps(result_data, indent=2)}</pre>",
+                            "report_info": report_info
+                        }
+                    )
+                    report_type = "Natural Language Query Report"
             
-            # Use CommandBase.format_output to generate HTML
-            CommandBase.format_output(
-                data=report_data,
-                output_format="html",
-                output_file=report_file,
-                table_title="PANFlow NLQ Results",
-                report_type=report_type,
-                query_text=query,
-                config_file=config,
-                additional_info=additional_info
-            )
+            else:
+                # No result data, render generic report
+                html_content = template_loader.render_template(
+                    "reports/components/base_template.html",
+                    {
+                        "report_title": "Natural Language Query Results",
+                        "content": "<p>No result data available.</p>",
+                        "report_info": report_info
+                    }
+                )
+                report_type = "Natural Language Query Report"
             
+            # Save to file or display
             if report_file:
+                with open(report_file, "w") as f:
+                    f.write(html_content)
                 typer.echo(f"HTML report saved to {report_file}")
             else:
                 # When no report file is specified, print a simple text summary to the console
-                # This is a text-only summary when HTML output is requested but no file was specified
                 typer.echo(f"Query: {query}")
                 typer.echo(f"Intent: {result['intent']}")
                 typer.echo(f"Success: {result['success']}")
@@ -662,76 +768,128 @@ def process_query(
 
                 # For duplicate findings - need to handle this case first
                 if "duplicates" in result_data:
-                    dup_data = result_data["duplicates"]
                     dup_count = result_data.get("count", 0)
                     unique_values = result_data.get("unique_values", 0)
                     object_type = result_data.get("object_type", "")
 
                     if dup_count > 0:
-                        # Check if this is the "all" object type (combined results)
-                        if object_type.lower() == "all":
-                            # Create a summary table with object type column
-                            dup_table = Table(
-                                title=f"Duplicate Objects ({dup_count} across {unique_values} values)"
-                            )
-                            dup_table.add_column("Object Type", style="magenta")
-                            dup_table.add_column("Value/Pattern", style="cyan")
-                            dup_table.add_column("Objects", style="green")
-
-                            # Add rows for each duplicated value - in "all" mode, keys are prefixed with the object type
-                            for value, objects in dup_data.items():
+                        # Check if we have formatted duplicates with context info
+                        if "formatted_duplicates" in result_data:
+                            formatted_dups = result_data["formatted_duplicates"]
+                            
+                            # Create a grouped table per value
+                            console.print(f"[bold]Duplicate {object_type} Objects ({dup_count} across {unique_values} values)[/bold]")
+                            console.print()
+                            
+                            # Iterate through values and show objects grouped by value
+                            for value, objects in formatted_dups.items():
                                 # Skip internal fields
                                 if value.startswith("_"):
                                     continue
-
-                                # Extract object type from the key prefix
-                                type_parts = value.split(":", 1)
-                                obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
-                                actual_value = type_parts[1] if len(type_parts) > 1 else value
-
-                                # Format the list of objects - handle both strings and tuples
-                                obj_list = []
+                                    
+                                # Format the value for display
+                                if ":" in value:
+                                    parts = value.split(":", 1)
+                                    value_display = f"[cyan]{parts[0].capitalize()}:[/cyan] [bold]{parts[1]}[/bold]"
+                                else:
+                                    value_display = f"[bold]{value}[/bold]"
+                                    
+                                # Create a table for this duplicate group
+                                group_table = Table(
+                                    title=f"{value_display} ({len(objects)} objects)",
+                                    show_header=True,
+                                    box=None
+                                )
+                                group_table.add_column("Name", style="green")
+                                group_table.add_column("Context", style="magenta")
+                                
+                                # Add each object to the table
                                 for obj in objects:
-                                    if isinstance(obj, tuple):
-                                        obj_list.append(obj[0])  # Assume the first item is the name
-                                    else:
-                                        obj_list.append(str(obj))
-
-                                objects_str = ", ".join(obj_list)
-                                if len(objects_str) > 70:  # Truncate if too long
-                                    objects_str = objects_str[:67] + "..."
-
-                                dup_table.add_row(obj_type, actual_value, objects_str)
+                                    name = obj.get("name", "unnamed")
+                                    
+                                    # Get context information
+                                    context = obj.get("context", "")
+                                    if not context and "context_type" in obj:
+                                        if obj["context_type"] == "device_group" and "context_name" in obj:
+                                            context = f"Device Group: {obj['context_name']}"
+                                        elif obj["context_type"] == "vsys" and "context_name" in obj:
+                                            context = f"VSYS: {obj['context_name']}"
+                                        elif obj["context_type"] == "shared":
+                                            context = "Shared"
+                                            
+                                    group_table.add_row(name, context)
+                                
+                                # Display the table for this group
+                                console.print(group_table)
+                                console.print()  # Add spacing between groups
                         else:
-                            # Normal single object type display
-                            # Create a summary table
-                            dup_table = Table(
-                                title=f"Duplicate {object_type} Objects ({dup_count} across {unique_values} values)"
-                            )
-                            dup_table.add_column("Value/Pattern", style="cyan")
-                            dup_table.add_column("Objects", style="green")
-
-                            # Add rows for each duplicated value
-                            for value, objects in dup_data.items():
-                                # Skip internal fields
-                                if value.startswith("_"):
-                                    continue
-
-                                # Format the list of objects - handle both strings and tuples
-                                obj_list = []
-                                for obj in objects:
-                                    if isinstance(obj, tuple):
-                                        obj_list.append(obj[0])  # Assume the first item is the name
-                                    else:
-                                        obj_list.append(str(obj))
-
-                                objects_str = ", ".join(obj_list)
-                                if len(objects_str) > 70:  # Truncate if too long
-                                    objects_str = objects_str[:67] + "..."
-
-                                dup_table.add_row(value, objects_str)
-
-                        console.print(dup_table)
+                            # Fall back to old display format if formatted_duplicates not available
+                            dup_data = result_data["duplicates"]
+                            
+                            # Check if this is the "all" object type (combined results)
+                            if object_type.lower() == "all":
+                                # Create a summary table with object type column
+                                dup_table = Table(
+                                    title=f"Duplicate Objects ({dup_count} across {unique_values} values)"
+                                )
+                                dup_table.add_column("Object Type", style="magenta")
+                                dup_table.add_column("Value/Pattern", style="cyan")
+                                dup_table.add_column("Objects", style="green")
+    
+                                # Add rows for each duplicated value - in "all" mode, keys are prefixed with the object type
+                                for value, objects in dup_data.items():
+                                    # Skip internal fields
+                                    if value.startswith("_"):
+                                        continue
+    
+                                    # Extract object type from the key prefix
+                                    type_parts = value.split(":", 1)
+                                    obj_type = type_parts[0] if len(type_parts) > 1 else "unknown"
+                                    actual_value = type_parts[1] if len(type_parts) > 1 else value
+    
+                                    # Format the list of objects - handle both strings and tuples
+                                    obj_list = []
+                                    for obj in objects:
+                                        if isinstance(obj, tuple):
+                                            obj_list.append(obj[0])  # Assume the first item is the name
+                                        else:
+                                            obj_list.append(str(obj))
+    
+                                    objects_str = ", ".join(obj_list)
+                                    if len(objects_str) > 70:  # Truncate if too long
+                                        objects_str = objects_str[:67] + "..."
+    
+                                    dup_table.add_row(obj_type, actual_value, objects_str)
+                            else:
+                                # Normal single object type display
+                                # Create a summary table
+                                dup_table = Table(
+                                    title=f"Duplicate {object_type} Objects ({dup_count} across {unique_values} values)"
+                                )
+                                dup_table.add_column("Value/Pattern", style="cyan")
+                                dup_table.add_column("Objects", style="green")
+    
+                                # Add rows for each duplicated value
+                                for value, objects in dup_data.items():
+                                    # Skip internal fields
+                                    if value.startswith("_"):
+                                        continue
+    
+                                    # Format the list of objects - handle both strings and tuples
+                                    obj_list = []
+                                    for obj in objects:
+                                        if isinstance(obj, tuple):
+                                            obj_list.append(obj[0])  # Assume the first item is the name
+                                        else:
+                                            obj_list.append(str(obj))
+    
+                                    objects_str = ", ".join(obj_list)
+                                    if len(objects_str) > 70:  # Truncate if too long
+                                        objects_str = objects_str[:67] + "..."
+    
+                                    dup_table.add_row(value, objects_str)
+    
+                            console.print(dup_table)
 
                 # For cleanup operations (objects)
                 if "cleaned_objects" in result_data and isinstance(

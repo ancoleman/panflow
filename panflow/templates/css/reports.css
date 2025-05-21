@@ -1,0 +1,211 @@
+/* PANFlow Reports CSS */
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f8f9fa;
+}
+
+h1, h2, h3 {
+    color: #2c3e50;
+}
+
+h1 {
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+h2 {
+    margin-top: 20px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #ddd;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #3498db;
+    color: white;
+}
+
+tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+tr:hover {
+    background-color: #f1f7fa;
+}
+
+.timestamp {
+    color: #7f8c8d;
+    font-style: italic;
+    margin-top: 40px;
+    text-align: center;
+}
+
+.key {
+    font-weight: bold;
+}
+
+.value-col {
+    color: #2980b9;
+    font-weight: bold;
+}
+
+.details-col {
+    max-width: 300px;
+    word-wrap: break-word;
+}
+
+.container {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    padding: 20px;
+    margin-bottom: 30px;
+}
+
+.note {
+    background-color: #fef9e7;
+    padding: 10px;
+    border-left: 4px solid #f39c12;
+    margin: 10px 0;
+}
+
+.report-info {
+    background-color: #edf7ff;
+    border-radius: 8px;
+    padding: 10px 20px;
+    margin-bottom: 20px;
+}
+
+.info-table {
+    border: none;
+    box-shadow: none;
+}
+
+.info-table td {
+    padding: 5px 10px;
+}
+
+.info-key {
+    font-weight: bold;
+    width: 150px;
+}
+
+.info-value {
+    font-family: monospace;
+}
+
+.info-value pre {
+    margin: 0;
+    background-color: #f5f5f5;
+    padding: 5px 10px;
+    border-radius: 3px;
+    overflow-x: auto;
+}
+
+/* Context-specific styling */
+.context-shared {
+    background-color: #d1e7dd;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.context-device-group {
+    background-color: #cff4fc;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.context-vsys {
+    background-color: #fff3cd;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* Object type specific styling */
+.object-unused {
+    background-color: #f8d7da;
+}
+
+.object-duplicate {
+    background-color: #fff3cd;
+}
+
+/* Duplicate groups styling */
+.duplicate-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.duplicate-group {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.value-header {
+    background-color: #3498db;
+    color: white;
+    padding: 10px 15px;
+    margin: 0;
+    border-bottom: 1px solid #ddd;
+    font-size: 16px;
+}
+
+.value-header .key {
+    color: #f0f0f0;
+}
+
+.value-header .count {
+    float: right;
+    font-size: 14px;
+    color: #f0f0f0;
+    font-weight: normal;
+}
+
+.duplicate-content {
+    background-color: white;
+    padding: 0;
+}
+
+.duplicate-content table {
+    margin: 0;
+    box-shadow: none;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+    
+    .container {
+        padding: 10px;
+    }
+}

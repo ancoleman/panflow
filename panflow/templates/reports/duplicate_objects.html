@@ -1,0 +1,59 @@
+{% extends "reports/components/base_template.html" %}
+
+{% block title %}Duplicate Objects Report{% endblock %}
+
+{% block report_title %}Duplicate Objects Report{% endblock %}
+
+{% block content %}
+<h2>Found {{ total_count }} Duplicate Objects Across {{ unique_values }} Unique Values</h2>
+
+{% if duplicate_objects and duplicate_objects|length > 0 %}
+    <div class="duplicate-groups">
+        {% for value_key, objects in duplicate_objects.items() %}
+            {% if not value_key.startswith('_') %}
+                <div class="duplicate-group">
+                    <h3 class="value-header">
+                        {% if ':' in value_key %}
+                            {% set parts = value_key.split(':') %}
+                            <span class="key">{{ parts[0]|capitalize }}:</span> {{ parts[1:] | join(':') }}
+                        {% else %}
+                            {{ value_key }}
+                        {% endif %}
+                        <span class="count">({{ objects|length }} objects)</span>
+                    </h3>
+                    <div class="duplicate-content">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Context</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for obj in objects %}
+                                    <tr class="object-row object-duplicate">
+                                        <td>{{ obj.name }}</td>
+                                        <td>
+                                            {% if obj.get('context_type') == 'device_group' %}
+                                            <span class="context-device-group">Device Group: {{ obj.get('context_name', '') }}</span>
+                                            {% elif obj.get('context_type') == 'vsys' %}
+                                            <span class="context-vsys">VSYS: {{ obj.get('context_name', '') }}</span>
+                                            {% elif obj.get('context_type') == 'shared' %}
+                                            <span class="context-shared">Shared</span>
+                                            {% else %}
+                                            {{ obj.get('context', '') }}
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+{% else %}
+<p>No duplicate objects found.</p>
+{% endif %}
+{% endblock %}

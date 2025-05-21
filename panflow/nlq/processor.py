@@ -354,26 +354,82 @@ class NLQProcessor:
 
                 # Create a consolidated list of only the duplicate objects
                 duplicate_objects = {}
+                # Create a list to store formatted duplicate objects with context
+                formatted_duplicates = {}
+                
                 # Get all objects for reference (do this once outside the loop for efficiency)
                 all_objects = xml_config.get_objects(object_type, context_type, **context_kwargs)
 
                 for value, obj_list in duplicates.items():
+                    # Create list for formatted objects with this value
+                    formatted_objects_list = []
+                    
                     for obj_info in obj_list:
                         # Handle different return types from the duplicate finding methods
                         if hasattr(obj_info, "object_name"):
                             obj_name = obj_info.object_name
+                            obj_context = None  # No context available for this format
                         elif isinstance(obj_info, tuple) and len(obj_info) >= 1:
                             obj_name = obj_info[0]  # Assume first item is the name
+                            
+                            # Extract context if available (tuple should have 3 elements: name, element, context_dict)
+                            obj_context = None
+                            if len(obj_info) >= 3 and isinstance(obj_info[2], dict):
+                                obj_context = obj_info[2]
                         elif isinstance(obj_info, str):
                             obj_name = obj_info
+                            obj_context = None  # No context available for string objects
                         else:
                             logger.warning(f"Unknown object info format: {type(obj_info)}")
                             continue
 
                         if obj_name in all_objects:
+                            # Add object to duplicate objects dictionary
                             duplicate_objects[obj_name] = all_objects[obj_name]
+                            
+                            # Create a formatted object with context for the HTML report
+                            formatted_obj = {"name": obj_name}
+                            
+                            # Add all properties to the object
+                            if isinstance(all_objects[obj_name], dict):
+                                formatted_obj.update(all_objects[obj_name])
+                            
+                            # Add context information if available from the tuple
+                            if obj_context:
+                                formatted_obj["context_type"] = obj_context.get("type", "unknown")
+                                if "device_group" in obj_context:
+                                    formatted_obj["context_name"] = obj_context["device_group"]
+                                    formatted_obj["context"] = f"Device Group: {obj_context['device_group']}"
+                                elif "vsys" in obj_context:
+                                    formatted_obj["context_name"] = obj_context["vsys"]
+                                    formatted_obj["context"] = f"VSYS: {obj_context['vsys']}"
+                                elif "context_type" in obj_context and obj_context["type"] == "shared":
+                                    formatted_obj["context"] = "Shared"
+                            # If no context in the tuple, add default context information based on the current context
+                            else:
+                                if context_type == "device_group" and "device_group" in context_kwargs:
+                                    formatted_obj["context_type"] = "device_group"
+                                    formatted_obj["context_name"] = context_kwargs["device_group"]
+                                    formatted_obj["context"] = f"Device Group: {context_kwargs['device_group']}"
+                                elif context_type == "vsys" and "vsys" in context_kwargs:
+                                    formatted_obj["context_type"] = "vsys"
+                                    formatted_obj["context_name"] = context_kwargs["vsys"]
+                                    formatted_obj["context"] = f"VSYS: {context_kwargs['vsys']}"
+                                elif context_type == "shared":
+                                    formatted_obj["context_type"] = "shared"
+                                    formatted_obj["context"] = "Shared"
+                            
+                            # Add to formatted objects list
+                            formatted_objects_list.append(formatted_obj)
+                    
+                    # Add to formatted duplicates if we have objects
+                    if formatted_objects_list:
+                        formatted_duplicates[value] = formatted_objects_list
 
                 objects = duplicate_objects
+                
+                # Store formatted duplicates for HTML report
+                result_formatted_duplicates = formatted_duplicates
                 logger.info(
                     f"Found {len(duplicates)} unique values with duplicate {object_type} objects"
                 )
@@ -413,7 +469,8 @@ class NLQProcessor:
             else:
                 message = f"Found {object_count} {object_type} objects"
 
-            return {
+            # Create the result dictionary with all needed information
+            result_dict = {
                 "message": message,
                 "count": object_count,
                 "object_type": object_type,
@@ -421,7 +478,14 @@ class NLQProcessor:
                 "formatted_objects": formatted_objects_text,  # Include formatted objects for display
                 "is_duplicate_search": show_duplicates,
                 "unique_values": len(duplicates) if show_duplicates else None,
+                "duplicates": duplicates if show_duplicates else {},  # Include raw duplicates data for HTML formatting
             }
+            
+            # Add formatted duplicates if available
+            if show_duplicates and 'result_formatted_duplicates' in locals():
+                result_dict["formatted_duplicates"] = result_formatted_duplicates
+                
+            return result_dict
 
         # For listing policies
         elif command_name == "list_policies":
@@ -1279,6 +1343,57 @@ class NLQProcessor:
             # Count total duplicates
             total_duplicates = sum(len(items) - 1 for items in duplicates.values())
             unique_values = len(duplicates)
+            
+            # Create a dictionary to store formatted duplicate objects with context
+            formatted_duplicates = {}
+            for value, objects_list in duplicates.items():
+                formatted_objects = []
+                for obj in objects_list:
+                    if isinstance(obj, tuple) and len(obj) >= 2:
+                        obj_name = obj[0]
+                        obj_elem = obj[1]
+                        
+                        # Initialize object data with name
+                        obj_data = {"name": obj_name}
+                        
+                        # Add context information if available (tuple should have 3 elements)
+                        if len(obj) >= 3 and isinstance(obj[2], dict):
+                            obj_context = obj[2]
+                            obj_data["context_type"] = obj_context.get("type", "unknown")
+                            
+                            # Add context name based on context type
+                            if obj_context.get("type") == "device_group" and "device_group" in obj_context:
+                                obj_data["context_name"] = obj_context["device_group"]
+                            elif obj_context.get("type") == "vsys" and "vsys" in obj_context:
+                                obj_data["context_name"] = obj_context["vsys"]
+                            
+                            # Add a display-friendly context field for formatting
+                            if "context_name" in obj_data:
+                                if obj_data["context_type"] == "device_group":
+                                    obj_data["context"] = f"Device Group: {obj_data['context_name']}"
+                                elif obj_data["context_type"] == "vsys":
+                                    obj_data["context"] = f"VSYS: {obj_data['context_name']}"
+                                else:
+                                    obj_data["context"] = obj_data["context_name"]
+                            elif obj_data["context_type"] == "shared":
+                                obj_data["context"] = "Shared"
+                            else:
+                                obj_data["context"] = "Unknown"
+                        
+                        formatted_objects.append(obj_data)
+                    elif isinstance(obj, str):
+                        # For simple string objects, just add the name
+                        formatted_objects.append({"name": obj, "context": "Unknown"})
+                    else:
+                        # For objects with object_name attribute
+                        try:
+                            if hasattr(obj, "object_name"):
+                                formatted_objects.append({"name": obj.object_name, "context": "Unknown"})
+                        except Exception as e:
+                            logger.warning(f"Unknown object format: {type(obj)}, error: {e}")
+                
+                # Add the formatted objects to the formatted duplicates dictionary
+                formatted_duplicates[value] = formatted_objects
 
             # Process deduplication if requested and not in dry run mode
             cleaned_count = 0
@@ -1449,12 +1564,27 @@ class NLQProcessor:
                 logger.info(
                     f"Found {total_duplicates} duplicate {object_type} objects across {unique_values} values"
                 )
+                
+                # Create formatted text representation for table output
+                try:
+                    from panflow.cli.common import format_duplicate_objects_list
+                    formatted_lines = format_duplicate_objects_list(
+                        formatted_duplicates, 
+                        include_header=False,
+                        object_type=object_type
+                    )
+                except ImportError:
+                    # Fallback if import fails
+                    formatted_lines = None
+                
                 return {
                     "message": f"Found {total_duplicates} duplicate {object_type} objects across {unique_values} values",
                     "count": total_duplicates,
                     "unique_values": unique_values,
                     "object_type": object_type,
                     "duplicates": duplicates,
+                    "formatted_duplicates": formatted_duplicates,
+                    "formatted_duplicates_text": formatted_lines  # For table output
                 }
 
         else:

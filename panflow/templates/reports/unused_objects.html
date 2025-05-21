@@ -1,0 +1,74 @@
+{% extends "reports/components/base_template.html" %}
+
+{% block title %}Unused Objects Report{% endblock %}
+
+{% block report_title %}Unused Objects Report{% endblock %}
+
+{% block content %}
+<h2>Found {{ unused_objects|length }} Unused Objects</h2>
+
+{% if unused_objects and unused_objects|length > 0 %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Value</th>
+            <th>Context</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for obj in unused_objects %}
+        <tr class="object-row object-unused">
+            <td>{{ obj.name }}</td>
+            <td>
+                {% if obj.get('ip-netmask') %}
+                IP-Netmask
+                {% elif obj.get('ip-range') %}
+                IP-Range
+                {% elif obj.get('fqdn') %}
+                FQDN
+                {% elif obj.get('protocol') and obj.get('protocol').get('tcp') %}
+                TCP Service
+                {% elif obj.get('protocol') and obj.get('protocol').get('udp') %}
+                UDP Service
+                {% elif obj.get('protocol') %}
+                {{ obj.get('protocol')|upper }} Service
+                {% else %}
+                Object
+                {% endif %}
+            </td>
+            <td>
+                {% if obj.get('ip-netmask') %}
+                {{ obj.get('ip-netmask') }}
+                {% elif obj.get('ip-range') %}
+                {{ obj.get('ip-range') }}
+                {% elif obj.get('fqdn') %}
+                {{ obj.get('fqdn') }}
+                {% elif obj.get('protocol') and obj.get('protocol').get('tcp') and obj.get('protocol').get('tcp').get('port') %}
+                {{ obj.get('protocol').get('tcp').get('port') }}
+                {% elif obj.get('protocol') and obj.get('protocol').get('udp') and obj.get('protocol').get('udp').get('port') %}
+                {{ obj.get('protocol').get('udp').get('port') }}
+                {% else %}
+                &mdash;
+                {% endif %}
+            </td>
+            <td>
+                {% if obj.get('context_type') == 'device_group' %}
+                <span class="context-device-group">Device Group: {{ obj.get('context_name', '') }}</span>
+                {% elif obj.get('context_type') == 'vsys' %}
+                <span class="context-vsys">VSYS: {{ obj.get('context_name', '') }}</span>
+                {% elif obj.get('context_type') == 'shared' %}
+                <span class="context-shared">Shared</span>
+                {% else %}
+                {{ obj.get('context', '') }}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No unused objects found.</p>
+{% endif %}
+{% endblock %}
