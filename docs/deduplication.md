@@ -18,8 +18,8 @@ Deduplication functionality can be accessed through three interfaces:
 
 The deduplication engine supports the following object types:
 
-- **Address Objects** - IP addresses, FQDNs, and IP ranges
-- **Service Objects** - TCP/UDP services with port definitions
+- **Address Objects** - IP addresses (ip-netmask), FQDNs, and IP ranges
+- **Service Objects** - TCP/UDP services with port definitions, including ICMP, SCTP, and ICMP6
 - **Tag Objects** - Tags with color and comment attributes
 
 ## Command Structure
@@ -35,6 +35,7 @@ Available commands:
 - `merge` - Find and merge duplicate objects
 - `simulate` - Simulate deduplication and generate impact analysis
 - `report` - Generate a comprehensive deduplication report
+- `hierarchical` - Find and merge duplicates across device group hierarchy (Panorama only)
 
 ## Common Options
 
@@ -81,7 +82,7 @@ panflow deduplicate merge --config CONFIG --type TYPE --output OUTPUT [options]
 
 ### Options
 
-- `--strategy, -s TEXT` - Strategy for choosing primary object (first, shortest, longest, alphabetical) (default: first)
+- `--strategy, -s TEXT` - Strategy for choosing primary object (first, shortest, longest, alphabetical, context_priority) (default: first)
 - `--pattern, -p TEXT` - Pattern to filter objects (e.g., "10.0.0" for addresses)
 - `--include-file TEXT` - JSON file with list of object names to include
 - `--exclude-file TEXT` - JSON file with list of object names to exclude
@@ -94,54 +95,45 @@ panflow deduplicate merge --config CONFIG --type TYPE --output OUTPUT [options]
 panflow deduplicate merge --config firewall.xml --type address --output deduped.xml --strategy alphabetical
 ```
 
-## Simulation and Impact Analysis
+## Hierarchical Deduplication (Panorama Only)
 
-The `simulate` command performs a simulated deduplication and generates an impact analysis:
+For Panorama configurations, the `hierarchical` command provides advanced deduplication that considers the device group hierarchy:
 
 ```bash
-panflow deduplicate simulate --config CONFIG --type TYPE --output OUTPUT [options]
+panflow deduplicate hierarchical find --config CONFIG --type TYPE [options]
+panflow deduplicate hierarchical merge --config CONFIG --type TYPE --output OUTPUT [options]
 ```
 
-### Options
+### Additional Hierarchical Options
 
-- `--strategy, -s TEXT` - Strategy for choosing primary object (first, shortest, longest, alphabetical) (default: first)
-- `--pattern, -p TEXT` - Pattern to filter objects (e.g., "10.0.0" for addresses)
-- `--include-file TEXT` - JSON file with list of object names to include
-- `--exclude-file TEXT` - JSON file with list of object names to exclude
-- `--detailed, -d` - Include detailed policy and reference information
+- `--strategy TEXT` - Strategy for choosing primary object (highest_level, first, shortest, longest, alphabetical, pattern) (default: highest_level)
+- `--pattern-filter TEXT` - Regular expression pattern to prioritize object names (for 'pattern' strategy)
+- `--allow-merging-with-upper-level` - Whether to prioritize objects in parent contexts (default: True)
 
 ### Example
 
 ```bash
-panflow deduplicate simulate --config firewall.xml --type service --output impact.json --detailed
-```
+# Find hierarchical duplicates prioritizing shared objects
+panflow deduplicate hierarchical find --config panorama.xml --type address --output hierarchical_duplicates.json
 
-## Comprehensive Reporting
-
-The `report` command generates a comprehensive report on duplicate objects across all types:
-
-```bash
-panflow deduplicate report --config CONFIG --output OUTPUT [options]
-```
-
-### Options
-
-- `--types, -t LIST` - Types of objects to analyze (address, service, tag). If not specified, all types are analyzed.
-
-### Example
-
-```bash
-panflow deduplicate report --config firewall.xml --output dedup_report.json
+# Merge duplicates keeping objects from highest hierarchy level
+panflow deduplicate hierarchical merge --config panorama.xml --type address --output merged.xml --strategy highest_level
 ```
 
 ## Selection Strategies
 
 When merging duplicates, one object must be kept while others are removed. The following strategies are available:
 
+### Standard Strategies
 - `first` - Keep the first object encountered (default)
 - `shortest` - Keep the object with the shortest name
 - `longest` - Keep the object with the longest name
 - `alphabetical` - Keep the object with the first name alphabetically
+
+### Context-Aware Strategies
+- `context_priority` - Prioritize objects based on context hierarchy (shared > device groups > vsys)
+- `highest_level` - (Hierarchical only) Prioritize objects in parent contexts and higher-level device groups
+- `pattern` - (Hierarchical only) Prioritize objects matching a regular expression pattern
 
 ## Filtering
 
@@ -175,6 +167,33 @@ You can provide JSON files with specific object names to include or exclude:
 panflow deduplicate merge --config firewall.xml --type address --output deduped.xml --include-file include.json --exclude-file exclude.json
 ```
 
+## Reference Tracking
+
+The deduplication engine tracks references to objects in:
+
+### Address Objects
+- Address groups (member references)
+- Security policies (source and destination fields)
+- NAT policies (source and destination translation fields)
+
+### Service Objects
+- Service groups (member references)
+- Security policies (service field)
+- NAT policies (service and translated-service fields)
+
+### Tag Objects
+- Object tags (address, service, address-group, service-group objects)
+- Policy tags (security and NAT policies)
+
+## Device Group Hierarchy Support
+
+For Panorama configurations, the deduplication engine:
+
+1. **Builds device group hierarchy** - Automatically detects parent-child relationships between device groups
+2. **Prioritizes by level** - Higher-level device groups take precedence over child device groups
+3. **Considers shared context** - Shared objects have the highest priority in hierarchical operations
+4. **Tracks context information** - Maintains context details (shared, device group name, hierarchy level) for each object
+
 ## Impact Analysis
 
 The impact analysis features show what changes would be made by deduplication:
@@ -184,10 +203,28 @@ panflow deduplicate simulate --config firewall.xml --type address --output impac
 ```
 
 The generated report includes:
-- Objects to be kept/deleted
-- Policy impacts
-- Group impacts
-- Reference changes
+- Objects to be kept/deleted with context information
+- Policy impacts across all policy types
+- Group impacts and member changes
+- Reference changes with detailed paths
+
+## Object Value Detection
+
+The deduplication engine identifies duplicate objects based on their configuration values:
+
+### Address Objects
+- **ip-netmask**: IP address with subnet mask (e.g., "192.168.1.1/24")
+- **fqdn**: Fully qualified domain name (e.g., "www.example.com")
+- **ip-range**: IP address range (e.g., "192.168.1.1-192.168.1.10")
+
+### Service Objects
+- **TCP/UDP**: Protocol type, destination port, and optional source port
+- **ICMP/ICMP6**: Protocol type, ICMP type, and optional ICMP code
+- **SCTP**: Protocol type and port information
+
+### Tag Objects
+- **color**: Tag color value (or "none" if not specified)
+- **comments**: Tag comment text (or empty string if not specified)
 
 ## Practical Examples
 
@@ -221,6 +258,19 @@ panflow deduplicate report --config firewall.xml --output report.json
 panflow deduplicate merge --config firewall.xml --type tag --output deduped.xml --include-file important_tags.json --dry-run
 ```
 
+### Hierarchical Deduplication Examples
+
+```bash
+# Find duplicates across entire Panorama hierarchy
+panflow deduplicate hierarchical find --config panorama.xml --type address
+
+# Merge duplicates keeping shared objects as primary
+panflow deduplicate hierarchical merge --config panorama.xml --type address --output consolidated.xml --strategy highest_level
+
+# Use pattern-based selection for hierarchical merge
+panflow deduplicate hierarchical merge --config panorama.xml --type service --output consolidated.xml --strategy pattern --pattern-filter "^std-"
+```
+
 ## Natural Language Query Examples
 
 PANFlow supports natural language for deduplication operations through the NLQ module:
@@ -251,6 +301,44 @@ panflow nlq query "deduplicate service objects but don't make changes" --config 
 panflow nlq query "cleanup duplicate address objects in device group DG1" --config panorama.xml --output deduped.xml
 ```
 
+## API Usage
+
+The DeduplicationEngine can be used programmatically:
+
+```python
+from panflow.core.deduplication import DeduplicationEngine
+
+# Initialize the engine
+engine = DeduplicationEngine(
+    tree=config_tree,
+    device_type="panorama",
+    context_type="device_group",
+    version="10.2",
+    device_group="production-dg"
+)
+
+# Find duplicates
+duplicates, references = engine.find_duplicates("address", reference_tracking=True)
+
+# Merge duplicates
+changes = engine.merge_duplicates(duplicates, references, primary_name_strategy="shortest")
+
+# For hierarchical operations (Panorama only)
+hierarchical_duplicates, hierarchical_references, contexts = engine.find_hierarchical_duplicates(
+    "address", 
+    allow_merging_with_upper_level=True,
+    reference_tracking=True
+)
+
+# Merge with hierarchical awareness
+hierarchical_changes = engine.merge_hierarchical_duplicates(
+    hierarchical_duplicates,
+    hierarchical_references,
+    contexts,
+    primary_name_strategy="highest_level"
+)
+```
+
 ## Best Practices
 
 1. **Always run simulation first**:
@@ -275,12 +363,20 @@ panflow nlq query "cleanup duplicate address objects in device group DG1" --conf
 5. **Choose appropriate strategy based on naming conventions**:
    - `alphabetical` works well for standardized names
    - `shortest` works well for consolidating to simpler names
+   - `highest_level` is recommended for Panorama hierarchical deduplication
+
+6. **For Panorama configurations**:
+   - Use hierarchical deduplication to consider device group relationships
+   - Review device group hierarchy before merging
+   - Consider impact on child device groups
 
 ## Troubleshooting
 
 - **No duplicates found**: Verify object type and context settings
 - **Changes not as expected**: Check for references in different contexts
 - **Error in deduplication**: Enable verbose logging with `-v` flag
+- **Hierarchical issues**: Verify device group hierarchy is correctly detected
+- **Reference tracking failures**: Check XPath mappings for your PAN-OS version
 
 ## Output Format
 
@@ -294,27 +390,36 @@ The JSON output of the deduplication commands follows this general structure:
     "duplicate_count": 12,
     "objects_to_delete": 7,
     "references_to_update": 15,
-    "strategy": "first"
+    "strategy": "first",
+    "context_type": "device_group",
+    "device_group": "production-dg"
   },
   "duplicate_sets": {
-    "ip-netmask:10.0.0.1/32": ["server1", "webserver", "www-1"],
-    "fqdn:example.com": ["example", "example-fqdn"]
+    "ip-netmask:10.0.0.1/32": [
+      {"name": "server1", "context": {"type": "shared"}},
+      {"name": "webserver", "context": {"type": "device_group", "device_group": "web-dg"}},
+      {"name": "www-1", "context": {"type": "device_group", "device_group": "web-dg"}}
+    ],
+    "fqdn:example.com": [
+      {"name": "example", "context": {"type": "shared"}},
+      {"name": "example-fqdn", "context": {"type": "device_group", "device_group": "app-dg"}}
+    ]
   },
   "to_be_kept": [
-    {"name": "server1", "value": "ip-netmask:10.0.0.1/32"},
-    {"name": "example", "value": "fqdn:example.com"}
+    {"name": "server1", "value": "ip-netmask:10.0.0.1/32", "context": {"type": "shared"}},
+    {"name": "example", "value": "fqdn:example.com", "context": {"type": "shared"}}
   ],
   "to_be_deleted": [
-    {"name": "webserver", "replaced_by": "server1", "value": "ip-netmask:10.0.0.1/32"},
-    {"name": "www-1", "replaced_by": "server1", "value": "ip-netmask:10.0.0.1/32"},
-    {"name": "example-fqdn", "replaced_by": "example", "value": "fqdn:example.com"}
+    {"name": "webserver", "replaced_by": "server1", "value": "ip-netmask:10.0.0.1/32", "context": {"type": "device_group", "device_group": "web-dg"}},
+    {"name": "www-1", "replaced_by": "server1", "value": "ip-netmask:10.0.0.1/32", "context": {"type": "device_group", "device_group": "web-dg"}},
+    {"name": "example-fqdn", "replaced_by": "example", "value": "fqdn:example.com", "context": {"type": "device_group", "device_group": "app-dg"}}
   ],
   "policy_impacts": {
     "security": [
-      {"policy_name": "Allow-Web", "field": "source", "old_value": "webserver", "new_value": "server1"}
+      {"policy_name": "Allow-Web", "field": "source", "old_value": "webserver", "new_value": "server1", "context": "pre-security"}
     ],
     "nat": [
-      {"policy_name": "NAT-Web", "field": "destination", "old_value": "www-1", "new_value": "server1"}
+      {"policy_name": "NAT-Web", "field": "destination", "old_value": "www-1", "new_value": "server1", "context": "pre-nat"}
     ]
   },
   "group_impacts": [
