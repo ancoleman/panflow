@@ -11,19 +11,19 @@ This section provides detailed documentation for the PANFlow API.
 - **conflict_resolver**: Strategies for resolving conflicts during merges
 - **[bulk_operations](../bulk_policy_ops.md)**: Tools for performing operations on multiple elements
 - **[deduplication](../deduplication.md)**: Tools for finding and merging duplicate objects
-- **[xml_abstractions](xml_abstractions.md)**: High-level abstractions for working with XML
 
 ## XML Package
 
 The XML utilities in PANFlow have been consolidated into a dedicated package structure to improve maintainability, reduce code duplication, and provide a more cohesive API for XML operations:
 
 - **[xml_package](../xml_package.md)**: Overview of the XML package consolidation
+- **[xml_abstractions](xml_abstractions.md)**: High-level abstractions for working with XML
 - **`panflow.core.xml`**: Main package with all XML functionality
-- **`panflow.core.xml.base`**: Core XML utilities (parsing, manipulation, etc.)
-- **`panflow.core.xml.builder`**: High-level XML building abstractions
-- **`panflow.core.xml.cache`**: Caching functionality for XML operations
-- **`panflow.core.xml.diff`**: XML difference utilities
-- **`panflow.core.xml.query`**: Advanced XML querying capabilities
+  - **`panflow.core.xml.base`**: Core XML parsing and manipulation utilities
+  - **`panflow.core.xml.builder`**: Building and navigation with XmlNode and XmlBuilder
+  - **`panflow.core.xml.cache`**: Caching for improved XPath query performance
+  - **`panflow.core.xml.diff`**: XML comparison with XmlDiff
+  - **`panflow.core.xml.query`**: Advanced querying with XmlQuery
 
 ## Functional Modules
 
@@ -44,16 +44,19 @@ The XML utilities in PANFlow have been consolidated into a dedicated package str
 
 ### XML-Specific Classes
 
-- **[XmlNode](xml_abstractions.md#xmlnode)**: High-level wrapper for XML elements
-- **[XmlBuilder](xml_abstractions.md#xmlbuilder)**: Builder for creating XML hierarchies
-- **[XPathBuilder](xml_abstractions.md#xpathbuilder)**: Builder for creating XPath expressions
-- **[XmlQuery](xml_abstractions.md#xmlquery)**: Query engine for XML data extraction
-- **[XmlDiff](xml_abstractions.md#xmldiff)**: Compare two XML trees and identify differences
+- **[XmlNode](xml_abstractions.md#xmlnode)**: High-level wrapper for XML elements with intuitive methods for navigation, manipulation, and queries
+- **[XmlBuilder](xml_abstractions.md#xmlbuilder)**: Fluent interface for creating XML hierarchies with a chainable API
+- **[XPathBuilder](xml_abstractions.md#xpathbuilder)**: Helper for constructing complex XPath expressions
+- **[XmlQuery](xml_abstractions.md#xmlquery)**: jQuery-like interface for selecting, filtering, and manipulating XML elements
+- **[XmlDiff](xml_abstractions.md#xmldiff)**: Utility for comparing XML trees and identifying differences
+- **DiffItem**: Class representing a single difference between XML elements, with path and difference type
+- **LRUCache**: Least Recently Used cache implementation for XML operations
 
 ## Constants and Enums
 
 - **ConflictStrategy**: Enum defining strategies for conflict resolution
-- **[DiffType](xml_abstractions.md#xmldiff)**: Enum defining types of XML differences (ADDED, REMOVED, CHANGED)
+- **[DiffType](xml_abstractions.md#xmldiff)**: Enum defining types of XML differences (ADDED, REMOVED, CHANGED, UNCHANGED)
+- **HAVE_LXML**: Boolean indicating whether the lxml library is available
 
 ## Exception Types
 
@@ -64,6 +67,9 @@ PANFlow provides a hierarchy of exception types for specific error conditions:
   - **ValidationError**: Exception raised when validation fails
   - **ParseError**: Exception raised when parsing XML fails
   - **XPathError**: Exception raised when an XPath operation fails
+  - **CacheError**: Exception raised when caching operations fail
+  - **DiffError**: Exception raised for XML diff operation failures
+  - **QueryError**: Exception raised when XML queries fail
   - **ContextError**: Exception raised when an operation fails due to invalid context
   - **ObjectError**: Base class for object-related errors
     - **ObjectNotFoundError**: Exception raised when an object is not found
@@ -77,3 +83,4 @@ PANFlow provides a hierarchy of exception types for specific error conditions:
   - **FileOperationError**: Exception raised when a file operation fails
   - **BulkOperationError**: Exception raised when a bulk operation fails
   - **SecurityError**: Exception raised for security-related issues
+  - **ConfigSaverError**: Exception raised when saving configurations fails
