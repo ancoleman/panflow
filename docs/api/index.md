@@ -4,13 +4,13 @@ This section provides detailed documentation for the PANFlow API.
 
 ## Core Modules
 
-- **[config_loader](config_loader.md)**: Functions for loading and saving PAN-OS XML configurations
-- **[xpath_resolver](xpath_resolver.md)**: Version-aware XPath resolution for PAN-OS configurations
-- **[object_merger](object_merger.md)**: Functions for merging objects between configurations
-- **[policy_merger](policy_merger.md)**: Functions for merging policies between configurations
-- **[conflict_resolver](conflict_resolver.md)**: Strategies for resolving conflicts during merges
-- **[bulk_operations](bulk_operations.md)**: Tools for performing operations on multiple elements
-- **[deduplication](deduplication.md)**: Tools for finding and merging duplicate objects
+- **config_loader**: Functions for loading and saving PAN-OS XML configurations
+- **xpath_resolver**: Version-aware XPath resolution for PAN-OS configurations
+- **[object_merger](../object_merger.md)**: Functions for merging objects between configurations
+- **policy_merger**: Functions for merging policies between configurations
+- **conflict_resolver**: Strategies for resolving conflicts during merges
+- **[bulk_operations](../bulk_policy_ops.md)**: Tools for performing operations on multiple elements
+- **[deduplication](../deduplication.md)**: Tools for finding and merging duplicate objects
 - **[xml_abstractions](xml_abstractions.md)**: High-level abstractions for working with XML
 
 ## XML Package
@@ -27,20 +27,20 @@ The XML utilities in PANFlow have been consolidated into a dedicated package str
 
 ## Functional Modules
 
-- **[objects](objects.md)**: High-level functions for working with PAN-OS objects
-- **[policies](policies.md)**: High-level functions for working with PAN-OS policies
-- **[groups](groups.md)**: Functions for working with group objects
-- **[reports](reports.md)**: Functions for generating reports
+- **objects**: High-level functions for working with PAN-OS objects
+- **[policies](../policy_bulk_update_capabilities.md)**: High-level functions for working with PAN-OS policies
+- **groups**: Functions for working with group objects
+- **reports**: Functions for generating reports
 
 ## Classes
 
 ### Core Classes
 
-- **[PANFlowConfig](panflow_config.md)**: Main class for working with PAN-OS configurations
-- **[DeduplicationEngine](deduplication_engine.md)**: Engine for finding and merging duplicates
-- **[ObjectMerger](object_merger_class.md)**: Class for merging objects between configurations
-- **[PolicyMerger](policy_merger_class.md)**: Class for merging policies between configurations
-- **[ConflictResolver](conflict_resolver_class.md)**: Class for resolving merge conflicts
+- **PANFlowConfig**: Main class for working with PAN-OS configurations
+- **[DeduplicationEngine](../deduplication.md#api)**: Engine for finding and merging duplicates
+- **[ObjectMerger](../object_merger.md#objectmerger-class)**: Class for merging objects between configurations
+- **PolicyMerger**: Class for merging policies between configurations
+- **ConflictResolver**: Class for resolving merge conflicts
 
 ### XML-Specific Classes
 
@@ -52,7 +52,7 @@ The XML utilities in PANFlow have been consolidated into a dedicated package str
 
 ## Constants and Enums
 
-- **[ConflictStrategy](conflict_strategy.md)**: Enum defining strategies for conflict resolution
+- **ConflictStrategy**: Enum defining strategies for conflict resolution
 - **[DiffType](xml_abstractions.md#xmldiff)**: Enum defining types of XML differences (ADDED, REMOVED, CHANGED)
 
 ## Exception Types
