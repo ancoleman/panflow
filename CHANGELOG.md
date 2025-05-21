@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
-## [0.3.3] - 2025-05-25
+## [0.3.3] - 2025-05-20
 
 ### Added
 - Major reporting system enhancements
