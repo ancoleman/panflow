@@ -925,14 +925,17 @@ Options:
 
 Example:
 ```bash
-# Find all address objects
-python cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value"
+# Find all address objects with device group context
+python cli.py query execute -c config.xml -q "MATCH (a:address) RETURN a.name, a.value, a.device_group"
 
-# Find rules using a specific address
-python cli.py query execute -c config.xml -q "MATCH (r:security-rule)-[:uses-source|uses-destination]->(a:address) WHERE a.name == 'web-server' RETURN r.name"
+# Find rules using a specific address (using edges_out)
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (a:address) WHERE a.name == 'web-server' AND r.edges_out CONTAINS {target: a.id, relation: 'uses-source'} RETURN r.name"
+
+# Find services by port number
+python cli.py query execute -c config.xml -q "MATCH (s:service) WHERE s.port == '8080' RETURN s.name, s.device_group"
 
 # Export results to CSV
-python cli.py query execute -c config.xml -q "MATCH (a:address-group)-[:contains]->(m:address) RETURN a.name, m.name" --format csv --output groups.csv
+python cli.py query execute -c config.xml -q "MATCH (g:address-group) MATCH (a:address) WHERE g.edges_out CONTAINS {target: a.id, relation: 'contains'} RETURN g.name, a.name" --format csv --output groups.csv
 ```
 
 ### Verify Query Syntax
@@ -948,7 +951,7 @@ Options:
 
 Example:
 ```bash
-python cli.py query verify -q "MATCH (a:address) WHERE a.value CONTAINS '10.0.0' RETURN a.name"
+python cli.py query verify -q "MATCH (a:address) WHERE a.value =~ '.*10\\.0\\.0.*' RETURN a.name"
 ```
 
 ### Show Query Examples
@@ -981,20 +984,20 @@ The interactive mode provides a REPL-like environment where you can:
 
 Example session:
 ```
-> MATCH (a:address) RETURN a.name LIMIT 5
-| a.name       |
-|--------------| 
-| web-server-1 |
-| web-server-2 |
-| db-server    |
-| app-server   |
-| localhost    |
-
-> MATCH (a:address) WHERE a.name CONTAINS "web" RETURN a.name, a.value
-| a.name       | a.value        |
+> MATCH (a:address) RETURN a.name, a.device_group LIMIT 5
+| a.name       | a.device_group |
 |--------------|----------------|
-| web-server-1 | 10.0.1.10      |
-| web-server-2 | 10.0.1.11      |
+| web-server-1 | test-dg-1      |
+| web-server-2 | test-dg-1      |
+| db-server    | shared         |
+| app-server   | shared         |
+| localhost    | shared         |
+
+> MATCH (a:address) WHERE a.name =~ ".*web.*" RETURN a.name, a.value, a.device_group
+| a.name       | a.value       | a.device_group |
+|--------------|---------------|----------------|
+| web-server-1 | 10.0.1.10     | test-dg-1      |
+| web-server-2 | 10.0.1.11     | test-dg-1      |
 ```
 
 See the [Graph Query Language Reference](docs/graph_query_reference.md) for detailed information on query syntax, capabilities, and current limitations.
@@ -1029,11 +1032,11 @@ Examples:
 # Delete objects listed in a file
 python cli.py object bulk-delete --config config.xml --type address --names-file objects_to_delete.txt --output updated.xml
 
-# Delete unused address objects using query filter
-python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE NOT (()-[:uses-source|uses-destination|contains]->(a))" --output updated.xml
+# Delete unused address objects using query filter (proper syntax)
+python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE NOT EXISTS(()-[:uses-source|uses-destination|contains]->(a)) RETURN a.name" --output updated.xml
 
 # Preview objects that would be deleted without making changes
-python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE a.value CONTAINS '192.168.1'" --dry-run
+python cli.py object bulk-delete --config config.xml --type address --query-filter "MATCH (a:address) WHERE a.value =~ '.*192\\.168\\.1.*' RETURN a.name" --dry-run
 ```
 
 ### Bulk Update Policies

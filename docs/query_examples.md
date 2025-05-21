@@ -152,7 +152,7 @@ This query finds the security rule named "test-shared policy" and returns its ou
 ### 8. Find security rules using a specific address
 
 ```bash
-python cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (a:address) WHERE a.name == 'shared-dgs' AND r.edges_out CONTAINS {target: a.id, type: 'uses-destination'} RETURN r.name"
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (a:address) WHERE a.name == 'shared-dgs' AND r.edges_out CONTAINS {target: a.id, relation: 'uses-destination'} RETURN r.name"
 ```
 
 This advanced query finds security rules that use the address "shared-dgs" as a destination.
@@ -232,7 +232,7 @@ This query finds address objects that have no value defined, often indicating pl
 ### 18. Find address groups that contain a specific address
 
 ```bash
-python cli.py query execute -c config.xml -q "MATCH (g:address-group) MATCH (a:address) WHERE a.name == 'shared-dgs' AND g.edges_out CONTAINS {target: a.id, type: 'contains'} RETURN g.name"
+python cli.py query execute -c config.xml -q "MATCH (g:address-group) MATCH (a:address) WHERE a.name == 'shared-dgs' AND g.edges_out CONTAINS {target: a.id, relation: 'contains'} RETURN g.name"
 ```
 
 This advanced query finds address groups that contain the address "shared-dgs".
@@ -252,6 +252,46 @@ python cli.py query execute -c config.xml -q "MATCH (n) RETURN n.type, n.name, n
 ```
 
 This query matches all nodes in the graph, regardless of type, and exports them to a JSON file with their type, name, and all properties.
+
+## Comprehensive Examples with Device Group Context
+
+These examples work with Panorama configurations and demonstrate the corrected syntax:
+
+### Find duplicate IP addresses across device groups
+
+```bash
+python cli.py query execute -c config.xml -q "MATCH (a1:address) MATCH (a2:address) WHERE a1.value == a2.value AND a1.name != a2.name RETURN a1.name, a1.device_group, a2.name, a2.device_group, a1.value"
+```
+
+### Find all services on a specific port
+
+```bash
+python cli.py query execute -c config.xml -q "MATCH (s:service) WHERE s.port == '8080' RETURN s.name, s.device_group, s.protocol"
+```
+
+### Find disabled security rules by device group
+
+```bash
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) WHERE r.disabled == 'yes' AND r.device_group == 'test-dg-1' RETURN r.name, r.action"
+```
+
+### Find address objects in specific subnets
+
+```bash
+python cli.py query execute -c config.xml -q "MATCH (a:address) WHERE a.value =~ '.*10\\.10\\.10\\..*' RETURN a.name, a.device_group, a.value"
+```
+
+### Find shared objects referenced by device group rules
+
+```bash
+python cli.py query execute -c config.xml -q "MATCH (r:security-rule) MATCH (a:address) WHERE r.device_group != 'shared' AND a.device_group == 'shared' AND r.edges_out CONTAINS {target: a.id, relation: 'uses-source'} RETURN r.name, r.device_group, a.name"
+```
+
+### Find duplicate services by port across contexts
+
+```bash
+python cli.py query execute -c config.xml -q "MATCH (s1:service) MATCH (s2:service) WHERE s1.port == s2.port AND s1.name != s2.name AND s1.device_group != s2.device_group RETURN s1.name, s1.device_group, s2.name, s2.device_group, s1.port"
+```
 
 ## Interactive Mode
 

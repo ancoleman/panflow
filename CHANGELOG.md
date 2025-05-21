@@ -10,6 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.3.4] - 2025-05-21
+
+### Fixed
+- Critical graph query system fixes
+  - Fixed service port extraction in graph building (was using incorrect XPath patterns)
+  - Fixed device group context assignment for all object types (address, service, groups)
+  - Fixed security and NAT rule processing in auto-detect mode when context_type is None
+  - Fixed query commands to auto-detect device type and pass to graph service
+  - Enhanced graph building to properly handle Panorama configurations without specific context
+
+### Enhanced
+- Graph query functionality now works correctly with comprehensive test configurations
+  - Service queries by port number now return accurate results
+  - Device group context information is properly populated in all node types
+  - Security and NAT rules are correctly processed across all device groups
+  - Query commands automatically detect Panorama vs firewall configurations
+
+### Technical Improvements
+- Improved XPath resolution for service protocol extraction (tcp/udp ports)
+- Added `_get_device_group_from_element()` helper method for context detection
+- Enhanced graph building logic to process all device groups when context_type is None
+- Added device type auto-detection to query execute and interactive commands
+
 ## [0.3.3] - 2025-05-20
 
 ### Added

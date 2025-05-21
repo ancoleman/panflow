@@ -118,6 +118,14 @@ class ConfigGraph:
                     props["value"] = value
                     break
 
+            # Determine device group context by looking at the XML path
+            if self.device_type == "panorama":
+                device_group = self._get_device_group_from_element(addr)
+                if device_group:
+                    props["device_group"] = device_group
+                else:
+                    props["device_group"] = "shared"
+
             # Add node to graph
             self.graph.add_node(node_id, **props)
             self.graph.add_edge(self.root_node, node_id, relation="contains")
@@ -149,8 +157,19 @@ class ConfigGraph:
 
             node_id = f"address-group:{name}"
 
+            # Extract group properties
+            props = {"type": "address-group", "name": name, "xml": group}
+            
+            # Determine device group context by looking at the XML path
+            if self.device_type == "panorama":
+                device_group = self._get_device_group_from_element(group)
+                if device_group:
+                    props["device_group"] = device_group
+                else:
+                    props["device_group"] = "shared"
+
             # Add the group node
-            self.graph.add_node(node_id, type="address-group", name=name, xml=group)
+            self.graph.add_node(node_id, **props)
             self.graph.add_edge(self.root_node, node_id, relation="contains")
 
             # Process static members
@@ -205,11 +224,19 @@ class ConfigGraph:
 
             # Add protocol specific info
             for protocol in ["tcp", "udp"]:
-                port = get_xpath_element_value(svc, f"./{protocol}/port")
+                port = get_xpath_element_value(svc, f"./protocol/{protocol}/port")
                 if port:
                     props["protocol"] = protocol
                     props["port"] = port
                     break
+
+            # Determine device group context by looking at the XML path
+            if self.device_type == "panorama":
+                device_group = self._get_device_group_from_element(svc)
+                if device_group:
+                    props["device_group"] = device_group
+                else:
+                    props["device_group"] = "shared"
 
             # Add node to graph
             self.graph.add_node(node_id, **props)
@@ -242,8 +269,19 @@ class ConfigGraph:
 
             node_id = f"service-group:{name}"
 
+            # Extract group properties
+            props = {"type": "service-group", "name": name, "xml": group}
+            
+            # Determine device group context by looking at the XML path
+            if self.device_type == "panorama":
+                device_group = self._get_device_group_from_element(group)
+                if device_group:
+                    props["device_group"] = device_group
+                else:
+                    props["device_group"] = "shared"
+
             # Add the group node
-            self.graph.add_node(node_id, type="service-group", name=name, xml=group)
+            self.graph.add_node(node_id, **props)
             self.graph.add_edge(self.root_node, node_id, relation="contains")
 
             # Process members
@@ -303,8 +341,9 @@ class ConfigGraph:
             except Exception as e:
                 logger.warning(f"Failed to get context-specific xpath: {e}. Using default.")
         
-        # For Panorama, process each device group separately if no specific context is provided
-        if self.device_type == "panorama" and device_group is None and self.context_type == "shared":
+        # For Panorama, process each device group separately if no specific device group context is provided
+        # This happens when context_type is "shared" or None (auto-detect mode)
+        if self.device_type == "panorama" and device_group is None and (self.context_type == "shared" or self.context_type is None):
             # Find all device groups
             device_groups = xml_root.xpath("/config/devices/entry/device-group/entry")
             for dg in device_groups:
@@ -508,7 +547,7 @@ class ConfigGraph:
             self._process_rule_references(rule, rule_id, "service", "service", "uses-service")
             
         # For Panorama, also process NAT rules in device groups if not already targeting a specific group
-        if self.device_type == "panorama" and device_group is None and self.context_type == "shared":
+        if self.device_type == "panorama" and device_group is None and (self.context_type == "shared" or self.context_type is None):
             # Find all device groups
             device_groups = xml_root.xpath("/config/devices/entry/device-group/entry")
             for dg in device_groups:
@@ -703,3 +742,24 @@ class ConfigGraph:
             del data["xml"]
 
         return data
+
+    def _get_device_group_from_element(self, element: etree._Element) -> Optional[str]:
+        """
+        Determine the device group name from an XML element's path.
+        
+        Args:
+            element: XML element to check
+            
+        Returns:
+            Device group name if the element is in a device group, None if in shared
+        """
+        # Walk up the parent hierarchy to find device-group
+        current = element
+        while current is not None:
+            if current.tag == "entry" and current.getparent() is not None:
+                parent = current.getparent()
+                if parent.tag == "device-group":
+                    return current.get("name")
+            current = current.getparent()
+        
+        return None

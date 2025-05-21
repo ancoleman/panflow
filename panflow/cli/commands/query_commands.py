@@ -75,9 +75,13 @@ def execute(
         # Load the XML configuration
         xml_root = load_xml_file(config_file)
 
+        # Auto-detect device type
+        device_type = _detect_device_type(xml_root)
+        logger.debug(f"Auto-detected device type: {device_type}")
+
         # Use GraphService to execute the query
         graph_service = GraphService()
-        results = graph_service.execute_custom_query(xml_root, query)
+        results = graph_service.execute_custom_query(xml_root, query, device_type=device_type)
 
         # Display the results
         _display_results(results, output_format, output_file)
@@ -110,6 +114,10 @@ def interactive(
         # Load the XML configuration
         xml_root = load_xml_file(config_file)
 
+        # Auto-detect device type
+        device_type = _detect_device_type(xml_root)
+        logger.debug(f"Auto-detected device type: {device_type}")
+
         # Create graph service
         graph_service = GraphService()
 
@@ -129,7 +137,7 @@ def interactive(
                     continue
 
                 # Execute the query through GraphService
-                results = graph_service.execute_custom_query(xml_root, user_input)
+                results = graph_service.execute_custom_query(xml_root, user_input, device_type=device_type)
 
                 # Display the results as a table
                 _display_results(results, "table", None)
@@ -359,3 +367,24 @@ def _display_results(
             console.print(f"[green]Results saved to {output_file}[/green]")
         else:
             console.print(table)
+
+
+def _detect_device_type(xml_root: etree._Element) -> str:
+    """
+    Auto-detect device type from XML configuration.
+    
+    Args:
+        xml_root: Root element of the XML configuration
+        
+    Returns:
+        Device type ("panorama" or "firewall")
+    """
+    # Check for Panorama-specific elements
+    device_groups = xml_root.xpath("//device-group")
+    templates = xml_root.xpath("//template") 
+    mgmt_config = xml_root.xpath("//devices/entry[@name='localhost.localdomain']")
+    
+    if device_groups or templates or mgmt_config:
+        return "panorama"
+    else:
+        return "firewall"
