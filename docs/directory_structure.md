@@ -12,32 +12,34 @@ panflow/
 │   ├── config_loader.py     # XML configuration loading functions
 │   ├── config_saver.py      # XML configuration saving functions
 │   ├── xpath_resolver.py    # Version-aware XPath resolution
-│   ├── xml_utils.py         # Common XML manipulation utilities (deprecated, use xml package)
-│   ├── xml_builder.py       # XML builder utilities (deprecated, use xml package)
-│   ├── xml_cache.py         # XML caching (deprecated, use xml package)
-│   ├── xml_diff.py          # XML diffing (deprecated, use xml package)
-│   ├── xml_query.py         # XML querying (deprecated, use xml package)
-│   ├── xml/                 # Consolidated XML package (recommended)
-│   │   ├── __init__.py      # XML package exports
-│   │   ├── base.py          # Core XML parsing and utility functions
-│   │   ├── builder.py       # XML construction classes
-│   │   ├── cache.py         # XML caching functionality
-│   │   ├── diff.py          # XML comparison and diffing tools
-│   │   └── query.py         # XML query functionality
 │   ├── logging_utils.py     # Logging configuration utilities
 │   ├── bulk_operations.py   # Bulk configuration update operations
-│   ├── graph_service.py     # Graph representation of configurations
-│   ├── graph_utils.py       # Graph query utilities
+│   ├── graph_service.py     # Graph representation service for configurations
+│   ├── graph_utils.py       # Graph building and query utilities
 │   ├── query_engine.py      # Query execution engine
-│   ├── query_language.py    # Query language parser
-│   └── deduplication.py     # Object deduplication engine
+│   ├── query_language.py    # Graph query language parser
+│   ├── deduplication.py     # Object deduplication engine
+│   ├── object_finder.py     # Object finding and filtering utilities
+│   ├── object_merger.py     # Object merging utilities for configuration merge
+│   ├── object_validator.py  # Object validation utilities
+│   ├── policy_merger.py     # Policy merging utilities for configuration merge
+│   ├── conflict_resolver.py # Conflict resolution for merging operations
+│   ├── nat_splitter.py      # NAT rule splitting utilities
+│   ├── template_loader.py   # Template loading for HTML report generation
+│   ├── exceptions.py        # Custom exception classes
+│   └── xml/                 # Consolidated XML package (recommended)
+│       ├── __init__.py      # XML package exports
+│       ├── base.py          # Core XML parsing and utility functions
+│       ├── builder.py       # XML construction classes
+│       ├── cache.py         # XML caching functionality
+│       ├── diff.py          # XML comparison and diffing tools
+│       └── query.py         # XML query functionality
 ├── modules/
 │   ├── __init__.py          # Module exports
 │   ├── objects.py           # Object-related functions (address, service, etc.)
 │   ├── policies.py          # Policy-related functions (security, NAT, etc.)
-│   ├── groups.py            # Group-related functions (add/remove members)
-│   └── reports.py           # Report generation functions (deprecated, use reporting package)
-├── reporting/               # Consolidated reporting package (recommended)
+│   └── groups.py            # Group-related functions (add/remove members)
+├── reporting/               # Consolidated reporting package
 │   ├── __init__.py          # Reporting package exports with backward compatibility
 │   ├── engine.py            # Core reporting engine (ReportingEngine class)
 │   ├── reports/             # Report generators
@@ -56,31 +58,67 @@ panflow/
 │   ├── entity_extractor.py  # Entity extraction from natural language
 │   ├── intent_parser.py     # Intent parsing from natural language
 │   ├── command_mapper.py    # Maps NLQ intents to CLI commands
-│   └── ai_processor.py      # AI-powered NLQ processing (optional)
+│   ├── ai_processor.py      # AI-powered NLQ processing (optional)
+│   └── README.md            # NLQ documentation
+├── templates/               # HTML report templates
+│   ├── css/
+│   │   └── reports.css      # CSS styling for HTML reports
+│   └── reports/
+│       ├── base.html        # Base HTML template
+│       ├── components/
+│       │   └── base_template.html # Base template component
+│       ├── custom_report.html # Custom report template
+│       ├── duplicate_objects.html # Duplicate objects report template
+│       ├── object_usage.html # Object usage report template
+│       ├── sections/
+│       │   ├── object_section.html # Object section template
+│       │   └── policy_section.html # Policy section template
+│       ├── security_policy_analysis.html # Security policy analysis template
+│       └── unused_objects.html # Unused objects report template
 ├── constants/
 │   ├── __init__.py          # Constants exports
 │   └── common.py            # Common constants
 ├── xpath_mappings/
-│   ├── panos_10.1.yaml      # XPath mappings for PAN-OS 10.1
-│   ├── panos_10.2.yaml      # XPath mappings for PAN-OS 10.2
-│   ├── panos_11.0.yaml      # XPath mappings for PAN-OS 11.0
-│   ├── panos_11.1.yaml      # XPath mappings for PAN-OS 11.1
-│   └── panos_11.2.yaml      # XPath mappings for PAN-OS 11.2
+│   ├── panos_10_1.yaml      # XPath mappings for PAN-OS 10.1
+│   ├── panos_10_2.yaml      # XPath mappings for PAN-OS 10.2
+│   ├── panos_11_0.yaml      # XPath mappings for PAN-OS 11.0
+│   ├── panos_11_1.yaml      # XPath mappings for PAN-OS 11.1
+│   └── panos_11_2.yaml      # XPath mappings for PAN-OS 11.2
 ├── cli/                     # Command Line Interface
 │   ├── __init__.py          # CLI package exports
 │   ├── app.py               # Main CLI application
+│   ├── command_base.py      # Base class for CLI commands with common functionality
 │   ├── common.py            # Common CLI utilities
+│   ├── completion.py        # Shell completion support
+│   ├── completions.py       # Completion definitions
 │   └── commands/            # CLI command groups
 │       ├── __init__.py      # Command exports
 │       ├── object_commands.py # Object-related commands
+│       ├── object_commands_refactored.py # Refactored object commands
 │       ├── policy_commands.py # Policy-related commands
 │       ├── merge_commands.py  # Configuration merge commands
 │       ├── query_commands.py  # Graph query commands
 │       ├── cleanup_commands.py # Cleanup and analysis commands
 │       ├── nat_commands.py    # NAT-related commands
 │       ├── nlq_commands.py    # Natural language query commands
-│       └── deduplicate_commands.py # Deduplication commands
-└── cli.py                   # CLI entry point
+│       ├── deduplicate_commands.py # Deduplication commands
+│       └── migrated/        # Migrated command patterns
+│           ├── object_add.py # Migrated object add command
+│           └── object_list.py # Migrated object list command
+├── pyinstaller_hooks/       # PyInstaller hooks for binary building
+│   ├── __init__.py
+│   └── panflow_hooks.py     # Custom hooks for PANFlow dependencies
+└── Root level files:
+├── cli.py                   # CLI entry point
+├── cli_migrate.py           # CLI command migration utility
+├── completion_aware_launcher.py # Shell completion aware launcher
+├── debug_graph.py           # Graph debugging utilities
+├── dmg_config.py            # macOS DMG configuration
+├── optimized_launcher.py    # Optimized launcher for performance
+├── panflow_launcher.py      # Main application launcher
+├── panflow_script.sh        # Shell script launcher
+├── panflow.spec             # PyInstaller specification
+└── runtime_hook.py          # PyInstaller runtime hook
 ```
 
 ## Module Functionality
@@ -88,32 +126,35 @@ panflow/
 ### Core Modules
 
 - `config_loader.py` - Functions to load and parse PAN-OS XML configurations
-- `config_saver.py` - Functions to save and export XML configurations
+- `config_saver.py` - Functions to save and export XML configurations  
 - `xpath_resolver.py` - Version-aware XPath resolution for different PAN-OS versions
+- `logging_utils.py` - Logging configuration and utilities
+- `bulk_operations.py` - Advanced bulk operations for modifying multiple configuration elements
+- `graph_service.py` - Centralized service for graph queries and operations
+- `graph_utils.py` - Graph building utilities with NetworkX integration for configuration relationships
+- `query_engine.py` - Query execution engine for graph-based queries
+- `query_language.py` - Parser for the graph query language (Cypher-like syntax)
+- `deduplication.py` - Engine for finding and merging duplicate objects
+- `object_finder.py` - Object finding and filtering utilities
+- `object_merger.py` - Object merging utilities for configuration merge operations
+- `object_validator.py` - Object validation utilities
+- `policy_merger.py` - Policy merging utilities for configuration merge operations
+- `conflict_resolver.py` - Conflict resolution for merging operations
+- `nat_splitter.py` - NAT rule splitting utilities
+- `template_loader.py` - Jinja2 template loading for HTML report generation
+- `exceptions.py` - Custom exception classes
 - `xml/*.py` - Consolidated package for XML manipulation (recommended)
   - `base.py` - Core XML parsing and utility functions
   - `builder.py` - XML construction and manipulation
   - `cache.py` - Caching layer for efficient XML operations
   - `diff.py` - XML comparison and diffing
   - `query.py` - XML query capabilities
-- `xml_utils.py` - General-purpose XML utilities (deprecated, use xml package)
-- `xml_builder.py` - XML builder utilities (deprecated, use xml package)
-- `xml_cache.py` - XML caching (deprecated, use xml package)
-- `xml_diff.py` - XML diffing (deprecated, use xml package)
-- `xml_query.py` - XML querying (deprecated, use xml package)
-- `logging_utils.py` - Logging configuration and utilities
-- `bulk_operations.py` - Advanced bulk operations for modifying multiple configuration elements
-- `graph_service.py` - Graph representation of configurations
-- `query_engine.py` - Query execution engine for graph-based queries
-- `query_language.py` - Parser for the graph query language
-- `deduplication.py` - Engine for finding and merging duplicate objects
 
 ### Functional Modules
 
 - `objects.py` - Manage address objects, service objects, etc.
 - `policies.py` - Manage security rules, NAT rules, etc.
 - `groups.py` - Manage address groups, service groups, etc.
-- `reports.py` - Generate reports on configurations (deprecated, use reporting package)
 
 ### Reporting Package
 
@@ -134,6 +175,30 @@ panflow/
 - `nlq/intent_parser.py` - Parses intents from natural language
 - `nlq/command_mapper.py` - Maps NLQ intents to CLI commands
 - `nlq/ai_processor.py` - AI-powered NLQ processing (optional)
+- `nlq/README.md` - NLQ documentation and usage examples
+
+### Template System
+
+- `templates/css/reports.css` - CSS styling for HTML reports with professional styling
+- `templates/reports/` - Jinja2 HTML templates for report generation:
+  - `base.html` - Base HTML template with common structure
+  - `components/base_template.html` - Reusable base template component
+  - `unused_objects.html` - Template for unused objects reports
+  - `duplicate_objects.html` - Template for duplicate objects reports
+  - `security_policy_analysis.html` - Template for security policy analysis
+  - `sections/` - Reusable template sections:
+    - `object_section.html` - Object-specific report sections
+    - `policy_section.html` - Policy-specific report sections
+
+### CLI Infrastructure
+
+- `cli/command_base.py` - Base class providing common functionality for all CLI commands:
+  - Standard error handling with `@command_error_handler` decorator
+  - Configuration loading with `@config_loader` decorator  
+  - Consistent output formatting across all formats (JSON, table, CSV, YAML, HTML, text)
+  - Centralized logging and exception handling
+- `cli/completion.py` - Shell completion support for bash/zsh
+- `cli/completions.py` - Completion definitions for CLI arguments
 
 ### Constants
 
@@ -142,6 +207,28 @@ panflow/
 ### XPath Mappings
 
 - YAML files containing version-specific XPath mappings for different PAN-OS versions
+
+### Root Level Utilities
+
+- `cli_migrate.py` - CLI command migration utility for updating commands to new patterns
+- `completion_aware_launcher.py` - Shell completion aware launcher
+- `debug_graph.py` - Graph debugging utilities for troubleshooting configuration relationships
+- `dmg_config.py` - macOS DMG configuration for application packaging
+- `optimized_launcher.py` - Performance-optimized launcher
+- `panflow_launcher.py` - Main application launcher with cross-platform support
+- `panflow_script.sh` - Shell script launcher for Unix-like systems
+- `panflow.spec` - PyInstaller specification for binary building
+- `runtime_hook.py` - PyInstaller runtime hook for dependency management
+
+### Build and Deployment Support
+
+- `pyinstaller_hooks/` - Custom PyInstaller hooks for packaging:
+  - `panflow_hooks.py` - Handles PANFlow-specific dependencies and data files
+- `build_scripts/` - Build automation scripts:
+  - `build_binary.py` - Python script for binary building
+  - `build_all_platforms.sh` - Multi-platform build script
+  - `build.sh` - Main build script
+  - `install.sh` / `install.bat` - Installation scripts for Unix/Windows
 
 ## Key Features
 
@@ -252,20 +339,46 @@ Example usage in CLI:
 panflow deduplicate --config CONFIG_FILE --type OBJECT_TYPE --output OUTPUT_FILE [--dry-run] [--strategy STRATEGY]
 ```
 
+## Recent Major Improvements (2025)
+
+### Graph Query System Enhancements (v0.3.4)
+- **Fixed critical graph building issues**: Service port extraction, device group context assignment, and rule processing
+- **Enhanced NetworkX integration**: Improved graph representation with proper relationship modeling
+- **Auto-detection capabilities**: Automatic Panorama vs Firewall configuration detection
+- **Query system reliability**: All graph queries now work correctly with comprehensive test configurations
+
+### HTML Reporting System (v0.3.3)
+- **Template-based HTML generation**: Jinja2 templates with CSS styling separate from Python code
+- **Responsive design**: Professional reports that work on mobile, tablet, and desktop
+- **Reusable components**: Template inheritance for consistent look and feel
+- **Enhanced report types**: Support for disabled policies, unused objects, duplicate objects reports
+
+### CLI Command Pattern Standardization (v0.3.3)
+- **CommandBase class**: Unified base class for all CLI commands with common functionality
+- **Standardized decorators**: `@command_error_handler`, `@config_loader`, `@standard_command`
+- **Consistent output formats**: All commands support JSON, table, CSV, YAML, HTML, and text formats
+- **Enhanced error handling**: Improved error messages and exception handling across all commands
+
+### NLQ HTML Report Integration (v0.3.4)
+- **Fixed HTML formatting**: NLQ commands now properly generate HTML reports with data tables
+- **Disabled policies support**: Specific template handling for disabled security rules
+- **Report file separation**: Clear separation between configuration output (`--output`) and report output (`--report-file`)
+
 ## CLI Command Groups
 
 The command-line interface organizes functionality into logical command groups:
 
-1. **Object commands**: List, add, update, delete, and filter objects
-2. **Policy commands**: List, add, update, delete, filter, and bulk-update policies
+1. **Object commands**: List, add, update, delete, and filter objects with graph query support
+2. **Policy commands**: List, add, update, delete, filter, and bulk-update policies with standardized formatting
 3. **Group commands**: Manage group memberships
 4. **Report commands**: Generate various reports (unused objects, duplicates, coverage, references)
 5. **Config commands**: Validate and manage configurations
-6. **Deduplicate commands**: Find and merge duplicate objects
-7. **Query commands**: Execute graph queries against configurations
+6. **Deduplicate commands**: Find and merge duplicate objects with multiple strategies
+7. **Query commands**: Execute graph queries against configurations with interactive mode
 8. **Cleanup commands**: Identify and clean up unused objects and disabled policies
 9. **NAT commands**: Manage NAT rules and configurations
-10. **NLQ commands**: Process natural language queries and commands
+10. **NLQ commands**: Process natural language queries with AI integration and HTML reporting
+11. **Merge commands**: Merge configurations between different contexts (device groups, vsys)
 
 ## Class Overview
 

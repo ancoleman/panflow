@@ -10,6 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.3.5] - 2025-05-21
+
+### Added
+- **Visualization Implementation Plan**: Comprehensive roadmap for PAN-OS configuration visualization capabilities
+  - Business use cases for security compliance, change impact analysis, and troubleshooting
+  - Technical architecture with Phase 1-4 implementation plan
+  - Integration with existing graph query system for policy flow diagrams and dependency graphs
+  - Competitive differentiation through native PAN-OS understanding
+
+### Fixed
+- **NLQ HTML Report Formatting**: Resolved issue where NLQ disabled policies queries generated empty HTML reports
+  - Added specific template handling for `list_disabled_policies` intent
+  - Implemented proper Jinja2 template rendering for disabled security rules
+  - Fixed data table generation showing policy name, action, source/destination zones, and status
+  - HTML reports now correctly display data while maintaining professional styling
+
+### Enhanced
+- **Project Structure Documentation**: Comprehensive update to reflect current codebase state
+  - Updated `docs/directory_structure.md` with complete project tree (381 files, 43 directories)
+  - Added documentation for template system, CLI infrastructure, and build support
+  - Included recent major improvements section highlighting v0.3.3 and v0.3.4 enhancements
+  - Synchronized version references across documentation and project files
+
+### Technical Improvements
+- Updated pyproject.toml version to match git release tags (0.3.4)
+- Enhanced directory structure documentation with accurate module descriptions
+- Added comprehensive build and deployment infrastructure documentation
+
 ## [0.3.4] - 2025-05-21
 
 ### Fixed

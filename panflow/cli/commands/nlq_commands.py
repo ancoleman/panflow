@@ -673,6 +673,200 @@ def process_query(
                         )
                         report_type = "Cleanup Operation Report"
                 
+                elif result["intent"] == "list_disabled_policies":
+                    # Disabled policies report
+                    disabled_policies = result_data.get("disabled_policies_details", [])
+                    count = result_data.get("count", len(disabled_policies))
+                    
+                    # Convert disabled policies to the format expected by unused objects template
+                    # (reuse existing template structure)
+                    disabled_objects = []
+                    for policy in disabled_policies:
+                        # Convert policy to object-like structure for the template
+                        disabled_objects.append({
+                            "name": policy.get("name", ""),
+                            "action": policy.get("action", ""),
+                            "from_zones": policy.get("from", []),
+                            "to_zones": policy.get("to", []),
+                            "source": policy.get("source", []),
+                            "destination": policy.get("destination", []),
+                            "disabled": policy.get("disabled", "yes")
+                        })
+                    
+                    # Use the base template with custom context
+                    import datetime
+                    context = {
+                        "report_title": "Disabled Policies Report", 
+                        "report_info": report_info,
+                        "disabled_policies": disabled_objects,
+                        "count": count,
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    
+                    # Create custom HTML content for disabled policies
+                    from jinja2 import Template
+                    
+                    disabled_policies_template = Template("""
+                    <h2>Found {{ count }} Disabled Policies</h2>
+                    
+                    {% if disabled_policies and disabled_policies|length > 0 %}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Action</th>
+                                <th>Source/Destination</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for policy in disabled_policies %}
+                            <tr class="policy-row">
+                                <td>{{ policy.name }}</td>
+                                <td>{{ policy.action }}</td>
+                                <td>{{ policy.from_zones }} → {{ policy.to_zones }}</td>
+                                <td>{{ "Disabled" if policy.disabled == "yes" else "Enabled" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p>No disabled policies found.</p>
+                    {% endif %}
+                    """)
+                    
+                    content_html = disabled_policies_template.render(**context)
+                    
+                    # Create full HTML using the template loader's CSS but with our custom content
+                    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disabled Policies Report</title>
+    <style>
+        /* PANFlow Reports CSS */
+        
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }}
+        
+        h1, h2, h3 {{
+            color: #2c3e50;
+        }}
+        
+        h1 {{
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }}
+        
+        h2 {{
+            margin-top: 20px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+        }}
+        
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }}
+        
+        th, td {{
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }}
+        
+        th {{
+            background-color: #3498db;
+            color: white;
+        }}
+        
+        tr:nth-child(even) {{
+            background-color: #f2f2f2;
+        }}
+        
+        tr:hover {{
+            background-color: #f1f7fa;
+        }}
+        
+        .container {{
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 30px;
+        }}
+        
+        .report-info {{
+            background-color: #edf7ff;
+            border-radius: 8px;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+        }}
+        
+        .info-table {{
+            border: none;
+            box-shadow: none;
+        }}
+        
+        .info-table td {{
+            padding: 5px 10px;
+        }}
+        
+        .info-key {{
+            font-weight: bold;
+            width: 150px;
+        }}
+        
+        .info-value {{
+            font-family: monospace;
+        }}
+        
+        .info-value pre {{
+            margin: 0;
+            background-color: #f5f5f5;
+            padding: 5px 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }}
+        
+        .timestamp {{
+            color: #7f8c8d;
+            font-style: italic;
+            margin-top: 40px;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <h1>Disabled Policies Report</h1>
+    
+    {"<div class='report-info'><h2>Report Information</h2><table class='info-table'>" if report_info else ""}
+    {"".join([f"<tr><td class='info-key'>{key}</td><td class='info-value'>{'<pre>' + value + '</pre>' if key == 'Query' else value}</td></tr>" for key, value in (report_info or {}).items()])}
+    {"</table></div>" if report_info else ""}
+    
+    <div class="container">
+        {content_html}
+    </div>
+    
+    <div class="timestamp">
+        Report generated on {context.get('timestamp', 'Unknown')}
+    </div>
+</body>
+</html>"""
+                    
+                    report_type = "Disabled Policies Report"
+                
                 else:
                     # Generic NLQ report using base template
                     html_content = template_loader.render_template(
