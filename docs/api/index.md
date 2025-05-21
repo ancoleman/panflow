@@ -6,12 +6,24 @@ This section provides detailed documentation for the PANFlow API.
 
 - **[config_loader](config_loader.md)**: Functions for loading and saving PAN-OS XML configurations
 - **[xpath_resolver](xpath_resolver.md)**: Version-aware XPath resolution for PAN-OS configurations
-- **[xml_utils](xml_utils.md)**: XML manipulation utilities
 - **[object_merger](object_merger.md)**: Functions for merging objects between configurations
 - **[policy_merger](policy_merger.md)**: Functions for merging policies between configurations
 - **[conflict_resolver](conflict_resolver.md)**: Strategies for resolving conflicts during merges
 - **[bulk_operations](bulk_operations.md)**: Tools for performing operations on multiple elements
 - **[deduplication](deduplication.md)**: Tools for finding and merging duplicate objects
+- **[xml_abstractions](xml_abstractions.md)**: High-level abstractions for working with XML
+
+## XML Package
+
+The XML utilities in PANFlow have been consolidated into a dedicated package structure to improve maintainability, reduce code duplication, and provide a more cohesive API for XML operations:
+
+- **[xml_package](../xml_package.md)**: Overview of the XML package consolidation
+- **`panflow.core.xml`**: Main package with all XML functionality
+- **`panflow.core.xml.base`**: Core XML utilities (parsing, manipulation, etc.)
+- **`panflow.core.xml.builder`**: High-level XML building abstractions
+- **`panflow.core.xml.cache`**: Caching functionality for XML operations
+- **`panflow.core.xml.diff`**: XML difference utilities
+- **`panflow.core.xml.query`**: Advanced XML querying capabilities
 
 ## Functional Modules
 
@@ -22,15 +34,26 @@ This section provides detailed documentation for the PANFlow API.
 
 ## Classes
 
+### Core Classes
+
 - **[PANFlowConfig](panflow_config.md)**: Main class for working with PAN-OS configurations
 - **[DeduplicationEngine](deduplication_engine.md)**: Engine for finding and merging duplicates
 - **[ObjectMerger](object_merger_class.md)**: Class for merging objects between configurations
 - **[PolicyMerger](policy_merger_class.md)**: Class for merging policies between configurations
 - **[ConflictResolver](conflict_resolver_class.md)**: Class for resolving merge conflicts
 
+### XML-Specific Classes
+
+- **[XmlNode](xml_abstractions.md#xmlnode)**: High-level wrapper for XML elements
+- **[XmlBuilder](xml_abstractions.md#xmlbuilder)**: Builder for creating XML hierarchies
+- **[XPathBuilder](xml_abstractions.md#xpathbuilder)**: Builder for creating XPath expressions
+- **[XmlQuery](xml_abstractions.md#xmlquery)**: Query engine for XML data extraction
+- **[XmlDiff](xml_abstractions.md#xmldiff)**: Compare two XML trees and identify differences
+
 ## Constants and Enums
 
 - **[ConflictStrategy](conflict_strategy.md)**: Enum defining strategies for conflict resolution
+- **[DiffType](xml_abstractions.md#xmldiff)**: Enum defining types of XML differences (ADDED, REMOVED, CHANGED)
 
 ## Exception Types
 
