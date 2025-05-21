@@ -7,7 +7,7 @@ PANFlow provides a set of high-level abstractions for working with XML, making i
 `XmlNode` is a wrapper around lxml's Element that provides a more intuitive interface:
 
 ```python
-from panflow.core import XmlNode
+from panflow.core.xml import XmlNode
 
 # Create a node from an existing Element
 node = XmlNode(element)
@@ -20,21 +20,21 @@ node = XmlNode.create('address', {'name': 'web-server'})
 
 # Get node attributes and properties
 tag = node.tag  # 'address'
-name = node.get_attribute('name')  # 'web-server'
-children = node.children  # List of child nodes
+attributes = node.attributes  # {'name': 'web-server'}
+text = node.text  # Get element text content
 
 # Modify node
 node.text = "Some text content"
 node.set_attribute('description', 'Web server')
-node.delete_attribute('temp')
+node.remove_attribute('temp')
 
 # Navigation
 parent = node.parent
-child = node.child('ip-netmask')
+children = node.children
 
 # Add children
 ip_node = node.add_child('ip-netmask', text='192.168.1.1/32')
-desc_node = node.add_child('description', text='Web server')
+desc_node = node.add_child('description', attributes={'type': 'comment'}, text='Web server')
 
 # Finding elements
 members = node.find_all('.//member')
@@ -55,7 +55,7 @@ node_dict = node.to_dict()
 `XmlBuilder` provides a fluent interface for creating XML:
 
 ```python
-from panflow.core import XmlBuilder
+from panflow.core.xml import XmlBuilder
 
 # Create a builder for a config element
 builder = XmlBuilder('config', {'version': '10.1.0'})
@@ -87,7 +87,7 @@ xml_str = builder.to_string(pretty_print=True)
 `XPathBuilder` makes it easier to construct XPath expressions:
 
 ```python
-from panflow.core import XPathBuilder
+from panflow.core.xml import XPathBuilder
 
 # Create an XPath for finding address objects with a specific tag
 xpath = XPathBuilder() \
@@ -108,30 +108,36 @@ xpath = XPathBuilder() \
 `XmlQuery` provides a jQuery-like interface for selecting and manipulating XML:
 
 ```python
-from panflow.core import XmlQuery, XmlNode
+from panflow.core.xml import XmlQuery, XmlNode
 
-# Create a query from an XmlNode
+# Create a query from an XML element or XmlNode
 node = XmlNode.from_string('<config>...</config>')
-query = XmlQuery.from_node(node)
+query = XmlQuery(node)
 
 # Find elements
-addresses = query.find('.//address/entry')
+addresses = query.find_all('.//address/entry')
 
-# Filter elements
-web_servers = addresses.has_attribute('name').has_child('tag').has_text_containing('web')
+# Find a single element
+address = query.find('.//address/entry[@name="web-server"]')
 
-# Get information
-names = web_servers.attribute('name')  # List of names
-count = web_servers.count()  # Number of web servers
+# Filter elements with a condition
+web_servers = query.filter(lambda el: 'web' in el.get('name', ''))
 
-# Transformation
-server_data = web_servers.map(lambda node: {
-    'name': node.get_attribute('name'),
-    'ip': node.find('./ip-netmask').text if node.find('./ip-netmask') else None
-})
+# Count results
+count = addresses.count()
 
-# Iteration
-web_servers.each(lambda node: print(f"Server: {node.get_attribute('name')}"))
+# Get the first result
+first_address = addresses.first()
+
+# Map results to extract data
+names = addresses.map(lambda el: el.get('name'))
+
+# Each (iterate over results)
+addresses.each(lambda el: print(f"Address: {el.get('name')}"))
+
+# Check if elements exist
+if query.exists('.//address/entry[@name="web-server"]'):
+    print("Web server exists")
 ```
 
 ## XmlDiff
@@ -139,22 +145,29 @@ web_servers.each(lambda node: print(f"Server: {node.get_attribute('name')}"))
 `XmlDiff` helps identify differences between XML elements:
 
 ```python
-from panflow.core import XmlDiff, DiffType
+from panflow.core.xml import XmlNode, XmlDiff, DiffType
 
-# Compare two XML elements
-diffs = XmlDiff.compare(source_node.element, target_node.element)
+# Create two XML documents to compare
+original = XmlNode.from_string("<config><settings><option>old</option></settings></config>")
+modified = XmlNode.from_string("<config><settings><option>new</option></settings></config>")
+
+# Initialize diff with source and target
+diff = XmlDiff(original.element, modified.element)
+
+# Compare the elements
+diff.compare()
+
+# Get the differences
+diff_items = diff.get_diffs()
 
 # Process the differences
-for diff in diffs:
-    if diff.type == DiffType.ADDED:
-        print(f"Added: {diff.path}")
-    elif diff.type == DiffType.REMOVED:
-        print(f"Removed: {diff.path}")
-    elif diff.type == DiffType.CHANGED:
-        print(f"Changed: {diff.path} from {diff.source_value} to {diff.target_value}")
-
-# Format the differences for display
-formatted_diff = XmlDiff.format_diff(diffs, format_type='markdown')
+for item in diff_items:
+    if item.diff_type == DiffType.ADDED:
+        print(f"Added: {item.path} - {item.target_value}")
+    elif item.diff_type == DiffType.REMOVED:
+        print(f"Removed: {item.path} - {item.source_value}")
+    elif item.diff_type == DiffType.CHANGED:
+        print(f"Changed: {item.path} from {item.source_value} to {item.target_value}")
 ```
 
 ## Combined Example
@@ -162,7 +175,7 @@ formatted_diff = XmlDiff.format_diff(diffs, format_type='markdown')
 Here's a complete example showing how to use these abstractions together:
 
 ```python
-from panflow.core import XmlNode, XmlBuilder, XPathBuilder, XmlQuery, XmlDiff
+from panflow.core.xml import XmlNode, XmlBuilder, XPathBuilder, XmlQuery, XmlDiff
 
 # Create a configuration with an address object
 builder = XmlBuilder('config')
@@ -177,19 +190,21 @@ builder.into('devices') \
 
 # Get the XML and create a query
 xml = builder.build()
-query = XmlQuery.from_node(xml)
+query = XmlQuery(xml)
 
-# Find the address element
-address = query.find(
-    XPathBuilder().anywhere().element('entry').with_name('web-server').build()
-).first()
+# Find the address element using XPathBuilder
+xpath = XPathBuilder().anywhere().element('entry').with_attribute('name', 'web-server').build()
+address_element = query.find(xpath).first()
 
-# Modify the address
-if address:
+# Create an XmlNode for easier manipulation
+if address_element:
+    address = XmlNode(address_element)
+    # Add description and tag
     address.add_child('description', text='Main web server')
-    address.add_child('tag').add_child('member', text='web')
+    tag_node = address.add_child('tag')
+    tag_node.add_child('member', text='web')
 
-# Create a different version
+# Create a different version to compare against
 modified_builder = XmlBuilder('config')
 modified_builder.into('devices') \
     .into('entry', {'name': 'localhost.localdomain'}) \
@@ -197,16 +212,20 @@ modified_builder.into('devices') \
     .into('entry', {'name': 'vsys1'}) \
     .into('address') \
     .into('entry', {'name': 'web-server'}) \
-    .add('ip-netmask', text='192.168.1.2/32') \  # Different IP
+    .add('ip-netmask', text='192.168.1.2/32') \
     .add('description', text='Web server') \
     .root_up()
 
 modified_xml = modified_builder.build()
 
 # Compare the two versions
-diffs = XmlDiff.compare(xml.element, modified_xml.element)
-formatted_diff = XmlDiff.format_diff(diffs, format_type='text')
-print(formatted_diff)
+diff = XmlDiff(xml.element, modified_xml.element)
+diff.compare()
+diffs = diff.get_diffs()
+
+# Print the differences
+for item in diffs:
+    print(item)  # Uses __repr__ to format diff items
 ```
 
 These abstractions significantly simplify working with XML in PANFlow, making your code more readable and maintainable.
