@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated pyproject.toml version to match git release tags (0.3.4)
 - Enhanced directory structure documentation with accurate module descriptions
 - Added comprehensive build and deployment infrastructure documentation
+- **Overhauled documentation index**: Complete rewrite of `docs/index.md` with modern structure
+  - Added quick start guide with installation and basic usage examples
+  - Organized documentation into logical sections (Core, Use Cases, Developer Resources)
+  - Added recent major enhancements summary highlighting v0.3.0-v0.3.5 features
+  - Enhanced navigation with emojis and clear categorization
+  - Added key benefits section showcasing PANFlow's value proposition
 
 ## [0.3.4] - 2025-05-21
 
