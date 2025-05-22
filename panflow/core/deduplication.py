@@ -1249,7 +1249,12 @@ class DeduplicationEngine:
                 }
 
                 # Process each duplicate
-                for name, obj in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    if len(obj_tuple) == 3:
+                        name, obj, context = obj_tuple
+                    else:
+                        name, obj = obj_tuple
                     # Skip the primary object
                     if name == primary_name:
                         continue
@@ -1480,7 +1485,7 @@ class DeduplicationEngine:
 
         # Build mapping of value_keys to object names
         for value_key, objects in duplicates.items():
-            names = [name for name, _ in objects]
+            names = [obj_tuple[0] for obj_tuple in objects]
             value_key_to_names[value_key] = set(names)
             dependency_graph[value_key] = set()
 

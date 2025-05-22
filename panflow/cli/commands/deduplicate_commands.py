@@ -214,7 +214,9 @@ def find_hierarchical_duplicates(
             if pattern:
                 # Check if any object in this group matches the pattern
                 matches_pattern = False
-                for name, _ in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    name = obj_tuple[0]
                     if pattern.lower() in name.lower() or pattern.lower() in value_key.lower():
                         matches_pattern = True
                         break
@@ -226,13 +228,13 @@ def find_hierarchical_duplicates(
             # Filter objects based on include/exclude lists
             if include_list:
                 # Only keep objects explicitly included in the list
-                filtered_objects = [(name, obj) for name, obj in objects if name in include_list]
+                filtered_objects = [obj_tuple for obj_tuple in objects if obj_tuple[0] in include_list]
                 objects = filtered_objects
 
             if exclude_list:
                 # Remove objects in the exclude list
                 filtered_objects = [
-                    (name, obj) for name, obj in objects if name not in exclude_list
+                    obj_tuple for obj_tuple in objects if obj_tuple[0] not in exclude_list
                 ]
                 objects = filtered_objects
 
@@ -507,7 +509,9 @@ def merge_hierarchical_duplicates(
             if pattern:
                 # Check if any object in this group matches the pattern
                 matches_pattern = False
-                for name, _ in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    name = obj_tuple[0]
                     if pattern.lower() in name.lower() or pattern.lower() in value_key.lower():
                         matches_pattern = True
                         break
@@ -519,7 +523,7 @@ def merge_hierarchical_duplicates(
             # Filter objects based on include/exclude lists
             if include_list:
                 # Only keep objects explicitly included in the list
-                filtered_objects = [(name, obj) for name, obj in objects if name in include_list]
+                filtered_objects = [obj_tuple for obj_tuple in objects if obj_tuple[0] in include_list]
                 # If we don't have at least 2 objects after filtering, skip this group
                 if len(filtered_objects) < 2:
                     continue
@@ -528,7 +532,7 @@ def merge_hierarchical_duplicates(
             if exclude_list:
                 # Remove objects in the exclude list
                 filtered_objects = [
-                    (name, obj) for name, obj in objects if name not in exclude_list
+                    obj_tuple for obj_tuple in objects if obj_tuple[0] not in exclude_list
                 ]
                 # If we don't have at least 2 objects after filtering, skip this group
                 if len(filtered_objects) < 2:
@@ -581,7 +585,9 @@ def merge_hierarchical_duplicates(
             for value_key, objects in duplicates.items():
                 # Format objects with context
                 object_details = []
-                for name, _ in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    name = obj_tuple[0]
                     if name in contexts:
                         context_info = contexts[name]
                         context_type = context_info.get("type", "unknown")
@@ -646,7 +652,9 @@ def merge_hierarchical_duplicates(
                 )
 
                 # Add others to deleted list
-                for name, _ in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    name = obj_tuple[0]
                     if name != primary_name:
                         deleted_context = contexts.get(name, {})
                         deleted_context_type = deleted_context.get("type", "unknown")
@@ -885,7 +893,9 @@ def find_duplicates(
             if pattern:
                 # Check if any object in this group matches the pattern
                 matches_pattern = False
-                for name, _ in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    name = obj_tuple[0]
                     if pattern.lower() in name.lower() or pattern.lower() in value_key.lower():
                         matches_pattern = True
                         break
@@ -897,13 +907,13 @@ def find_duplicates(
             # Filter objects based on include/exclude lists
             if include_list:
                 # Only keep objects explicitly included in the list
-                filtered_objects = [(name, obj) for name, obj in objects if name in include_list]
+                filtered_objects = [obj_tuple for obj_tuple in objects if obj_tuple[0] in include_list]
                 objects = filtered_objects
 
             if exclude_list:
                 # Remove objects in the exclude list
                 filtered_objects = [
-                    (name, obj) for name, obj in objects if name not in exclude_list
+                    obj_tuple for obj_tuple in objects if obj_tuple[0] not in exclude_list
                 ]
                 objects = filtered_objects
 
@@ -927,7 +937,7 @@ def find_duplicates(
 
         # Log the duplicates found
         for value_key, objects in duplicates.items():
-            names = [name for name, _ in objects]
+            names = [obj_tuple[0] for obj_tuple in objects]
             logger.info(f"Found duplicates with value {value_key}: {', '.join(names)}")
 
         # Save to output file if provided
@@ -1118,7 +1128,9 @@ def deduplicate_objects(
             if pattern:
                 # Check if any object in this group matches the pattern
                 matches_pattern = False
-                for name, _ in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    name = obj_tuple[0]
                     if pattern.lower() in name.lower() or pattern.lower() in value_key.lower():
                         matches_pattern = True
                         break
@@ -1130,7 +1142,7 @@ def deduplicate_objects(
             # Filter objects based on include/exclude lists
             if include_list:
                 # Only keep objects explicitly included in the list
-                filtered_objects = [(name, obj) for name, obj in objects if name in include_list]
+                filtered_objects = [obj_tuple for obj_tuple in objects if obj_tuple[0] in include_list]
                 # If we don't have at least 2 objects after filtering, skip this group
                 if len(filtered_objects) < 2:
                     continue
@@ -1139,7 +1151,7 @@ def deduplicate_objects(
             if exclude_list:
                 # Remove objects in the exclude list
                 filtered_objects = [
-                    (name, obj) for name, obj in objects if name not in exclude_list
+                    obj_tuple for obj_tuple in objects if obj_tuple[0] not in exclude_list
                 ]
                 # If we don't have at least 2 objects after filtering, skip this group
                 if len(filtered_objects) < 2:
@@ -1165,7 +1177,7 @@ def deduplicate_objects(
         )
 
         for value_key, objects in duplicates.items():
-            names = [name for name, _ in objects]
+            names = [obj_tuple[0] for obj_tuple in objects]
             logger.info(f"Found duplicates with value {value_key}: {', '.join(names)}")
 
         # Merge duplicates (simulation)
@@ -1481,7 +1493,9 @@ def simulate_deduplication(
             if pattern:
                 # Check if any object in this group matches the pattern
                 matches_pattern = False
-                for name, _ in objects:
+                for obj_tuple in objects:
+                    # Handle both (name, element) and (name, element, context) formats
+                    name = obj_tuple[0]
                     if pattern.lower() in name.lower() or pattern.lower() in value_key.lower():
                         matches_pattern = True
                         break
@@ -1493,7 +1507,7 @@ def simulate_deduplication(
             # Filter objects based on include/exclude lists
             if include_list:
                 # Only keep objects explicitly included in the list
-                filtered_objects = [(name, obj) for name, obj in objects if name in include_list]
+                filtered_objects = [obj_tuple for obj_tuple in objects if obj_tuple[0] in include_list]
                 # If we don't have at least 2 objects after filtering, skip this group
                 if len(filtered_objects) < 2:
                     continue
@@ -1502,7 +1516,7 @@ def simulate_deduplication(
             if exclude_list:
                 # Remove objects in the exclude list
                 filtered_objects = [
-                    (name, obj) for name, obj in objects if name not in exclude_list
+                    obj_tuple for obj_tuple in objects if obj_tuple[0] not in exclude_list
                 ]
                 # If we don't have at least 2 objects after filtering, skip this group
                 if len(filtered_objects) < 2:
@@ -1867,7 +1881,7 @@ def generate_deduplication_report(
 
                 # Add details to report
                 for value_key, objects in duplicates.items():
-                    names = [name for name, _ in objects]
+                    names = [obj_tuple[0] for obj_tuple in objects]
                     report["object_types"][obj_type]["duplicates"][value_key] = names
                     logger.debug(f"Found duplicates with value {value_key}: {', '.join(names)}")
             else:
