@@ -277,9 +277,16 @@ def find_hierarchical_duplicates(
         # Format context info for output
         for name, context_info in contexts.items():
             # Only include objects in the duplicate sets
-            if any(
-                name in [obj_name for obj_name, _ in objects] for objects in duplicates.values()
-            ):
+            # Extract all object names from duplicates, handling both tuple formats
+            all_duplicate_names = []
+            for objects in duplicates.values():
+                for obj_tuple in objects:
+                    if len(obj_tuple) == 3:
+                        obj_name, _, _ = obj_tuple
+                    else:
+                        obj_name, _ = obj_tuple
+                    all_duplicate_names.append(obj_name)
+            if name in all_duplicate_names:
                 context_type = context_info.get("type", "unknown")
                 device_group = (
                     context_info.get("device_group", "shared")
@@ -298,7 +305,11 @@ def find_hierarchical_duplicates(
         for value_key, objects in duplicates.items():
             # Format objects with context info
             object_details = []
-            for name, _ in objects:
+            for obj_tuple in objects:
+                if len(obj_tuple) == 3:
+                    name, _, _ = obj_tuple
+                else:
+                    name, _ = obj_tuple
                 context_info = contexts.get(name, {})
                 context_type = context_info.get("type", "unknown")
                 device_group = (
@@ -631,7 +642,11 @@ def merge_hierarchical_duplicates(
                 primary = engine._select_hierarchical_primary_object(
                     objects, contexts, strategy, pattern_strategy
                 )
-                primary_name, _ = primary
+                # Handle both tuple formats
+                if len(primary) == 3:
+                    primary_name, _, _ = primary
+                else:
+                    primary_name, _ = primary
 
                 primary_context = contexts.get(primary_name, {})
                 primary_context_type = primary_context.get("type", "unknown")
@@ -959,7 +974,15 @@ def find_duplicates(
             }
 
             for value_key, objects in duplicates.items():
-                result["duplicates"][value_key] = [name for name, _ in objects]
+                # Handle both (name, element) and (name, element, context) tuple formats
+                names = []
+                for obj_tuple in objects:
+                    if len(obj_tuple) == 3:
+                        name, _, _ = obj_tuple
+                    else:
+                        name, _ = obj_tuple
+                    names.append(name)
+                result["duplicates"][value_key] = names
 
             with open(output, "w") as f:
                 json.dump(result, f, indent=2)
@@ -1217,7 +1240,14 @@ def deduplicate_objects(
 
             # Collect details on each duplicate set
             for value_key, objects in duplicates.items():
-                object_names = [name for name, _ in objects]
+                # Handle both tuple formats when extracting names
+                object_names = []
+                for obj_tuple in objects:
+                    if len(obj_tuple) == 3:
+                        name, _, _ = obj_tuple
+                    else:
+                        name, _ = obj_tuple
+                    object_names.append(name)
                 impact_data["duplicate_sets"][value_key] = object_names
 
                 # Figure out which object will be kept based on strategy
@@ -1579,7 +1609,14 @@ def simulate_deduplication(
 
         # Collect details on each duplicate set
         for value_key, objects in duplicates.items():
-            object_names = [name for name, _ in objects]
+            # Handle both tuple formats when extracting names
+            object_names = []
+            for obj_tuple in objects:
+                if len(obj_tuple) == 3:
+                    name, _, _ = obj_tuple
+                else:
+                    name, _ = obj_tuple
+                object_names.append(name)
             impact_data["duplicate_sets"][value_key] = object_names
 
             # Figure out which object will be kept based on strategy
