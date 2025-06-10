@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Created demo script (`examples/deduplication_verbose_demo.py`) showcasing the enhanced output
 
 ### Fixed
+- **Deduplication Tuple Unpacking Error (#6)**: Fixed "too many values to unpack" error in deduplicate commands
+  - Updated all tuple unpacking in `deduplicate_commands.py` to handle both 2-tuple and 3-tuple formats
+  - Fixed issue where `find_duplicate_addresses()` returns 3-tuples for Panorama configs but CLI expected 2-tuples
+  - Affected deduplicate find command with address objects on Panorama configurations
+  - Fixed 6 locations where tuple unpacking was failing (lines 281, 308, 645, 977, 1243, 1612)
 - **Deduplication NAT Rule References**: Added missing NAT rule source/destination reference checking
   - NAT rules now properly check both regular source/destination fields
   - Ensures all object references are tracked during deduplication
