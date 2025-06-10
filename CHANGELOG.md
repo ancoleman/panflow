@@ -10,6 +10,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Ongoing development and improvements
 
+## [0.4.0] - 2025-06-09
+
+### Added
+- **Test Infrastructure Foundation**: Comprehensive test utilities and infrastructure
+  - New `tests/common/` module with shared test utilities
+  - Factory classes for creating test configurations and objects
+  - Base test classes for common functionality
+  - Performance benchmarking utilities
+  - Duplication analyzer for tracking code reduction
+  - Compatibility checker for verifying behavior consistency
+- **Enhanced Command Base**: Feature-flagged enhanced command base for future CLI improvements
+  - New `EnhancedCommandBase` class with improved output formatting
+  - Consistent format handling across all output types
+  - Feature flag system for gradual rollout of enhancements
+- **Refactoring Documentation**: Comprehensive planning for codebase improvements
+  - Detailed refactoring workflow and step-by-step guides
+  - Analysis tools for identifying refactoring opportunities
+  - Documentation for v0.4.x release series roadmap
+
+### Fixed
+- **Stdout Piping Issue (#3)**: Fixed logging output going to stderr instead of stdout
+  - Modified `StreamHandler` in `app.py` to explicitly use `sys.stdout`
+  - This allows proper piping with tools like `tee` and output redirection
+  - All CLI commands now correctly output to stdout for better Unix pipeline compatibility
+
 ## [0.3.5] - 2025-05-21
 
 ### Added
@@ -381,7 +406,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - N/A (Initial release)
 
-[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.2...HEAD
+[Unreleased]: https://code.pan.run/gcs-automation/panflow/compare/v0.4.0...HEAD
+[0.4.0]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.5...v0.4.0
+[0.3.5]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.4...v0.3.5
+[0.3.4]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.3...v0.3.4
+[0.3.3]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.2...v0.3.3
 [0.3.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.1...v0.3.2
 [0.3.1]: https://code.pan.run/gcs-automation/panflow/compare/v0.3.0...v0.3.1
 [0.2.2]: https://code.pan.run/gcs-automation/panflow/compare/v0.2.1...v0.2.2
