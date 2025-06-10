@@ -578,6 +578,23 @@ class DeduplicationEngine:
                     for policy in policies:
                         policy_name = policy.get("name", "unknown")
 
+                        # Check regular source/destination fields
+                        for source in policy.xpath("./source/member"):
+                            if source.text and source.text != "any":
+                                source_name = source.text
+                                if source_name not in references:
+                                    references[source_name] = []
+                                ref_path = f"{path_name}:{policy_name}:source"
+                                references[source_name].append((ref_path, source))
+                                
+                        for dest in policy.xpath("./destination/member"):
+                            if dest.text and dest.text != "any":
+                                dest_name = dest.text
+                                if dest_name not in references:
+                                    references[dest_name] = []
+                                ref_path = f"{path_name}:{policy_name}:destination"
+                                references[dest_name].append((ref_path, dest))
+
                         # Check source and destination translation addresses
                         for src_elem in policy.xpath(".//source-translation//translated-address"):
                             if src_elem.text and src_elem.text != "any":
@@ -812,6 +829,99 @@ class DeduplicationEngine:
 
         return references
 
+    def _format_reference_location(self, ref_path, context_kwargs=None):
+        """
+        Format a reference path into a human-readable location description.
+        
+        Args:
+            ref_path: Reference path string (e.g., "address-group:web-servers")
+            context_kwargs: Optional context parameters for device group info
+            
+        Returns:
+            str: Formatted location description
+        """
+        if not ref_path:
+            return "Unknown location"
+            
+        # Use instance context_kwargs if not provided
+        if context_kwargs is None:
+            context_kwargs = self.context_kwargs
+            
+        # Split the reference path
+        parts = ref_path.split(":")
+        ref_type = parts[0] if parts else ""
+        
+        location_parts = []
+        
+        # Add device group context if available
+        if "device_group" in context_kwargs:
+            location_parts.append(f"Device Group: {context_kwargs['device_group']}")
+        elif self.context_type == "shared":
+            location_parts.append("Device Group: Shared")
+        elif self.context_type == "vsys" and "vsys" in context_kwargs:
+            location_parts.append(f"VSYS: {context_kwargs['vsys']}")
+            
+        # Format based on reference type
+        if ref_type == "address-group":
+            group_name = parts[1] if len(parts) > 1 else "unknown"
+            location_parts.append(f"Address-Group: {group_name}")
+            
+        elif ref_type == "service-group":
+            group_name = parts[1] if len(parts) > 1 else "unknown"
+            location_parts.append(f"Service-Group: {group_name}")
+            
+        elif ref_type in ["security", "pre-security", "post-security"]:
+            rule_name = parts[1] if len(parts) > 1 else "unknown"
+            field = parts[2] if len(parts) > 2 else "unknown"
+            
+            # Determine rulebase type
+            if ref_type == "pre-security":
+                rulebase = "Pre-Rulebase Security"
+            elif ref_type == "post-security":
+                rulebase = "Post-Rulebase Security"
+            else:
+                rulebase = "Security"
+                
+            location_parts.append(f"Rulebase: {rulebase}")
+            location_parts.append(f"Rule: {rule_name}")
+            location_parts.append(f"Field: {field}")
+            
+        elif ref_type in ["nat", "pre-nat", "post-nat"]:
+            rule_name = parts[1] if len(parts) > 1 else "unknown"
+            field = parts[2] if len(parts) > 2 else "unknown"
+            
+            # Determine rulebase type
+            if ref_type == "pre-nat":
+                rulebase = "Pre-Rulebase NAT"
+            elif ref_type == "post-nat":
+                rulebase = "Post-Rulebase NAT"
+            else:
+                rulebase = "NAT"
+                
+            location_parts.append(f"Rulebase: {rulebase}")
+            location_parts.append(f"Rule: {rule_name}")
+            location_parts.append(f"Field: {field}")
+            
+        elif ref_type == "app-override":
+            rule_name = parts[1] if len(parts) > 1 else "unknown"
+            field = parts[2] if len(parts) > 2 else "unknown"
+            location_parts.append("Rulebase: Application Override")
+            location_parts.append(f"Rule: {rule_name}")
+            location_parts.append(f"Field: {field}")
+            
+        elif ref_type == "decryption":
+            rule_name = parts[1] if len(parts) > 1 else "unknown"
+            field = parts[2] if len(parts) > 2 else "unknown"
+            location_parts.append("Rulebase: Decryption")
+            location_parts.append(f"Rule: {rule_name}")
+            location_parts.append(f"Field: {field}")
+            
+        else:
+            # Fallback to raw path
+            location_parts.append(ref_path)
+            
+        return " | ".join(location_parts)
+
     def merge_duplicates(self, duplicates, references, primary_name_strategy="first"):
         """
         Merge duplicate objects, keeping one and updating references.
@@ -901,10 +1011,17 @@ class DeduplicationEngine:
                     # Update references to this object
                     if name in references:
                         ref_count = len(references[name])
-                        logger.info(f"Updating {ref_count} references to '{name}'")
-
+                        
                         for ref_path, ref_elem in references[name]:
                             try:
+                                # Format the location for better readability
+                                location = self._format_reference_location(ref_path)
+                                
+                                # Log the detailed replacement message
+                                logger.info(
+                                    f"Replacing reference to '{name}' with '{primary_name}' in {location}"
+                                )
+                                
                                 # Update the reference to point to primary_name
                                 old_text = ref_elem.text
                                 ref_elem.text = primary_name
@@ -914,9 +1031,6 @@ class DeduplicationEngine:
                                         f"{ref_path}: {old_text} -> {primary_name}",
                                         ref_elem,
                                     )
-                                )
-                                logger.debug(
-                                    f"Updated reference in {ref_path}: {old_text} -> {primary_name}"
                                 )
                             except Exception as e:
                                 logger.error(
@@ -1264,18 +1378,22 @@ class DeduplicationEngine:
                     # Update references to this object
                     if name in references:
                         ref_count = len(references[name])
-                        logger.info(f"Updating {ref_count} references to '{name}'")
-
+                        
                         for ref_path, ref_elem in references[name]:
                             try:
+                                # Format the location for better readability
+                                location = self._format_reference_location(ref_path)
+                                
+                                # Log the detailed replacement message
+                                logger.info(
+                                    f"Replacing reference to '{name}' with '{primary_name}' in {location}"
+                                )
+                                
                                 # Update the reference to point to primary_name
                                 old_text = ref_elem.text
                                 ref_elem.text = primary_name
                                 changes[value_key]["references_updated"].append(
                                     f"{ref_path}: {old_text} -> {primary_name}"
-                                )
-                                logger.debug(
-                                    f"Updated reference in {ref_path}: {old_text} -> {primary_name}"
                                 )
                             except Exception as e:
                                 logger.error(
