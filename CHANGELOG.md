@@ -8,7 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Ongoing development and improvements
+- **Enhanced Deduplication Verbose Output (#5)**: Added detailed location information during deduplication
+  - New `_format_reference_location()` helper method provides human-readable location descriptions
+  - Enhanced logging in `merge_duplicates()` and `merge_hierarchical_duplicates()` methods
+  - Shows exactly where object replacements occur (e.g., "Device Group: EDGE-WAN | Address-Group: Private-Subnets")
+  - Added comprehensive unit tests for verbose output formatting
+  - Created demo script (`examples/deduplication_verbose_demo.py`) showcasing the enhanced output
+
+### Fixed
+- **Deduplication NAT Rule References**: Added missing NAT rule source/destination reference checking
+  - NAT rules now properly check both regular source/destination fields
+  - Ensures all object references are tracked during deduplication
+- **Deduplication Unit Tests**: Updated tests to match current implementation
+  - Fixed handling of 3-tuple format (name, element, context) in duplicate objects
+  - Updated merge methods to work with list of changes instead of dictionary
+  - Aligned tests with current method signatures and return values
 
 ## [0.4.0] - 2025-06-09
 
