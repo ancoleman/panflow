@@ -41,6 +41,22 @@ PANFlow determines if an object is unused through the following process:
 
 An object is considered unused only if it doesn't appear in any policy or group across all checked contexts.
 
+### Context Search Behavior
+
+**IMPORTANT**: The search scope depends on the `--context` parameter:
+
+- **`--context shared` (default)**: When searching for unused objects in the shared context, PANFlow searches for usage across the **ENTIRE configuration**, including:
+  - All shared policies
+  - All device groups (for Panorama)
+  - All vsys (for firewalls)
+  - All groups in all contexts
+  
+  This ensures that a shared object is only marked as unused if it's not referenced ANYWHERE in the configuration.
+
+- **`--context device_group`**: When searching in a specific device group, PANFlow only checks for usage within that device group's policies and groups.
+
+- **`--context vsys`**: When searching in a specific vsys, PANFlow only checks for usage within that vsys's policies and groups.
+
 ### Comprehensive Policy Coverage
 
 PANFlow checks for usage across a wide range of policy types:

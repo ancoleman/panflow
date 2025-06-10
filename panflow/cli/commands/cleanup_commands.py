@@ -57,13 +57,23 @@ def cleanup_unused_objects(
     By default, it operates on address objects only, but can be configured to handle
     other object types like services and tags.
 
+    IMPORTANT: Context Search Behavior
+    - When --context is "shared" (default): Searches for object usage across the ENTIRE 
+      configuration, including all device groups (Panorama) or all vsys (firewall)
+    - When --context is "device_group": Only searches within that specific device group
+    - When --context is "vsys": Only searches within that specific vsys
+
     Examples:
 
         # Find and report on unused address objects without making changes (dry run)
+        # This searches across the ENTIRE configuration by default
         python cli.py cleanup unused-objects --config firewall.xml --dry-run
 
         # Clean up unused address objects and save the updated configuration
         python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml
+
+        # Clean up objects in a specific device group only
+        python cli.py cleanup unused-objects --config panorama.xml --output cleaned.xml --context device_group --device-group DG1
 
         # Clean up multiple object types (address and service) with a report
         python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --type address --type service --report-file cleanup-report.json

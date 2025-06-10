@@ -136,7 +136,7 @@ class ContextOptions:
         return typer.Option(
             "shared",
             "--context",
-            help="Context (shared, device_group, vsys, template)",
+            help="Context to search in. 'shared' (default) searches the ENTIRE configuration including all device groups/vsys. Use 'device_group' or 'vsys' to limit scope to a specific context.",
             autocompletion=complete_context_types,
         )
 

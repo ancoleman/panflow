@@ -8,9 +8,11 @@ This document provides practical examples for using the PANFlow cleanup commands
 
 ```bash
 # Preview unused address objects (dry-run mode)
+# NOTE: By default, this searches the ENTIRE configuration for usage
 python cli.py cleanup unused-objects --config firewall.xml --output updated.xml --dry-run
 
 # Clean up unused address objects
+# This removes objects not referenced ANYWHERE in the configuration
 python cli.py cleanup unused-objects --config firewall.xml --output updated.xml
 ```
 
@@ -38,14 +40,17 @@ python cli.py cleanup unused-objects --config firewall.xml --output updated.xml 
 
 ```bash
 # Clean up unused objects in Panorama shared context
+# IMPORTANT: This searches across ALL device groups for usage
 python cli.py cleanup unused-objects --config panorama.xml --output updated.xml \
   --device-type panorama --context shared
 
 # Clean up unused objects in a specific device group
+# NOTE: This only searches within DG1 for usage
 python cli.py cleanup unused-objects --config panorama.xml --output updated.xml \
   --device-type panorama --context device_group --device-group DG1
 
 # Clean up unused objects in a specific VSYS
+# NOTE: This only searches within vsys1 for usage
 python cli.py cleanup unused-objects --config firewall.xml --output updated.xml \
   --device-type firewall --context vsys --vsys vsys1
 ```

@@ -1394,10 +1394,15 @@ python cli.py object delete --config firewall.xml --type address --name unused-o
 
 # Automated approach (using cleanup command):
 # Preview which objects would be removed (dry run)
+# NOTE: By default (--context shared), this searches the ENTIRE configuration for usage
 python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --dry-run
 
 # Clean up all unused address objects in one step
+# This removes objects not referenced ANYWHERE in the configuration
 python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml
+
+# Clean up objects in a specific device group only (limited scope)
+python cli.py cleanup unused-objects --config panorama.xml --output cleaned.xml --context device_group --device-group DG1
 
 # Generate a report alongside cleanup
 python cli.py cleanup unused-objects --config firewall.xml --output cleaned.xml --report-file cleanup-report.json
