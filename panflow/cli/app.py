@@ -93,7 +93,7 @@ for handler in panflow_logger.handlers[:]:
     panflow_logger.removeHandler(handler)
 
 # Set up a single handler for the panflow logger
-handler = logging.StreamHandler()
+handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
 panflow_logger.addHandler(handler)
 panflow_logger.setLevel(logging.INFO)
